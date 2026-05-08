@@ -64,6 +64,7 @@ class Note:
     pitch: int
     text: str
     end_word: bool = True
+    line_break_after: bool = False
 
 
 Syllable = Note
@@ -238,6 +239,7 @@ def load_json_chart(path: Path) -> SongChart:
                 pitch=int(raw_note["pitch"]),
                 text=str(raw_note["text"]),
                 end_word=bool(raw_note.get("end_word", True)),
+                line_break_after=bool(raw_note.get("line_break_after", False)),
             )
         except KeyError as exc:
             raise ValueError(f"note {index} missing required field {exc.args[0]}") from exc
@@ -567,7 +569,9 @@ def _build_visible_lyric_text(
         offset = len(text)
         text += note.text
         placements[index] = TextPlacement(offset=offset, length=len(note.text))
-        if note.end_word:
+        if note.line_break_after:
+            text += line_break
+        elif note.end_word:
             text += " "
     payload = text.rstrip(" ") + line_break
     return payload, placements
