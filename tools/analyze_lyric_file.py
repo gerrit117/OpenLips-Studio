@@ -101,6 +101,7 @@ class ChartLyricCoverage:
 class TextResourceSelection:
     resource: TextResource | None
     selected_by: str
+    resource_index: int | None = None
     coverage: ChartLyricCoverage | None = None
     threshold: float = TEXT_COVERAGE_THRESHOLD
 
@@ -316,17 +317,22 @@ def select_text_resource(
     if lyric_markers is not None:
         coverages = compute_resource_coverages(resources, lyric_data, lyric_markers)
         if coverages:
-            best = max(coverages, key=lambda item: (item.markers_in_bounds, item.resource.payload_length))
+            best_index, best = max(
+                enumerate(coverages, start=1),
+                key=lambda item: (item[1].markers_in_bounds, item[1].resource.payload_length),
+            )
             if best.total_markers and best.coverage_ratio >= threshold:
                 return TextResourceSelection(
                     resource=best.resource,
                     selected_by="chart_worddata_coverage",
+                    resource_index=best_index,
                     coverage=best,
                     threshold=threshold,
                 )
             return TextResourceSelection(
                 resource=None,
                 selected_by="chart_worddata_coverage_below_threshold",
+                resource_index=best_index,
                 coverage=best,
                 threshold=threshold,
             )
@@ -334,7 +340,12 @@ def select_text_resource(
     candidates = [resource for resource in resources if resource.is_visible_lyric_candidate]
     if candidates:
         candidates.sort(key=lambda item: (item.line_count, item.printable_ratio, item.visible_length), reverse=True)
-        return TextResourceSelection(resource=candidates[0], selected_by="heuristic", threshold=threshold)
+        return TextResourceSelection(
+            resource=candidates[0],
+            selected_by="heuristic",
+            resource_index=resources.index(candidates[0]) + 1,
+            threshold=threshold,
+        )
     return TextResourceSelection(resource=None, selected_by="unsupported/unknown", threshold=threshold)
 
 
@@ -406,6 +417,7 @@ def analyze_chart(chart_path: Path, resources: list[TextResource], lyric_data: b
         lines.append(
             "  selected_text_resource: "
             f"payload=0x{selection.resource.payload_start:08X}-0x{selection.resource.payload_end - 1:08X} "
+            f"resource_index={selection.resource_index} "
             f"selected_by={selection.selected_by}{detail}"
         )
 
@@ -496,6 +508,7 @@ def analyze_lyric_file(lyric_path: Path, chart_path: Path | None = None) -> list
             lines.append(
                 "  selected_text_resource: "
                 f"payload=0x{selection.resource.payload_start:08X}-0x{selection.resource.payload_end - 1:08X} "
+                f"resource_index={selection.resource_index} "
                 f"selected_by={selection.selected_by}"
             )
     return lines

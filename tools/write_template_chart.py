@@ -105,6 +105,11 @@ class LyricTextOverwriteInfo:
     padding_byte: int
     changed_only_detected_range: bool
     selected_by: str
+    resource_index: int | None
+    payload_length_offset: int
+    payload_length_value: int
+    coverage_markers_in_bounds: int | None = None
+    coverage_total_markers: int | None = None
     coverage_ratio: float | None = None
 
 
@@ -222,7 +227,10 @@ def _chronological_lyrics(chart_data: bytes) -> list[LyricMarker]:
     return sorted(iter_lyric_markers_structural(chart_data), key=lambda marker: (marker.time, marker.offset))
 
 
-def _select_lyric_text_resource(lyric_data: bytes, lyric_markers: list[LyricMarker] | None = None) -> tuple[TextResource, str, float | None]:
+def _select_lyric_text_resource(
+    lyric_data: bytes,
+    lyric_markers: list[LyricMarker] | None = None,
+) -> tuple[TextResource, str, int | None, int | None, int | None, float | None]:
     selection = select_text_resource(lyric_data, lyric_markers)
     if selection.resource is None:
         detail = ""
@@ -233,11 +241,20 @@ def _select_lyric_text_resource(lyric_data: bytes, lyric_markers: list[LyricMark
             f"(selected_by={selection.selected_by}, threshold={TEXT_COVERAGE_THRESHOLD:.0%}{detail})"
         )
     coverage_ratio = selection.coverage.coverage_ratio if selection.coverage is not None else None
-    return selection.resource, selection.selected_by, coverage_ratio
+    coverage_in_bounds = selection.coverage.markers_in_bounds if selection.coverage is not None else None
+    coverage_total = selection.coverage.total_markers if selection.coverage is not None else None
+    return (
+        selection.resource,
+        selection.selected_by,
+        selection.resource_index,
+        coverage_in_bounds,
+        coverage_total,
+        coverage_ratio,
+    )
 
 
 def _lyric_payload_text(lyric_data: bytes, lyric_markers: list[LyricMarker] | None = None) -> str:
-    resource, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    resource, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
     return lyric_data[resource.payload_start : resource.payload_end].decode("utf-8", errors="replace")
 
 
@@ -245,7 +262,7 @@ def _existing_lyric_payload_stats(
     lyric_data: bytes,
     lyric_markers: list[LyricMarker] | None = None,
 ) -> tuple[int, int]:
-    resource, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    resource, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
     return resource.visible_length, resource.payload_length
 
 
@@ -425,36 +442,48 @@ def patch_lyric_file_text(
     chart: SongChart,
     lyric_markers: list[LyricMarker] | None = None,
 ) -> tuple[bytes, dict[int, TextPlacement], int, int, LyricTextOverwriteInfo]:
-    resource, selected_by, coverage_ratio = _select_lyric_text_resource(template_lyric_data, lyric_markers)
-    visible_start = resource.payload_start
-    visible_end = resource.visible_end
+    (
+        resource,
+        selected_by,
+        resource_index,
+        coverage_in_bounds,
+        coverage_total,
+        coverage_ratio,
+    ) = _select_lyric_text_resource(template_lyric_data, lyric_markers)
+    payload_start = resource.payload_start
+    payload_end = resource.payload_end
     padding_byte = resource.padding_byte if resource.padding_byte is not None else 0x20
-    visible_capacity = resource.visible_length
+    payload_capacity = resource.payload_length
     payload, placements = _build_visible_lyric_payload(chart)
-    if len(payload) > visible_capacity:
+    if len(payload) > payload_capacity:
         raise ValueError(
-            f"new lyric text needs {len(payload)} bytes but existing visible text range has only {visible_capacity}"
+            f"new lyric text needs {len(payload)} bytes but selected Text resource payload has only {payload_capacity}"
         )
     patched = bytearray(template_lyric_data)
-    replacement = payload + bytes([padding_byte]) * (visible_capacity - len(payload))
-    patched[visible_start:visible_end] = replacement
+    replacement = payload + bytes([padding_byte]) * (payload_capacity - len(payload))
+    patched[payload_start:payload_end] = replacement
     if len(patched) != len(template_lyric_data):
         raise ValueError("lyric file size changed unexpectedly")
     changed_ranges = _byte_diff_summary(template_lyric_data, bytes(patched)).changed_ranges
-    changed_only_detected_range = all(visible_start <= start and end <= visible_end for start, end in changed_ranges)
+    changed_only_detected_range = all(payload_start <= start and end <= payload_end for start, end in changed_ranges)
     return (
         bytes(patched),
         placements,
         len(payload),
-        visible_capacity,
+        payload_capacity,
         LyricTextOverwriteInfo(
-            range_start=visible_start,
-            range_end=visible_end,
-            original_range_length=visible_capacity,
+            range_start=payload_start,
+            range_end=payload_end,
+            original_range_length=payload_capacity,
             new_text_byte_length=len(payload),
             padding_byte=padding_byte,
             changed_only_detected_range=changed_only_detected_range,
             selected_by=selected_by,
+            resource_index=resource_index,
+            payload_length_offset=resource.payload_length_offset,
+            payload_length_value=resource.payload_length,
+            coverage_markers_in_bounds=coverage_in_bounds,
+            coverage_total_markers=coverage_total,
             coverage_ratio=coverage_ratio,
         ),
     )
@@ -785,16 +814,23 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         lines.extend(
             [
                 "  lyric_text_overwrite:",
-                f"    detected_text_range: 0x{overwrite.range_start:08X}-0x{overwrite.range_end - 1:08X}",
-                f"    original_range_length: {overwrite.original_range_length}",
+                f"    selected_by: {overwrite.selected_by}",
+                f"    selected_text_resource_index: {overwrite.resource_index}",
+                f"    coverage: {'n/a' if overwrite.coverage_markers_in_bounds is None or overwrite.coverage_total_markers is None else f'{overwrite.coverage_markers_in_bounds}/{overwrite.coverage_total_markers}'}",
+                f"    coverage_ratio: {'n/a' if overwrite.coverage_ratio is None else f'{overwrite.coverage_ratio:.1%}'}",
+                f"    payload_length_field: 0x{overwrite.payload_length_offset:08X}={overwrite.payload_length_value}",
+                f"    payload_range: 0x{overwrite.range_start:08X}-0x{overwrite.range_end - 1:08X}",
+                f"    payload_length: {overwrite.original_range_length}",
                 f"    new_text_byte_length: {overwrite.new_text_byte_length}",
                 f"    padding_byte: 0x{overwrite.padding_byte:02X}",
-                f"    changed_only_detected_range: {_format_bool(overwrite.changed_only_detected_range)}",
-                f"    selected_by: {overwrite.selected_by}",
-                f"    coverage_ratio: {'n/a' if overwrite.coverage_ratio is None else f'{overwrite.coverage_ratio:.1%}'}",
+                f"    changed_only_selected_payload: {_format_bool(overwrite.changed_only_detected_range)}",
                 "    metadata_fields_changed: no",
             ]
         )
+        if overwrite.selected_by == "heuristic":
+            lines.append(
+                "    warning: no chart LyricWordData coverage was available; selected lyric text by heuristic fallback"
+            )
     if result.melody_changes:
         lines.append("  melody_changes:")
         for change in result.melody_changes:
