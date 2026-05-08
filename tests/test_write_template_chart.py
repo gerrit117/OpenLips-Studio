@@ -425,10 +425,75 @@ def test_summary_reports_safe_text_overwrite_fields(tmp_path):
     assert "trailing_padding_preserved: yes" in summary
     assert "chart_output_differs:" in summary
     assert "melody_preview_first10_chronological:" in summary
+    assert "lyric_worddata_mapping_validation:" not in summary
     assert "new_text_byte_length:" in summary
     assert "padding_byte: 0x20" in summary
     assert "changed_only_selected_payload: yes" in summary
     assert "metadata_fields_changed: no" in summary
+
+
+def test_summary_reports_lyric_worddata_mapping_validation(tmp_path):
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model)
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert [(row.expected_text, row.resolved_text, row.match, row.warning) for row in result.lyric_mapping_validation] == [
+        ("Hel", "Hel", True, "no"),
+        ("lo", "lo", True, "no"),
+    ]
+    assert "lyric_worddata_mapping_validation:" in summary
+    assert "expected='Hel' resolved='Hel' match=yes warning=no" in summary
+    assert "expected='lo' resolved='lo' match=yes warning=no" in summary
+
+
+def test_worddata_mapping_validation_warns_for_wrong_or_padding_fragments(tmp_path):
+    chart_data = template_chart()
+    lyric_data = template_lyric_null_padded()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_worddata_only=True))
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert result.lyric_mapping_validation
+    assert any(row.warning != "no" for row in result.lyric_mapping_validation)
+    assert "warning=wrong-fragment" in summary or "warning=spaces-or-padding" in summary
+
+
+def test_flat_pitch_test_patches_first_30_chronological_melodies_only(tmp_path):
+    chart_data = template_chart(marker_count=35)
+    lyric_data = template_lyric(capacity=160)
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False)])
+    before = sorted(iter_melody_markers(chart_data), key=lambda marker: (marker.time, marker.offset))
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(flat_pitch_test=True))
+    after = sorted(iter_melody_markers(result.chart_data), key=lambda marker: (marker.time, marker.offset))
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert result.lyric_data == lyric_data
+    assert result.notes_written == 0
+    assert result.melody_count_before == result.melody_count_after == 35
+    assert result.lyric_count_before == result.lyric_count_after == 35
+    assert len(result.melody_changes) == 30
+    assert all(change.action == "flat-pitch-test" for change in result.melody_changes)
+    assert result.lyric_changes == []
+    assert result.moved_unused_melody_count == 0
+    for old_marker, new_marker in zip(before[:30], after[:30]):
+        assert new_marker.time == pytest.approx(old_marker.time)
+        assert new_marker.length == pytest.approx(old_marker.length)
+        assert new_marker.raw_pitch == 65
+        assert new_marker.tone == pytest.approx(2.0)
+        assert new_marker.octave == 5
+    for old_marker, new_marker in zip(before[30:], after[30:]):
+        assert (new_marker.time, new_marker.length, new_marker.raw_pitch, new_marker.tone, new_marker.octave) == pytest.approx(
+            (old_marker.time, old_marker.length, old_marker.raw_pitch, old_marker.tone, old_marker.octave)
+        )
+    assert "mode: flat-pitch-test" in summary
+    assert "mode_flat_pitch_test: yes" in summary
+    assert summary.count("flat-pitch-test: object_index=") == 30
+    assert "raw_pitch 49->65 tone 6.000000->2.000000 octave 6->5" in summary
 
 
 def test_no_disable_unused_preserves_unused_marker_times():
