@@ -9,6 +9,7 @@ from tools.write_template_chart import (
     Note,
     SongChart,
     TemplateWriteOptions,
+    format_summary,
     load_json_chart,
     write_template_chart,
     write_template_chart_files,
@@ -178,6 +179,104 @@ def test_lyric_only_leaves_melody_markers_unchanged():
     assert b"\xef\xbb\xbf\r\nHello" in result.lyric_data
 
 
+def test_lyric_text_only_changes_only_lyric_payload():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_only=True))
+
+    assert result.chart_data == chart_data
+    assert result.lyric_data != lyric_data
+    assert b"\xef\xbb\xbf\r\nHello\r\n" in result.lyric_data
+    assert result.chart_diff.bytes_changed == 0
+    assert result.lyric_diff.bytes_changed > 0
+    assert result.melody_changes == []
+    assert result.lyric_changes == []
+    assert result.string_length_fields_changed is False
+    assert result.pointer_looking_fields_changed is False
+
+
+def test_lyric_worddata_only_changes_only_worddata_offsets_and_lengths():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    before_lyric = sorted(iter_lyric_markers_structural(chart_data), key=lambda marker: marker.offset)
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_worddata_only=True))
+    after_lyric = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.offset)
+    after_melody = sorted(iter_melody_markers(result.chart_data), key=lambda marker: marker.offset)
+    before_melody = sorted(iter_melody_markers(chart_data), key=lambda marker: marker.offset)
+
+    assert result.lyric_data == lyric_data
+    assert result.melody_changes == []
+    assert result.chart_diff.bytes_changed > 0
+    assert result.lyric_diff.bytes_changed == 0
+    assert [(marker.time, marker.length, marker.track_index, marker.end_of_word) for marker in after_lyric] == [
+        (marker.time, marker.length, marker.track_index, marker.end_of_word) for marker in before_lyric
+    ]
+    assert [(marker.time, marker.length, marker.raw_pitch) for marker in after_melody] == [
+        (marker.time, marker.length, marker.raw_pitch) for marker in before_melody
+    ]
+    assert [(marker.text_offset, marker.text_length) for marker in after_lyric[:2]] == [(3, 3), (6, 2)]
+    assert [(marker.text_offset, marker.text_length) for marker in after_lyric[2:]] == [
+        (marker.text_offset, marker.text_length) for marker in before_lyric[2:]
+    ]
+    assert result.string_length_fields_changed is True
+    assert result.pointer_looking_fields_changed is False
+
+
+def test_lyric_marker_only_changes_only_lyric_marker_fields():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    before_lyric = sorted(iter_lyric_markers_structural(chart_data), key=lambda marker: marker.offset)
+    before_melody = sorted(iter_melody_markers(chart_data), key=lambda marker: marker.offset)
+
+    result = write_template_chart(
+        chart_data,
+        lyric_data,
+        model,
+        TemplateWriteOptions(lyric_marker_only=True),
+    )
+    after_lyric = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.offset)
+    after_melody = sorted(iter_melody_markers(result.chart_data), key=lambda marker: marker.offset)
+
+    assert result.lyric_data == lyric_data
+    assert result.melody_changes == []
+    assert result.moved_unused_lyric_count == 0
+    assert [(marker.time, marker.length, marker.raw_pitch) for marker in after_melody] == [
+        (marker.time, marker.length, marker.raw_pitch) for marker in before_melody
+    ]
+    assert [(marker.text_offset, marker.text_length, marker.melody_pointer, marker.word_data_pointer) for marker in after_lyric] == [
+        (marker.text_offset, marker.text_length, marker.melody_pointer, marker.word_data_pointer) for marker in before_lyric
+    ]
+    assert [(marker.time, marker.length, marker.track_index, marker.end_of_word) for marker in after_lyric[:2]] == pytest.approx(
+        [(10.0, 0.5, 60, 0), (10.5, 0.25, 62, 1)]
+    )
+    assert [(marker.time, marker.length, marker.track_index, marker.end_of_word) for marker in after_lyric[2:]] == pytest.approx(
+        [(marker.time, marker.length, marker.track_index, marker.end_of_word) for marker in before_lyric[2:]]
+    )
+    assert result.string_length_fields_changed is False
+    assert result.pointer_looking_fields_changed is False
+
+
+def test_summary_reports_diff_validation_fields(tmp_path):
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_worddata_only=True))
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert "mode: lyric-worddata-only" in summary
+    assert "chart_bytes_changed:" in summary
+    assert "lyric_bytes_changed: 0" in summary
+    assert "lyric_worddata_offset_length_bounds: ok" in summary
+    assert "string_length_fields_changed: yes" in summary
+    assert "pointer_looking_fields_changed: no" in summary
+
+
 def test_no_disable_unused_preserves_unused_marker_times():
     chart_data = template_chart()
     lyric_data = template_lyric()
@@ -198,7 +297,7 @@ def test_chart_only_and_lyric_only_are_mutually_exclusive():
     lyric_data = template_lyric()
     model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False)])
 
-    with pytest.raises(ValueError, match="cannot be used together"):
+    with pytest.raises(ValueError, match="cannot be combined"):
         write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(chart_only=True, lyric_only=True))
 
 

@@ -81,7 +81,16 @@ class TextPlacement:
 class TemplateWriteOptions:
     chart_only: bool = False
     lyric_only: bool = False
+    lyric_text_only: bool = False
+    lyric_worddata_only: bool = False
+    lyric_marker_only: bool = False
     disable_unused: bool = True
+
+
+@dataclass(frozen=True)
+class ByteDiffSummary:
+    bytes_changed: int
+    changed_ranges: list[tuple[int, int]]
 
 
 @dataclass(frozen=True)
@@ -138,8 +147,16 @@ class TemplateWriteResult:
     lyric_changes: list[LyricRecordChange]
     moved_unused_melody_count: int
     moved_unused_lyric_count: int
+    chart_diff: ByteDiffSummary
+    lyric_diff: ByteDiffSummary
+    lyric_worddata_bounds_valid: bool
+    string_length_fields_changed: bool
+    pointer_looking_fields_changed: bool
     chart_only: bool = False
     lyric_only: bool = False
+    lyric_text_only: bool = False
+    lyric_worddata_only: bool = False
+    lyric_marker_only: bool = False
     disable_unused: bool = True
 
 
@@ -207,9 +224,60 @@ def _existing_lyric_payload_stats(lyric_data: bytes) -> tuple[int, int]:
     return len(payload.rstrip(b" ")), len(payload)
 
 
+def _build_lyric_placements_without_writing(template_lyric_data: bytes, chart: SongChart) -> dict[int, TextPlacement]:
+    _, capacity = _existing_lyric_payload_stats(template_lyric_data)
+    _, placements = _build_lyric_payload(chart, capacity)
+    return placements
+
+
 def _validate_options(options: TemplateWriteOptions) -> None:
-    if options.chart_only and options.lyric_only:
-        raise ValueError("--chart-only and --lyric-only cannot be used together")
+    isolated_modes = [
+        options.chart_only,
+        options.lyric_only,
+        options.lyric_text_only,
+        options.lyric_worddata_only,
+        options.lyric_marker_only,
+    ]
+    if sum(1 for enabled in isolated_modes if enabled) > 1:
+        raise ValueError(
+            "--chart-only, --lyric-only, --lyric-text-only, --lyric-worddata-only, "
+            "and --lyric-marker-only cannot be combined"
+        )
+
+
+def _patch_melody_enabled(options: TemplateWriteOptions) -> bool:
+    return not (
+        options.lyric_only
+        or options.lyric_text_only
+        or options.lyric_worddata_only
+        or options.lyric_marker_only
+    )
+
+
+def _patch_lyric_text_enabled(options: TemplateWriteOptions) -> bool:
+    return not (options.chart_only or options.lyric_worddata_only or options.lyric_marker_only)
+
+
+def _patch_lyric_marker_fields_enabled(options: TemplateWriteOptions) -> bool:
+    return not (options.chart_only or options.lyric_text_only or options.lyric_worddata_only)
+
+
+def _patch_worddata_enabled(options: TemplateWriteOptions) -> bool:
+    return not (options.chart_only or options.lyric_text_only or options.lyric_marker_only)
+
+
+def _mode_name(options: TemplateWriteOptions) -> str:
+    if options.chart_only:
+        return "chart-only"
+    if options.lyric_only:
+        return "lyric-only"
+    if options.lyric_text_only:
+        return "lyric-text-only"
+    if options.lyric_worddata_only:
+        return "lyric-worddata-only"
+    if options.lyric_marker_only:
+        return "lyric-marker-only"
+    return "full"
 
 
 def _validate_lyric_word_bounds(lyric_markers: list[LyricMarker], lyric_data: bytes) -> None:
@@ -241,6 +309,47 @@ def _validate_patched_lyric_links(
                 "patched LyricMarker has no corresponding chronological MelodyMarker: "
                 f"lyric_index={marker.chronological_index} melody_count={len(melody_markers)}"
             )
+
+
+def _byte_diff_summary(before: bytes, after: bytes) -> ByteDiffSummary:
+    if len(before) != len(after):
+        raise ValueError("cannot summarize byte diff for differently sized data")
+    ranges: list[tuple[int, int]] = []
+    bytes_changed = 0
+    range_start: int | None = None
+    for index, (old_byte, new_byte) in enumerate(zip(before, after)):
+        if old_byte == new_byte:
+            if range_start is not None:
+                ranges.append((range_start, index))
+                range_start = None
+            continue
+        bytes_changed += 1
+        if range_start is None:
+            range_start = index
+    if range_start is not None:
+        ranges.append((range_start, len(before)))
+    return ByteDiffSummary(bytes_changed=bytes_changed, changed_ranges=ranges)
+
+
+def _string_length_fields_changed(before: list[LyricMarker], after: list[LyricMarker]) -> bool:
+    after_by_offset = {marker.offset: marker for marker in after}
+    return any(
+        marker.offset in after_by_offset and marker.text_length != after_by_offset[marker.offset].text_length
+        for marker in before
+    )
+
+
+def _pointer_looking_fields_changed(before: list[LyricMarker], after: list[LyricMarker]) -> bool:
+    after_by_offset = {marker.offset: marker for marker in after}
+    for marker in before:
+        after_marker = after_by_offset.get(marker.offset)
+        if after_marker is None:
+            return True
+        if marker.melody_pointer != after_marker.melody_pointer:
+            return True
+        if marker.word_data_pointer != after_marker.word_data_pointer:
+            return True
+    return False
 
 
 def _unused_time(index: int) -> float:
@@ -281,13 +390,15 @@ def patch_chart_from_model(
     options: TemplateWriteOptions = TemplateWriteOptions(),
 ) -> tuple[bytes, list[MelodyRecordChange], list[LyricRecordChange]]:
     _validate_options(options)
-    patch_melody = not options.lyric_only
-    patch_lyrics = not options.chart_only
+    patch_melody = _patch_melody_enabled(options)
+    patch_lyric_marker_fields = _patch_lyric_marker_fields_enabled(options)
+    patch_worddata = _patch_worddata_enabled(options)
+    patch_any_chart_lyrics = patch_lyric_marker_fields or patch_worddata
     melody_sites = _chronological_melody_sites(template_chart_data)
     lyric_markers = _chronological_lyrics(template_chart_data)
     if patch_melody and len(chart.notes) > len(melody_sites):
         raise ValueError(f"chart has {len(chart.notes)} notes but template has only {len(melody_sites)} MelodyMarkers")
-    if patch_lyrics and len(chart.notes) > len(lyric_markers):
+    if patch_any_chart_lyrics and len(chart.notes) > len(lyric_markers):
         raise ValueError(f"chart has {len(chart.notes)} notes but template has only {len(lyric_markers)} LyricMarkers")
 
     patched = bytearray(template_chart_data)
@@ -321,32 +432,38 @@ def patch_chart_from_model(
                 )
             )
 
-    if patch_lyrics:
+    if patch_any_chart_lyrics:
         for index, note in enumerate(chart.notes):
             lyric_marker = lyric_markers[index]
-            placement = placements[index]
+            placement = placements[index] if patch_worddata else TextPlacement(lyric_marker.text_offset, lyric_marker.text_length)
             new_end_word = 1 if note.end_word else 0
-            struct.pack_into(">f", patched, lyric_marker.body_offset + 8, note.time)
-            struct.pack_into(">f", patched, lyric_marker.body_offset + 12, note.length)
-            struct.pack_into(">i", patched, lyric_marker.body_offset + 16, note.pitch)
-            struct.pack_into(">I", patched, lyric_marker.body_offset + 60, new_end_word)
-            struct.pack_into(">I", patched, lyric_marker.word_data_file_offset + WORD_DATA_TEXT_OFFSET, placement.offset)
-            struct.pack_into(">I", patched, lyric_marker.word_data_file_offset + WORD_DATA_TEXT_LENGTH, placement.length)
+            if patch_lyric_marker_fields:
+                struct.pack_into(">f", patched, lyric_marker.body_offset + 8, note.time)
+                struct.pack_into(">f", patched, lyric_marker.body_offset + 12, note.length)
+                struct.pack_into(">i", patched, lyric_marker.body_offset + 16, note.pitch)
+                struct.pack_into(">I", patched, lyric_marker.body_offset + 60, new_end_word)
+            if patch_worddata:
+                struct.pack_into(">I", patched, lyric_marker.word_data_file_offset + WORD_DATA_TEXT_OFFSET, placement.offset)
+                struct.pack_into(">I", patched, lyric_marker.word_data_file_offset + WORD_DATA_TEXT_LENGTH, placement.length)
             lyric_changes.append(
                 LyricRecordChange(
-                    action="note",
+                    action="note"
+                    if patch_lyric_marker_fields and patch_worddata
+                    else "lyric-marker"
+                    if patch_lyric_marker_fields
+                    else "worddata",
                     object_index=lyric_marker.object_index,
                     chronological_index=lyric_marker.chronological_index,
                     offset=lyric_marker.offset,
                     melody_pointer=lyric_marker.melody_pointer,
                     old_time=lyric_marker.time,
-                    new_time=note.time,
+                    new_time=note.time if patch_lyric_marker_fields else lyric_marker.time,
                     old_length=lyric_marker.length,
-                    new_length=note.length,
+                    new_length=note.length if patch_lyric_marker_fields else lyric_marker.length,
                     old_track_index=lyric_marker.track_index,
-                    new_track_index=note.pitch,
+                    new_track_index=note.pitch if patch_lyric_marker_fields else lyric_marker.track_index,
                     old_end_word=lyric_marker.end_of_word,
-                    new_end_word=new_end_word,
+                    new_end_word=new_end_word if patch_lyric_marker_fields else lyric_marker.end_of_word,
                     old_text_offset=lyric_marker.text_offset,
                     new_text_offset=placement.offset,
                     old_text_length=lyric_marker.text_length,
@@ -380,7 +497,7 @@ def patch_chart_from_model(
                     )
                 )
 
-        if patch_lyrics:
+        if patch_lyric_marker_fields and not options.lyric_marker_only:
             for unused_index, lyric_marker in enumerate(lyric_markers[len(chart.notes) :]):
                 new_time = _unused_time(unused_index)
                 struct.pack_into(">f", patched, lyric_marker.body_offset + 8, new_time)
@@ -433,12 +550,16 @@ def write_template_chart(
         key=lambda marker: marker.offset,
     )
     lyric_before = iter_lyric_markers_structural(template_chart_data)
-    if options.chart_only:
-        patched_lyric = template_lyric_data
-        placements: dict[int, TextPlacement] = {}
-        lyric_bytes_used, lyric_capacity = _existing_lyric_payload_stats(template_lyric_data)
-    else:
+    if _patch_lyric_text_enabled(options):
         patched_lyric, placements, lyric_bytes_used, lyric_capacity = patch_lyric_file_text(template_lyric_data, chart)
+    else:
+        patched_lyric = template_lyric_data
+        lyric_bytes_used, lyric_capacity = _existing_lyric_payload_stats(template_lyric_data)
+        placements = (
+            _build_lyric_placements_without_writing(template_lyric_data, chart)
+            if _patch_worddata_enabled(options)
+            else {}
+        )
     patched_chart, melody_changes, lyric_changes = patch_chart_from_model(template_chart_data, chart, placements, options)
     melody_after = sorted(
         iter_melody_markers_object_walker(patched_chart, parse_ixb_document(patched_chart)),
@@ -455,6 +576,8 @@ def write_template_chart(
         raise ValueError("lyric file size changed unexpectedly")
     _validate_lyric_word_bounds(lyric_after, patched_lyric)
     _validate_patched_lyric_links(melody_after, lyric_after, lyric_changes)
+    chart_diff = _byte_diff_summary(template_chart_data, patched_chart)
+    lyric_diff = _byte_diff_summary(template_lyric_data, patched_lyric)
     return TemplateWriteResult(
         chart_data=patched_chart,
         lyric_data=patched_lyric,
@@ -469,8 +592,16 @@ def write_template_chart(
         lyric_changes=lyric_changes,
         moved_unused_melody_count=sum(1 for change in melody_changes if change.action == "disable-unused"),
         moved_unused_lyric_count=sum(1 for change in lyric_changes if change.action == "disable-unused"),
+        chart_diff=chart_diff,
+        lyric_diff=lyric_diff,
+        lyric_worddata_bounds_valid=True,
+        string_length_fields_changed=_string_length_fields_changed(lyric_before, lyric_after),
+        pointer_looking_fields_changed=_pointer_looking_fields_changed(lyric_before, lyric_after),
         chart_only=options.chart_only,
         lyric_only=options.lyric_only,
+        lyric_text_only=options.lyric_text_only,
+        lyric_worddata_only=options.lyric_worddata_only,
+        lyric_marker_only=options.lyric_marker_only,
         disable_unused=options.disable_unused,
     )
 
@@ -526,18 +657,38 @@ def _format_bool(value: bool) -> str:
     return "yes" if value else "no"
 
 
+def _format_ranges(ranges: list[tuple[int, int]], limit: int = 12) -> str:
+    if not ranges:
+        return "none"
+    visible = [f"0x{start:08X}-0x{end - 1:08X}" for start, end in ranges[:limit]]
+    if len(ranges) > limit:
+        visible.append(f"... +{len(ranges) - limit} more")
+    return ", ".join(visible)
+
+
 def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path) -> list[str]:
     lines = [
         "template chart write summary:",
         f"  chart_output: {out_chart}",
         f"  lyric_output: {out_lyric}",
+        f"  mode: {_mode_name(result)}",
         f"  mode_chart_only: {_format_bool(result.chart_only)}",
         f"  mode_lyric_only: {_format_bool(result.lyric_only)}",
+        f"  mode_lyric_text_only: {_format_bool(result.lyric_text_only)}",
+        f"  mode_lyric_worddata_only: {_format_bool(result.lyric_worddata_only)}",
+        f"  mode_lyric_marker_only: {_format_bool(result.lyric_marker_only)}",
         f"  disable_unused: {_format_bool(result.disable_unused)}",
         f"  notes_written: {result.notes_written}",
         f"  melody_marker_count: {result.melody_count_before} -> {result.melody_count_after}",
         f"  lyric_marker_count: {result.lyric_count_before} -> {result.lyric_count_after}",
         f"  lyric_payload_bytes: {result.lyric_payload_bytes_used}/{result.lyric_payload_capacity}",
+        f"  chart_bytes_changed: {result.chart_diff.bytes_changed}",
+        f"  lyric_bytes_changed: {result.lyric_diff.bytes_changed}",
+        f"  chart_changed_ranges: {_format_ranges(result.chart_diff.changed_ranges)}",
+        f"  lyric_changed_ranges: {_format_ranges(result.lyric_diff.changed_ranges)}",
+        f"  lyric_worddata_offset_length_bounds: {'ok' if result.lyric_worddata_bounds_valid else 'failed'}",
+        f"  string_length_fields_changed: {_format_bool(result.string_length_fields_changed)}",
+        f"  pointer_looking_fields_changed: {_format_bool(result.pointer_looking_fields_changed)}",
         f"  moved_unused_melody_markers: {result.moved_unused_melody_count}",
         f"  moved_unused_lyric_markers: {result.moved_unused_lyric_count}",
         f"  melody_records_changed: {len(result.melody_changes)}",
@@ -588,6 +739,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Patch lyric text and LyricMarker/LyricWordData records only; leave MelodyMarkers unchanged",
     )
     parser.add_argument(
+        "--lyric-text-only",
+        action="store_true",
+        help="Rewrite only the visible _Lyric.X360 text payload; leave chart records unchanged",
+    )
+    parser.add_argument(
+        "--lyric-worddata-only",
+        action="store_true",
+        help="Patch only LyricWordData text offsets/lengths; leave lyric text, MelodyMarkers, and LyricMarkers unchanged",
+    )
+    parser.add_argument(
+        "--lyric-marker-only",
+        action="store_true",
+        help="Patch only LyricMarker timing/length/track/end-word fields; leave lyric text, WordData, and MelodyMarkers unchanged",
+    )
+    parser.add_argument(
         "--no-disable-unused",
         action="store_true",
         help="Do not move unused MelodyMarkers or LyricMarkers later in the template",
@@ -604,6 +770,9 @@ def main(argv: list[str] | None = None) -> int:
     options = TemplateWriteOptions(
         chart_only=args.chart_only,
         lyric_only=args.lyric_only,
+        lyric_text_only=args.lyric_text_only,
+        lyric_worddata_only=args.lyric_worddata_only,
+        lyric_marker_only=args.lyric_marker_only,
         disable_unused=not args.no_disable_unused,
     )
     try:
