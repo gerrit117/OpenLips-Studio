@@ -101,8 +101,15 @@ class LyricTextOverwriteInfo:
     range_start: int
     range_end: int
     original_range_length: int
+    visible_range_start: int
+    visible_range_end: int
+    original_visible_length: int
     new_text_byte_length: int
     padding_byte: int
+    visible_fill_byte: int
+    prefix_char_length: int
+    bom_preserved: bool
+    trailing_padding_preserved: bool
     changed_only_detected_range: bool
     selected_by: str
     resource_index: int | None
@@ -117,6 +124,22 @@ class LyricTextOverwriteInfo:
 class MelodyRecordChange:
     action: str
     object_index: int
+    chronological_index: int
+    offset: int
+    old_time: float
+    new_time: float
+    old_length: float
+    new_length: float
+    old_raw_pitch: int
+    new_raw_pitch: int
+    old_tone: float
+    new_tone: float
+    old_octave: int
+    new_octave: int
+
+
+@dataclass(frozen=True)
+class MelodyPreviewRow:
     chronological_index: int
     offset: int
     old_time: float
@@ -164,6 +187,7 @@ class TemplateWriteResult:
     lyric_payload_bytes_used: int
     lyric_payload_capacity: int
     melody_changes: list[MelodyRecordChange]
+    melody_preview: list[MelodyPreviewRow]
     lyric_changes: list[LyricRecordChange]
     moved_unused_melody_count: int
     moved_unused_lyric_count: int
@@ -230,7 +254,7 @@ def _chronological_lyrics(chart_data: bytes) -> list[LyricMarker]:
 def _select_lyric_text_resource(
     lyric_data: bytes,
     lyric_markers: list[LyricMarker] | None = None,
-) -> tuple[TextResource, str, int | None, int | None, int | None, float | None]:
+) -> tuple[TextResource, str, int | None, int | None, int | None, float | None, int | None]:
     selection = select_text_resource(lyric_data, lyric_markers)
     if selection.resource is None:
         detail = ""
@@ -243,6 +267,7 @@ def _select_lyric_text_resource(
     coverage_ratio = selection.coverage.coverage_ratio if selection.coverage is not None else None
     coverage_in_bounds = selection.coverage.markers_in_bounds if selection.coverage is not None else None
     coverage_total = selection.coverage.total_markers if selection.coverage is not None else None
+    coverage_min_offset = selection.coverage.min_text_offset if selection.coverage is not None else None
     return (
         selection.resource,
         selection.selected_by,
@@ -250,11 +275,12 @@ def _select_lyric_text_resource(
         coverage_in_bounds,
         coverage_total,
         coverage_ratio,
+        coverage_min_offset,
     )
 
 
 def _lyric_payload_text(lyric_data: bytes, lyric_markers: list[LyricMarker] | None = None) -> str:
-    resource, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    resource, _, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
     return lyric_data[resource.payload_start : resource.payload_end].decode("utf-8", errors="replace")
 
 
@@ -262,7 +288,7 @@ def _existing_lyric_payload_stats(
     lyric_data: bytes,
     lyric_markers: list[LyricMarker] | None = None,
 ) -> tuple[int, int]:
-    resource, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    resource, _, _, _, _, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
     return resource.visible_length, resource.payload_length
 
 
@@ -416,8 +442,52 @@ def _unused_time(index: int) -> float:
     return UNUSED_MARKER_START_TIME - index * UNUSED_MARKER_STEP
 
 
-def _build_visible_lyric_payload(chart: SongChart) -> tuple[bytes, dict[int, TextPlacement]]:
-    text = "\ufeff\r\n"
+def _decode_resource_text(data: bytes) -> tuple[str, bool]:
+    try:
+        return data.decode("utf-8"), True
+    except UnicodeDecodeError:
+        return data.decode("utf-8", errors="replace"), False
+
+
+def _neutral_prefix(prefix: str) -> str:
+    return "".join(char if char in "\ufeff\r\n\t" else " " for char in prefix)
+
+
+def _prefix_from_template(resource: TextResource, lyric_data: bytes, coverage_min_offset: int | None) -> str:
+    visible_raw = lyric_data[resource.payload_start : resource.visible_end]
+    visible_text, _ = _decode_resource_text(visible_raw)
+    if coverage_min_offset is not None and 0 <= coverage_min_offset <= len(visible_text):
+        return _neutral_prefix(visible_text[:coverage_min_offset])
+    if visible_text.startswith("\ufeff\r\n"):
+        return "\ufeff\r\n"
+    if visible_text.startswith("\ufeff\n"):
+        return "\ufeff\n"
+    if visible_text.startswith("\ufeff"):
+        return "\ufeff"
+    index = 0
+    while index < len(visible_text) and visible_text[index] in "\r\n\t ":
+        index += 1
+    return _neutral_prefix(visible_text[:index])
+
+
+def _line_break_from_template(resource: TextResource, lyric_data: bytes) -> str:
+    visible_raw = lyric_data[resource.payload_start : resource.visible_end]
+    visible_text, _ = _decode_resource_text(visible_raw)
+    if "\r\n" in visible_text:
+        return "\r\n"
+    if "\n" in visible_text:
+        return "\n"
+    if "\r" in visible_text:
+        return "\r"
+    return "\r\n"
+
+
+def _build_visible_lyric_text(
+    chart: SongChart,
+    prefix: str = "\ufeff\r\n",
+    line_break: str = "\r\n",
+) -> tuple[str, dict[int, TextPlacement]]:
+    text = prefix
     placements: dict[int, TextPlacement] = {}
     for index, note in enumerate(chart.notes):
         offset = len(text)
@@ -425,7 +495,12 @@ def _build_visible_lyric_payload(chart: SongChart) -> tuple[bytes, dict[int, Tex
         placements[index] = TextPlacement(offset=offset, length=len(note.text))
         if note.end_word:
             text += " "
-    payload = text.rstrip() + "\r\n"
+    payload = text.rstrip(" ") + line_break
+    return payload, placements
+
+
+def _build_visible_lyric_payload(chart: SongChart) -> tuple[bytes, dict[int, TextPlacement]]:
+    payload, placements = _build_visible_lyric_text(chart)
     encoded = payload.encode("utf-8")
     return encoded, placements
 
@@ -449,18 +524,30 @@ def patch_lyric_file_text(
         coverage_in_bounds,
         coverage_total,
         coverage_ratio,
+        coverage_min_offset,
     ) = _select_lyric_text_resource(template_lyric_data, lyric_markers)
     payload_start = resource.payload_start
     payload_end = resource.payload_end
+    visible_start = resource.payload_start
+    visible_end = resource.visible_end
     padding_byte = resource.padding_byte if resource.padding_byte is not None else 0x20
+    visible_fill_byte = 0x20
     payload_capacity = resource.payload_length
-    payload, placements = _build_visible_lyric_payload(chart)
-    if len(payload) > payload_capacity:
+    visible_capacity = max(0, visible_end - visible_start)
+    prefix = _prefix_from_template(resource, template_lyric_data, coverage_min_offset)
+    line_break = _line_break_from_template(resource, template_lyric_data)
+    visible_text, placements = _build_visible_lyric_text(chart, prefix=prefix, line_break=line_break)
+    payload = visible_text.encode("utf-8")
+    if len(payload) > visible_capacity:
         raise ValueError(
-            f"new lyric text needs {len(payload)} bytes but selected Text resource payload has only {payload_capacity}"
+            f"new lyric text needs {len(payload)} bytes but original visible Text region has only {visible_capacity}"
         )
     patched = bytearray(template_lyric_data)
-    replacement = payload + bytes([padding_byte]) * (payload_capacity - len(payload))
+    original_trailing_padding = template_lyric_data[visible_end:payload_end]
+    visible_replacement = payload + bytes([visible_fill_byte]) * (visible_capacity - len(payload))
+    replacement = visible_replacement + original_trailing_padding
+    if len(replacement) != payload_capacity:
+        raise ValueError("generated lyric replacement does not match selected Text resource payload length")
     patched[payload_start:payload_end] = replacement
     if len(patched) != len(template_lyric_data):
         raise ValueError("lyric file size changed unexpectedly")
@@ -475,8 +562,15 @@ def patch_lyric_file_text(
             range_start=payload_start,
             range_end=payload_end,
             original_range_length=payload_capacity,
+            visible_range_start=visible_start,
+            visible_range_end=visible_end,
+            original_visible_length=visible_capacity,
             new_text_byte_length=len(payload),
             padding_byte=padding_byte,
+            visible_fill_byte=visible_fill_byte,
+            prefix_char_length=len(prefix),
+            bom_preserved=prefix.startswith("\ufeff") == template_lyric_data[payload_start:payload_start + 3].startswith(b"\xef\xbb\xbf"),
+            trailing_padding_preserved=patched[visible_end:payload_end] == template_lyric_data[visible_end:payload_end],
             changed_only_detected_range=changed_only_detected_range,
             selected_by=selected_by,
             resource_index=resource_index,
@@ -635,6 +729,30 @@ def patch_chart_from_model(
     return bytes(patched), melody_changes, lyric_changes
 
 
+def _melody_preview_rows(before: list[MelodyMarker], after: list[MelodyMarker], limit: int = 10) -> list[MelodyPreviewRow]:
+    after_by_offset = {marker.offset: marker for marker in after}
+    rows: list[MelodyPreviewRow] = []
+    for chronological_index, marker in enumerate(sorted(before, key=lambda item: (item.time, item.offset))[:limit], start=1):
+        after_marker = after_by_offset.get(marker.offset, marker)
+        rows.append(
+            MelodyPreviewRow(
+                chronological_index=chronological_index,
+                offset=marker.offset,
+                old_time=marker.time,
+                new_time=after_marker.time,
+                old_length=marker.length,
+                new_length=after_marker.length,
+                old_raw_pitch=marker.raw_pitch,
+                new_raw_pitch=after_marker.raw_pitch,
+                old_tone=marker.tone,
+                new_tone=after_marker.tone,
+                old_octave=marker.octave,
+                new_octave=after_marker.octave,
+            )
+        )
+    return rows
+
+
 def write_template_chart(
     template_chart_data: bytes,
     template_lyric_data: bytes,
@@ -700,6 +818,7 @@ def write_template_chart(
         lyric_payload_bytes_used=lyric_bytes_used,
         lyric_payload_capacity=lyric_capacity,
         melody_changes=melody_changes,
+        melody_preview=_melody_preview_rows(melody_before, melody_after),
         lyric_changes=lyric_changes,
         moved_unused_melody_count=sum(1 for change in melody_changes if change.action == "disable-unused"),
         moved_unused_lyric_count=sum(1 for change in lyric_changes if change.action == "disable-unused"),
@@ -779,6 +898,71 @@ def _format_ranges(ranges: list[tuple[int, int]], limit: int = 12) -> str:
     return ", ".join(visible)
 
 
+def _hex_dump(data: bytes, width: int = 16) -> list[str]:
+    lines: list[str] = []
+    for offset in range(0, len(data), width):
+        chunk = data[offset : offset + width]
+        hex_bytes = " ".join(f"{value:02X}" for value in chunk)
+        ascii_bytes = "".join(chr(value) if 0x20 <= value <= 0x7E else "." for value in chunk)
+        lines.append(f"    {offset:08X}  {hex_bytes:<{width * 3 - 1}}  {ascii_bytes}")
+    if not lines:
+        lines.append("    <empty>")
+    return lines
+
+
+def _escaped_utf8(data: bytes, limit: int | None = None) -> str:
+    text = data.decode("utf-8", errors="replace")
+    if limit is not None and len(text) > limit:
+        text = text[: limit - 3] + "..."
+    return text.encode("unicode_escape", errors="backslashreplace").decode("ascii")
+
+
+def format_lyric_payload_debug(original_lyric_data: bytes, result: TemplateWriteResult) -> list[str]:
+    info = result.lyric_text_overwrite
+    if info is None:
+        return ["lyric payload debug: unavailable because lyric text was not rewritten"]
+    generated_payload = result.lyric_data[info.range_start : info.range_end]
+    generated_visible = result.lyric_data[info.visible_range_start : info.visible_range_end]
+    lines = [
+        "lyric payload debug:",
+        f"  selected_payload_range: 0x{info.range_start:08X}-0x{info.range_end - 1:08X}",
+        f"  generated_payload_length: {len(generated_payload)}",
+        "  generated_payload_hex:",
+    ]
+    lines.extend(_hex_dump(generated_payload))
+    lines.extend(
+        [
+            f"  generated_payload_decoded_utf8_preview: {_escaped_utf8(generated_payload, limit=512)}",
+            f"  generated_visible_text_escaped: {_escaped_utf8(generated_visible)}",
+        ]
+    )
+    return lines
+
+
+def format_lyric_payload_comparison(
+    original_lyric_data: bytes,
+    result: TemplateWriteResult,
+    preview_bytes: int = 256,
+) -> list[str]:
+    info = result.lyric_text_overwrite
+    if info is None:
+        return ["lyric payload comparison: unavailable because lyric text was not rewritten"]
+    original_visible = original_lyric_data[info.visible_range_start : info.visible_range_end]
+    generated_visible = result.lyric_data[info.visible_range_start : info.visible_range_end]
+    original_prefix = original_lyric_data[info.range_start : min(info.range_end, info.range_start + preview_bytes)]
+    generated_prefix = result.lyric_data[info.range_start : min(info.range_end, info.range_start + preview_bytes)]
+    lines = [
+        "lyric payload comparison:",
+        f"  original_visible_preview: {_escaped_utf8(original_visible, limit=512)}",
+        f"  generated_visible_preview: {_escaped_utf8(generated_visible, limit=512)}",
+        f"  first_{preview_bytes}_bytes_before_hex:",
+    ]
+    lines.extend(_hex_dump(original_prefix))
+    lines.append(f"  first_{preview_bytes}_bytes_after_hex:")
+    lines.extend(_hex_dump(generated_prefix))
+    return lines
+
+
 def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path) -> list[str]:
     lines = [
         "template chart write summary:",
@@ -796,6 +980,7 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         f"  melody_marker_count: {result.melody_count_before} -> {result.melody_count_after}",
         f"  lyric_marker_count: {result.lyric_count_before} -> {result.lyric_count_after}",
         f"  lyric_payload_bytes: {result.lyric_payload_bytes_used}/{result.lyric_payload_capacity}",
+        f"  chart_output_differs: {_format_bool(result.chart_diff.bytes_changed > 0)}",
         f"  chart_bytes_changed: {result.chart_diff.bytes_changed}",
         f"  lyric_bytes_changed: {result.lyric_diff.bytes_changed}",
         f"  chart_changed_ranges: {_format_ranges(result.chart_diff.changed_ranges)}",
@@ -821,8 +1006,14 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
                 f"    payload_length_field: 0x{overwrite.payload_length_offset:08X}={overwrite.payload_length_value}",
                 f"    payload_range: 0x{overwrite.range_start:08X}-0x{overwrite.range_end - 1:08X}",
                 f"    payload_length: {overwrite.original_range_length}",
+                f"    visible_text_range: 0x{overwrite.visible_range_start:08X}-0x{overwrite.visible_range_end - 1:08X}",
+                f"    visible_text_length: {overwrite.original_visible_length}",
                 f"    new_text_byte_length: {overwrite.new_text_byte_length}",
                 f"    padding_byte: 0x{overwrite.padding_byte:02X}",
+                f"    visible_fill_byte: 0x{overwrite.visible_fill_byte:02X}",
+                f"    prefix_char_length: {overwrite.prefix_char_length}",
+                f"    bom_preserved: {_format_bool(overwrite.bom_preserved)}",
+                f"    trailing_padding_preserved: {_format_bool(overwrite.trailing_padding_preserved)}",
                 f"    changed_only_selected_payload: {_format_bool(overwrite.changed_only_detected_range)}",
                 "    metadata_fields_changed: no",
             ]
@@ -830,6 +1021,19 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         if overwrite.selected_by == "heuristic":
             lines.append(
                 "    warning: no chart LyricWordData coverage was available; selected lyric text by heuristic fallback"
+            )
+    if result.melody_preview:
+        lines.append("  melody_preview_first10_chronological:")
+        for row in result.melody_preview:
+            lines.append(
+                "    "
+                f"chronological_index={row.chronological_index} "
+                f"offset=0x{row.offset:08X} "
+                f"time {row.old_time:.6f}->{row.new_time:.6f} "
+                f"length {row.old_length:.6f}->{row.new_length:.6f} "
+                f"raw_pitch {row.old_raw_pitch}->{row.new_raw_pitch} "
+                f"tone {row.old_tone:.6f}->{row.new_tone:.6f} "
+                f"octave {row.old_octave}->{row.new_octave}"
             )
     if result.melody_changes:
         lines.append("  melody_changes:")
@@ -899,6 +1103,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Do not move unused MelodyMarkers or LyricMarkers later in the template",
     )
+    parser.add_argument(
+        "--debug-lyric-payload",
+        action="store_true",
+        help="Dump the generated selected lyric Text payload as hex, UTF-8 preview, and escaped text",
+    )
+    parser.add_argument(
+        "--compare-lyric-payload",
+        action="store_true",
+        help="Print original/generated visible lyric payload previews and first bytes before/after",
+    )
+    parser.add_argument(
+        "--payload-preview-bytes",
+        type=int,
+        default=256,
+        help="Number of first selected-payload bytes to show in --compare-lyric-payload",
+    )
     parser.add_argument("--force", action="store_true", help="Allow overwriting existing outputs")
     return parser.parse_args(argv)
 
@@ -934,6 +1154,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print("\n".join(format_summary(result, out_chart, out_lyric)))
+    if args.debug_lyric_payload or args.compare_lyric_payload:
+        original_lyric_data = args.template_lyric.read_bytes()
+        if args.debug_lyric_payload:
+            print("\n".join(format_lyric_payload_debug(original_lyric_data, result)))
+        if args.compare_lyric_payload:
+            print(
+                "\n".join(
+                    format_lyric_payload_comparison(
+                        original_lyric_data,
+                        result,
+                        preview_bytes=args.payload_preview_bytes,
+                    )
+                )
+            )
     return 0
 
 

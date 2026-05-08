@@ -9,6 +9,8 @@ from tools.write_template_chart import (
     Note,
     SongChart,
     TemplateWriteOptions,
+    format_lyric_payload_comparison,
+    format_lyric_payload_debug,
     format_summary,
     load_json_chart,
     write_template_chart,
@@ -80,12 +82,12 @@ def lyric_marker(time, length, pointer, pitch=49, melody_pointer=0x2FA10000, end
     return b"\x40" + bytes(body)
 
 
-def template_chart(marker_count=6):
+def template_chart(marker_count=6, text_offset_base=0):
     chunks = [IXB_SCHEMA]
     for index in range(marker_count):
         pointer = 0x07160000 + index * 0x80
         time = float(index + 1)
-        chunks.append(word_data(pointer, index * 3, 2))
+        chunks.append(word_data(pointer, text_offset_base + index * 3, 2))
         chunks.append(melody_marker(time, 0.25, raw_pitch=49))
         chunks.append(lyric_marker(time, 0.25, pointer, melody_pointer=0x2FA10000 + index * 0x80))
         chunks.append(b"gap")
@@ -147,10 +149,13 @@ def test_write_template_chart_patches_model_and_preserves_sizes_counts():
         [(10.0, 0.5, 60, 0), (10.5, 0.25, 62, 1), (11.0, 0.75, 64, 1)]
     )
     assert [marker.time for marker in lyric[3:]] == pytest.approx([898.98, 898.99, 899.0])
-    assert b"\xef\xbb\xbf\r\nHello world\r\n" in result.lyric_data
+    assert b"Hello world\r\n" in result.lyric_data
     assert [marker.text_length for marker in lyric[:3]] == [3, 2, 5]
     assert result.lyric_text_overwrite is not None
-    assert result.lyric_text_overwrite.new_text_byte_length == len(b"\xef\xbb\xbf\r\nHello world\r\n")
+    assert b"\x00" not in result.lyric_data[
+        result.lyric_text_overwrite.visible_range_start : result.lyric_text_overwrite.visible_range_end
+    ]
+    assert result.lyric_text_overwrite.new_text_byte_length == len(b"Hello world\r\n")
     assert result.lyric_text_overwrite.changed_only_detected_range is True
     assert result.lyric_text_overwrite.selected_by == "chart_worddata_coverage"
     assert result.lyric_text_overwrite.coverage_markers_in_bounds == 6
@@ -196,7 +201,7 @@ def test_lyric_only_leaves_melody_markers_unchanged():
     assert [(marker.time, marker.length, marker.track_index) for marker in lyric[:2]] == pytest.approx(
         [(10.0, 0.5, 60), (10.5, 0.25, 62)]
     )
-    assert b"\xef\xbb\xbf\r\nHello" in result.lyric_data
+    assert b"Hello\r\n" in result.lyric_data
 
 
 def test_lyric_text_only_uses_safe_visible_range_overwrite():
@@ -210,7 +215,7 @@ def test_lyric_text_only_uses_safe_visible_range_overwrite():
 
     assert result.chart_data == chart_data
     assert result.lyric_data != lyric_data
-    assert b"\xef\xbb\xbf\r\nHello\r\n" in result.lyric_data
+    assert b"Hello\r\n" in result.lyric_data
     assert result.lyric_data[payload_end:] == lyric_data[payload_end:]
     assert result.chart_diff.bytes_changed == 0
     assert result.lyric_diff.bytes_changed > 0
@@ -218,7 +223,10 @@ def test_lyric_text_only_uses_safe_visible_range_overwrite():
     assert result.lyric_text_overwrite.range_start == visible_start
     assert result.lyric_text_overwrite.range_end == payload_end
     assert result.lyric_text_overwrite.original_range_length == 128
+    assert result.lyric_text_overwrite.visible_range_end == visible_start + len(b"\xef\xbb\xbf\r\nold old old old old\r\n")
     assert result.lyric_text_overwrite.padding_byte == 0x20
+    assert result.lyric_text_overwrite.visible_fill_byte == 0x20
+    assert result.lyric_text_overwrite.trailing_padding_preserved is True
     assert result.lyric_text_overwrite.changed_only_detected_range is True
     assert result.melody_changes == []
     assert result.lyric_changes == []
@@ -242,8 +250,12 @@ def test_lyric_text_overwrite_only_preserves_null_padding_style():
     assert result.lyric_text_overwrite.range_end == payload_end
     assert result.lyric_data[payload_end:] == lyric_data[payload_end:]
     replacement = result.lyric_data[visible_start:payload_end]
-    assert replacement.startswith(b"\xef\xbb\xbf\r\nHello\r\n")
-    assert replacement.endswith(b"\x00" * (128 - len(b"\xef\xbb\xbf\r\nHello\r\n")))
+    original_visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old old old\r\n")
+    assert replacement.startswith(b"Hello\r\n")
+    assert b"\x00" not in result.lyric_data[visible_start:original_visible_end]
+    assert result.lyric_data[original_visible_end:payload_end] == lyric_data[original_visible_end:payload_end]
+    assert result.lyric_text_overwrite.visible_fill_byte == 0x20
+    assert result.lyric_text_overwrite.trailing_padding_preserved is True
 
 
 def test_lyric_text_overwrite_refuses_when_new_text_exceeds_visible_range():
@@ -251,8 +263,23 @@ def test_lyric_text_overwrite_refuses_when_new_text_exceeds_visible_range():
     lyric_data = template_lyric(capacity=32)
     model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is much too long for payload", True)])
 
-    with pytest.raises(ValueError, match="selected Text resource payload"):
+    with pytest.raises(ValueError, match="original visible Text region"):
         write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+
+
+def test_lyric_text_preserves_bom_prefix_when_worddata_offsets_use_it():
+    chart_data = template_chart(text_offset_base=3)
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model)
+    lyric = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.time)
+
+    assert b"\xef\xbb\xbf\r\nHello\r\n" in result.lyric_data
+    assert [(marker.text_offset, marker.text_length) for marker in lyric[:2]] == [(3, 3), (6, 2)]
+    assert result.lyric_text_overwrite is not None
+    assert result.lyric_text_overwrite.prefix_char_length == 3
+    assert result.lyric_text_overwrite.bom_preserved is True
 
 
 def test_lyric_text_resource_selected_by_coverage_even_when_heuristic_rejects_it():
@@ -393,6 +420,11 @@ def test_summary_reports_safe_text_overwrite_fields(tmp_path):
     assert "payload_length_field:" in summary
     assert "payload_range:" in summary
     assert "payload_length:" in summary
+    assert "visible_text_range:" in summary
+    assert "visible_fill_byte: 0x20" in summary
+    assert "trailing_padding_preserved: yes" in summary
+    assert "chart_output_differs:" in summary
+    assert "melody_preview_first10_chronological:" in summary
     assert "new_text_byte_length:" in summary
     assert "padding_byte: 0x20" in summary
     assert "changed_only_selected_payload: yes" in summary
@@ -448,8 +480,27 @@ def test_rejects_lyric_text_that_does_not_fit():
     lyric_data = template_lyric(capacity=16)
     model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is much too long", True)])
 
-    with pytest.raises(ValueError, match="selected Text resource payload"):
+    with pytest.raises(ValueError, match="original visible Text region"):
         write_template_chart(chart_data, lyric_data, model)
+
+
+def test_lyric_payload_debug_and_comparison_report_generated_bytes():
+    chart_data = template_chart(text_offset_base=3)
+    lyric_data = template_lyric_null_padded()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+    debug = "\n".join(format_lyric_payload_debug(lyric_data, result))
+    comparison = "\n".join(format_lyric_payload_comparison(lyric_data, result, preview_bytes=32))
+
+    assert "generated_payload_hex:" in debug
+    assert "EF BB BF 0D 0A 48 65 6C" in debug
+    assert "generated_visible_text_escaped:" in debug
+    assert "\\ufeff\\r\\nHello\\r\\n" in debug
+    assert "original_visible_preview:" in comparison
+    assert "generated_visible_preview:" in comparison
+    assert "first_32_bytes_before_hex:" in comparison
+    assert "first_32_bytes_after_hex:" in comparison
 
 
 def test_write_template_chart_files_outputs_copies(tmp_path):
