@@ -14,6 +14,17 @@ larger range than the real text resource in at least some files. That larger
 range can include null padding, asset names, path strings, a second `Text`-typed
 binary resource, and object metadata after the visible lyrics.
 
+When a matching chart is available, the best current selector is LyricWordData
+coverage rather than BOM or printability:
+
+```text
+choose the Text resource that contains more than 90% of chart LyricWordData
+offset/length ranges
+```
+
+This selected the visible lyric payload for every supported plain matching
+sample currently available.
+
 ## IXB Shape
 
 Observed lyric files are plain IXB:
@@ -71,19 +82,45 @@ Important observations:
 - Only one `Text` resource looks like visible lyric text.
 - The second `Text` resource is usually small and mostly binary-looking.
 - No sample so far stores duplicate full visible lyric text in `_Lyric.X360`.
+- Some resources have an extra alignment byte before the payload length field.
+  The parser must score possible alignments instead of accepting the first
+  plausible `Text` layout.
 
-## Sample Summary
+## Batch Coverage Summary
 
 This table uses only local private samples and does not include lyric text.
 
-| Song | Lyric size | Text resources | Visible resources | Visible payload bytes | MelodyMarkers | LyricMarkers | Duplicate lyric-time groups | WordData coverage |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 99 Luftballons | 4918 | 2 | 1 | 1846 | 340 | 326 | 0 | 326/326 |
-| Any Dream Will Do | 4543 | 2 | 1 | 1015 | 427 | 400 | 163 | 400/400 |
-| Everything About You | 4661 | 2 | 1 | 1121 | 716 | 642 | 269 | 642/642 |
-| I Don't Want To Wait | 6055 | 2 | 1 | 2520 | 1460 | 1304 | 529 | 1304/1304 |
-| The Phantom Of The Opera | 4795 | 2 | 1 | 1228 | 626 | 574 | 218 | 570/574 |
-| You've Lost That Lovin | 5201 | 2 | 1 | 2007 | 891 | 672 | 259 | 672/672 |
+The current batch run covered 58 matching pairs in:
+
+```text
+private/samples/lyrics
+private/samples/charts
+```
+
+Results:
+
+```text
+57 supported plain IXB lyric files selected by chart_worddata_coverage
+1 compressed lyric file unsupported by structural parser: Irreplaceable_Lyric.X360
+0 supported plain files selected below the 90% threshold
+2 files where the old heuristic selected no visible candidate, but coverage selected the correct resource:
+  ABC
+  In Bloom
+```
+
+Representative rows:
+
+| Song | Lyric size | Text resources | Visible payload bytes | MelodyMarkers | LyricMarkers | Duplicate lyric-time groups | Best WordData coverage |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 99 Luftballons | 4918 | 2 | 1846 | 340 | 326 | 0 | 326/326 |
+| ABC | 6808 | 2 | 3772 | n/a | 1150 | many | 1150/1150 |
+| Any Dream Will Do | 4543 | 2 | 1015 | 427 | 400 | 163 | 400/400 |
+| Every Little Thing She Does Is | 5091 | 2 | 2001 | 466 | 443 | 0 | 443/443 |
+| Everything About You | 4661 | 2 | 1121 | 716 | 642 | 269 | 642/642 |
+| I Don't Want To Wait | 6055 | 2 | 2520 | 1460 | 1304 | 529 | 1304/1304 |
+| In Bloom | 4606 | 2 | 1560 | n/a | 290 | many | 290/290 |
+| The Phantom Of The Opera | 4795 | 2 | 1228 | 626 | 574 | 218 | 570/574 |
+| You've Lost That Lovin | 5201 | 2 | 2007 | 891 | 672 | 259 | 672/672 |
 
 `WordData coverage` means how many parsed chart LyricMarkers have text
 offset/length ranges that fit inside the candidate visible lyric payload.
@@ -180,6 +217,12 @@ Use:
 python tools/analyze_lyric_file.py "private/samples/lyrics/Any Dream Will Do_Lyric.X360" --chart "private/samples/charts/Any Dream Will Do.X360"
 ```
 
+Batch mode:
+
+```bash
+python tools/analyze_lyric_file.py --batch private/samples/lyrics --charts private/samples/charts
+```
+
 The tool prints:
 
 - file size and IXB magic
@@ -190,6 +233,8 @@ The tool prints:
 - duplicate visible lyric resources
 - pointer-like references into payloads
 - payload length value references
+- selected text resource and `selected_by=chart_worddata_coverage` when a
+  matching chart is supplied
 - matching chart MelodyMarker/LyricMarker counts
 - duplicate LyricMarker time groups
 - track/pitch-like value distribution
@@ -204,6 +249,9 @@ When text writing resumes, it should:
 ```text
 parse the Text resource record
 use the resource payload length field
+choose the payload by chart WordData coverage when a matching chart is present
+require more than 90% WordData coverage before writing
+fallback to heuristic selection only when no chart is available
 preserve file size
 preserve payload length fields unless intentionally updated later
 write only inside the true payload byte range

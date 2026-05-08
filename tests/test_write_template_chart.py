@@ -94,15 +94,19 @@ def template_chart(marker_count=6):
 
 
 def template_lyric(capacity=128):
-    payload = b"\xef\xbb\xbf\r\nold old old\r\n"
+    payload = b"\xef\xbb\xbf\r\nold old old old old\r\n"
     payload += b" " * (capacity - len(payload))
-    return b"<ixb><Objects>" + payload + b"</Objects></ixb>"
+    return b"<ixb><Objects>" + text_resource(payload) + b"</Objects></ixb>"
 
 
 def template_lyric_null_padded(capacity=128):
-    payload = b"\xef\xbb\xbf\r\nold old old\r\n"
+    payload = b"\xef\xbb\xbf\r\nold old old old old\r\n"
     payload += b"\x00" * (capacity - len(payload))
-    return b"<ixb><Objects>" + payload + b"</Objects></ixb>"
+    return b"<ixb><Objects>" + text_resource(payload) + b"</Objects></ixb>"
+
+
+def text_resource(payload: bytes, payload_hash=0x12345678):
+    return b"\x00\x00\x00\x05Text\x00\x00\x00\x00" + struct.pack(">II", payload_hash, len(payload)) + payload
 
 
 def test_write_template_chart_patches_model_and_preserves_sizes_counts():
@@ -193,7 +197,7 @@ def test_lyric_text_only_uses_safe_visible_range_overwrite():
     lyric_data = template_lyric()
     model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
     visible_start = lyric_data.index(b"\xef\xbb\xbf")
-    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old\r\n")
+    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old old old\r\n")
 
     result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_only=True))
 
@@ -220,7 +224,7 @@ def test_lyric_text_overwrite_only_preserves_null_padding_style():
     lyric_data = template_lyric_null_padded()
     model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
     visible_start = lyric_data.index(b"\xef\xbb\xbf")
-    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old\r\n")
+    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old old old\r\n")
 
     result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
 
@@ -232,7 +236,7 @@ def test_lyric_text_overwrite_only_preserves_null_padding_style():
     assert result.lyric_data[visible_end:] == lyric_data[visible_end:]
     replacement = result.lyric_data[visible_start:visible_end]
     assert replacement.startswith(b"\xef\xbb\xbf\r\nHello\r\n")
-    assert replacement.endswith(b"\x00" * (len(b"\xef\xbb\xbf\r\nold old old\r\n") - len(b"\xef\xbb\xbf\r\nHello\r\n")))
+    assert replacement.endswith(b"\x00" * (len(b"\xef\xbb\xbf\r\nold old old old old\r\n") - len(b"\xef\xbb\xbf\r\nHello\r\n")))
 
 
 def test_lyric_text_overwrite_refuses_when_new_text_exceeds_visible_range():

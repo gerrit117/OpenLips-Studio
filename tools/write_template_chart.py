@@ -24,6 +24,7 @@ try:
         iter_melody_markers_object_walker,
         parse_ixb_document,
     )
+    from tools.analyze_lyric_file import TEXT_COVERAGE_THRESHOLD, TextResource, select_text_resource
     from tools.patch_lyrics_mapping import (
         LyricMarker,
         WORD_DATA_TEXT_LENGTH,
@@ -39,6 +40,7 @@ except ModuleNotFoundError:
         iter_melody_markers_object_walker,
         parse_ixb_document,
     )
+    from analyze_lyric_file import TEXT_COVERAGE_THRESHOLD, TextResource, select_text_resource
     from patch_lyrics_mapping import (
         LyricMarker,
         WORD_DATA_TEXT_LENGTH,
@@ -102,6 +104,8 @@ class LyricTextOverwriteInfo:
     new_text_byte_length: int
     padding_byte: int
     changed_only_detected_range: bool
+    selected_by: str
+    coverage_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -218,45 +222,39 @@ def _chronological_lyrics(chart_data: bytes) -> list[LyricMarker]:
     return sorted(iter_lyric_markers_structural(chart_data), key=lambda marker: (marker.time, marker.offset))
 
 
-def _lyric_payload_byte_bounds(lyric_data: bytes) -> tuple[int, int]:
-    payload_start = lyric_data.find(b"\xef\xbb\xbf")
-    payload_end = lyric_data.find(b"</Objects>", payload_start)
-    if payload_start < 0 or payload_end < 0:
-        raise ValueError("lyric template does not contain a UTF-8 BOM text payload inside <Objects>")
-    return payload_start, payload_end
+def _select_lyric_text_resource(lyric_data: bytes, lyric_markers: list[LyricMarker] | None = None) -> tuple[TextResource, str, float | None]:
+    selection = select_text_resource(lyric_data, lyric_markers)
+    if selection.resource is None:
+        detail = ""
+        if selection.coverage is not None:
+            detail = f" best coverage was {selection.coverage.coverage_ratio:.1%}"
+        raise ValueError(
+            "could not select a visible lyric Text resource "
+            f"(selected_by={selection.selected_by}, threshold={TEXT_COVERAGE_THRESHOLD:.0%}{detail})"
+        )
+    coverage_ratio = selection.coverage.coverage_ratio if selection.coverage is not None else None
+    return selection.resource, selection.selected_by, coverage_ratio
 
 
-def _lyric_payload_text(lyric_data: bytes) -> str:
-    payload_start, payload_end = _lyric_payload_byte_bounds(lyric_data)
-    return lyric_data[payload_start:payload_end].decode("utf-8", errors="replace")
+def _lyric_payload_text(lyric_data: bytes, lyric_markers: list[LyricMarker] | None = None) -> str:
+    resource, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    return lyric_data[resource.payload_start : resource.payload_end].decode("utf-8", errors="replace")
 
 
-def _detect_visible_lyric_text_range(lyric_data: bytes) -> tuple[int, int, int]:
-    payload_start, payload_end = _lyric_payload_byte_bounds(lyric_data)
-    payload = lyric_data[payload_start:payload_end]
-    visible_end = len(payload)
-    while visible_end > 0 and payload[visible_end - 1] in (0x00, 0x20):
-        visible_end -= 1
-    if visible_end <= 0:
-        raise ValueError("lyric template has no visible text bytes to overwrite")
-    padding = payload[visible_end:]
-    if padding:
-        null_count = padding.count(0)
-        space_count = padding.count(0x20)
-        padding_byte = 0 if null_count > space_count else 0x20
-    else:
-        padding_byte = 0x20
-    return payload_start, payload_start + visible_end, padding_byte
+def _existing_lyric_payload_stats(
+    lyric_data: bytes,
+    lyric_markers: list[LyricMarker] | None = None,
+) -> tuple[int, int]:
+    resource, _, _ = _select_lyric_text_resource(lyric_data, lyric_markers)
+    return resource.visible_length, resource.payload_length
 
 
-def _existing_lyric_payload_stats(lyric_data: bytes) -> tuple[int, int]:
-    payload_start, payload_end = _lyric_payload_byte_bounds(lyric_data)
-    payload = lyric_data[payload_start:payload_end]
-    return len(payload.rstrip(b" \x00")), len(payload)
-
-
-def _build_lyric_placements_without_writing(template_lyric_data: bytes, chart: SongChart) -> dict[int, TextPlacement]:
-    _, capacity = _existing_lyric_payload_stats(template_lyric_data)
+def _build_lyric_placements_without_writing(
+    template_lyric_data: bytes,
+    chart: SongChart,
+    lyric_markers: list[LyricMarker] | None = None,
+) -> dict[int, TextPlacement]:
+    _, capacity = _existing_lyric_payload_stats(template_lyric_data, lyric_markers)
     _, placements = _build_lyric_payload(chart, capacity)
     return placements
 
@@ -326,7 +324,7 @@ def _mode_name(options: TemplateWriteOptions) -> str:
 
 
 def _validate_lyric_word_bounds(lyric_markers: list[LyricMarker], lyric_data: bytes) -> None:
-    payload = _lyric_payload_text(lyric_data)
+    payload = _lyric_payload_text(lyric_data, lyric_markers)
     for marker in lyric_markers:
         if marker.text_offset < 0 or marker.text_length < 0 or marker.text_offset + marker.text_length > len(payload):
             raise ValueError(
@@ -425,9 +423,13 @@ def _build_lyric_payload(chart: SongChart, capacity: int) -> tuple[bytes, dict[i
 def patch_lyric_file_text(
     template_lyric_data: bytes,
     chart: SongChart,
+    lyric_markers: list[LyricMarker] | None = None,
 ) -> tuple[bytes, dict[int, TextPlacement], int, int, LyricTextOverwriteInfo]:
-    visible_start, visible_end, padding_byte = _detect_visible_lyric_text_range(template_lyric_data)
-    visible_capacity = visible_end - visible_start
+    resource, selected_by, coverage_ratio = _select_lyric_text_resource(template_lyric_data, lyric_markers)
+    visible_start = resource.payload_start
+    visible_end = resource.visible_end
+    padding_byte = resource.padding_byte if resource.padding_byte is not None else 0x20
+    visible_capacity = resource.visible_length
     payload, placements = _build_visible_lyric_payload(chart)
     if len(payload) > visible_capacity:
         raise ValueError(
@@ -452,6 +454,8 @@ def patch_lyric_file_text(
             new_text_byte_length=len(payload),
             padding_byte=padding_byte,
             changed_only_detected_range=changed_only_detected_range,
+            selected_by=selected_by,
+            coverage_ratio=coverage_ratio,
         ),
     )
 
@@ -628,12 +632,13 @@ def write_template_chart(
         patched_lyric, placements, lyric_bytes_used, lyric_capacity, lyric_text_overwrite = patch_lyric_file_text(
             template_lyric_data,
             chart,
+            lyric_before,
         )
     else:
         patched_lyric = template_lyric_data
-        lyric_bytes_used, lyric_capacity = _existing_lyric_payload_stats(template_lyric_data)
+        lyric_bytes_used, lyric_capacity = _existing_lyric_payload_stats(template_lyric_data, lyric_before)
         placements = (
-            _build_lyric_placements_without_writing(template_lyric_data, chart)
+            _build_lyric_placements_without_writing(template_lyric_data, chart, lyric_before)
             if _patch_worddata_enabled(options)
             else {}
         )
@@ -785,6 +790,8 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
                 f"    new_text_byte_length: {overwrite.new_text_byte_length}",
                 f"    padding_byte: 0x{overwrite.padding_byte:02X}",
                 f"    changed_only_detected_range: {_format_bool(overwrite.changed_only_detected_range)}",
+                f"    selected_by: {overwrite.selected_by}",
+                f"    coverage_ratio: {'n/a' if overwrite.coverage_ratio is None else f'{overwrite.coverage_ratio:.1%}'}",
                 "    metadata_fields_changed: no",
             ]
         )

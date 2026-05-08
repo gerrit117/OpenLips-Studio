@@ -14,6 +14,7 @@ import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 try:
     from tools.extract_melody_markers import (
@@ -37,6 +38,7 @@ except ModuleNotFoundError:
 
 MIN_TEXT_RUN = 8
 PREVIEW_LIMIT = 90
+TEXT_COVERAGE_THRESHOLD = 0.90
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,22 @@ class ChartLyricCoverage:
     markers_out_of_bounds: int
     min_text_offset: int | None
     max_text_end: int | None
+
+    @property
+    def total_markers(self) -> int:
+        return self.markers_in_bounds + self.markers_out_of_bounds
+
+    @property
+    def coverage_ratio(self) -> float:
+        return self.markers_in_bounds / self.total_markers if self.total_markers else 0.0
+
+
+@dataclass(frozen=True)
+class TextResourceSelection:
+    resource: TextResource | None
+    selected_by: str
+    coverage: ChartLyricCoverage | None = None
+    threshold: float = TEXT_COVERAGE_THRESHOLD
 
 
 def _safe_preview(text: str, limit: int = PREVIEW_LIMIT) -> str:
@@ -174,6 +192,7 @@ def find_text_resources(data: bytes) -> list[TextResource]:
         type_length = _u32be(data, type_length_offset)
         if type_length != 5:
             continue
+        candidates: list[TextResource] = []
         for pad_count in range(0, 9):
             payload_hash_offset = type_offset + type_length + pad_count
             payload_length_offset = payload_hash_offset + 4
@@ -188,14 +207,11 @@ def find_text_resources(data: bytes) -> list[TextResource]:
             text, utf8_ok = _decode_utf8(payload)
             ratio = _printable_ratio(text)
             line_count = text.count("\n")
-            if ratio < 0.25:
-                continue
             key = (payload_start, payload_end)
             if key in seen:
                 continue
-            seen.add(key)
             visible_len, padding_byte = _trim_padding(payload)
-            resources.append(
+            candidates.append(
                 TextResource(
                     type_name="Text",
                     type_name_offset=type_offset,
@@ -215,7 +231,20 @@ def find_text_resources(data: bytes) -> list[TextResource]:
                     preview=_safe_preview(text),
                 )
             )
-            break
+        if not candidates:
+            continue
+        candidates.sort(
+            key=lambda resource: (
+                resource.is_visible_lyric_candidate,
+                resource.line_count,
+                resource.printable_ratio,
+                resource.visible_length,
+            ),
+            reverse=True,
+        )
+        selected = candidates[0]
+        seen.add((selected.payload_start, selected.payload_end))
+        resources.append(selected)
     return sorted(resources, key=lambda resource: resource.payload_start)
 
 
@@ -243,6 +272,70 @@ def _duplicate_resources(data: bytes, resources: list[TextResource]) -> dict[str
         digest = hashlib.sha1(payload).hexdigest()
         groups[digest].append(resource)
     return {digest: group for digest, group in groups.items() if len(group) > 1}
+
+
+def coverage_for_resource(resource: TextResource, lyric_data: bytes, lyric_markers: Sequence[object]) -> ChartLyricCoverage:
+    decoded = lyric_data[resource.payload_start : resource.payload_end].decode("utf-8", errors="replace")
+    decoded_chars = len(decoded)
+    text_offsets = [marker.text_offset for marker in lyric_markers if hasattr(marker, "text_offset")]
+    text_ends = [
+        marker.text_offset + marker.text_length
+        for marker in lyric_markers
+        if hasattr(marker, "text_offset") and hasattr(marker, "text_length")
+    ]
+    in_bounds = sum(
+        1
+        for marker in lyric_markers
+        if 0 <= marker.text_offset <= marker.text_offset + marker.text_length <= decoded_chars
+    )
+    out_of_bounds = len(lyric_markers) - in_bounds
+    return ChartLyricCoverage(
+        resource=resource,
+        decoded_chars=decoded_chars,
+        markers_in_bounds=in_bounds,
+        markers_out_of_bounds=out_of_bounds,
+        min_text_offset=min(text_offsets) if text_offsets else None,
+        max_text_end=max(text_ends) if text_ends else None,
+    )
+
+
+def compute_resource_coverages(
+    resources: Sequence[TextResource],
+    lyric_data: bytes,
+    lyric_markers: Sequence[object],
+) -> list[ChartLyricCoverage]:
+    return [coverage_for_resource(resource, lyric_data, lyric_markers) for resource in resources]
+
+
+def select_text_resource(
+    lyric_data: bytes,
+    lyric_markers: Sequence[object] | None = None,
+    threshold: float = TEXT_COVERAGE_THRESHOLD,
+) -> TextResourceSelection:
+    resources = find_text_resources(lyric_data)
+    if lyric_markers is not None:
+        coverages = compute_resource_coverages(resources, lyric_data, lyric_markers)
+        if coverages:
+            best = max(coverages, key=lambda item: (item.markers_in_bounds, item.resource.payload_length))
+            if best.total_markers and best.coverage_ratio >= threshold:
+                return TextResourceSelection(
+                    resource=best.resource,
+                    selected_by="chart_worddata_coverage",
+                    coverage=best,
+                    threshold=threshold,
+                )
+            return TextResourceSelection(
+                resource=None,
+                selected_by="chart_worddata_coverage_below_threshold",
+                coverage=best,
+                threshold=threshold,
+            )
+
+    candidates = [resource for resource in resources if resource.is_visible_lyric_candidate]
+    if candidates:
+        candidates.sort(key=lambda item: (item.line_count, item.printable_ratio, item.visible_length), reverse=True)
+        return TextResourceSelection(resource=candidates[0], selected_by="heuristic", threshold=threshold)
+    return TextResourceSelection(resource=None, selected_by="unsupported/unknown", threshold=threshold)
 
 
 def analyze_chart(chart_path: Path, resources: list[TextResource], lyric_data: bytes) -> tuple[list[str], list[ChartLyricCoverage]]:
@@ -287,26 +380,33 @@ def analyze_chart(chart_path: Path, resources: list[TextResource], lyric_data: b
     else:
         lines.append("  LyricWordData text offset span: none")
 
-    coverages: list[ChartLyricCoverage] = []
-    for resource in resources:
-        decoded = lyric_data[resource.payload_start : resource.payload_end].decode("utf-8", errors="replace")
-        decoded_chars = len(decoded)
-        in_bounds = sum(1 for marker in lyrics if 0 <= marker.text_offset <= marker.text_offset + marker.text_length <= decoded_chars)
-        out_of_bounds = len(lyrics) - in_bounds
-        coverage = ChartLyricCoverage(
-            resource=resource,
-            decoded_chars=decoded_chars,
-            markers_in_bounds=in_bounds,
-            markers_out_of_bounds=out_of_bounds,
-            min_text_offset=min(text_offsets) if text_offsets else None,
-            max_text_end=max(text_ends) if text_ends else None,
-        )
-        coverages.append(coverage)
+    coverages = compute_resource_coverages(resources, lyric_data, lyrics)
+    for resource, coverage in zip(resources, coverages):
         lines.append(
             "  resource coverage: "
             f"payload=0x{resource.payload_start:08X}-0x{resource.payload_end - 1:08X} "
-            f"decoded_chars={decoded_chars} markers_in_bounds={in_bounds}/{len(lyrics)} "
-            f"markers_out_of_bounds={out_of_bounds}"
+            f"decoded_chars={coverage.decoded_chars} markers_in_bounds={coverage.markers_in_bounds}/{len(lyrics)} "
+            f"markers_out_of_bounds={coverage.markers_out_of_bounds} "
+            f"coverage={coverage.coverage_ratio:.1%}"
+        )
+
+    selection = select_text_resource(lyric_data, lyrics)
+    if selection.resource is None:
+        detail = ""
+        if selection.coverage is not None:
+            detail = f" best_coverage={selection.coverage.coverage_ratio:.1%}"
+        lines.append(f"  selected_text_resource: none selected_by={selection.selected_by}{detail}")
+    else:
+        detail = ""
+        if selection.coverage is not None:
+            detail = (
+                f" coverage={selection.coverage.markers_in_bounds}/{selection.coverage.total_markers}"
+                f" ({selection.coverage.coverage_ratio:.1%})"
+            )
+        lines.append(
+            "  selected_text_resource: "
+            f"payload=0x{selection.resource.payload_start:08X}-0x{selection.resource.payload_end - 1:08X} "
+            f"selected_by={selection.selected_by}{detail}"
         )
 
     possible_groups: list[str] = []
@@ -388,20 +488,99 @@ def analyze_lyric_file(lyric_path: Path, chart_path: Path | None = None) -> list
     if chart_path is not None:
         chart_lines, _ = analyze_chart(chart_path, resources, data)
         lines.extend(chart_lines)
+    else:
+        selection = select_text_resource(data)
+        if selection.resource is None:
+            lines.append(f"  selected_text_resource: none selected_by={selection.selected_by}")
+        else:
+            lines.append(
+                "  selected_text_resource: "
+                f"payload=0x{selection.resource.payload_start:08X}-0x{selection.resource.payload_end - 1:08X} "
+                f"selected_by={selection.selected_by}"
+            )
+    return lines
+
+
+def _matching_pairs(lyrics_dir: Path, charts_dir: Path) -> list[tuple[str, Path, Path]]:
+    charts = {path.stem: path for path in charts_dir.glob("*.X360") if not path.name.endswith("_Lyric.X360")}
+    lyrics = {
+        path.name[: -len("_Lyric.X360")]: path
+        for path in lyrics_dir.glob("*_Lyric.X360")
+    }
+    return sorted((name, charts[name], lyrics[name]) for name in charts.keys() & lyrics.keys())
+
+
+def batch_summary(lyrics_dir: Path, charts_dir: Path) -> list[str]:
+    pairs = _matching_pairs(lyrics_dir, charts_dir)
+    lines = [
+        f"matching_pairs: {len(pairs)}",
+        (
+            "filename | text_resources | payload_lengths | WordData coverage per resource | "
+            "visible_candidate | proposed_by_coverage | conflict"
+        ),
+        "-" * 140,
+    ]
+    supported_ok = True
+    for name, chart_path, lyric_path in pairs:
+        lyric_data = lyric_path.read_bytes()
+        if lyric_data[:4] in COMPRESSED_MAGICS:
+            lines.append(f"{name} | compressed/unsupported | [] | none | none | none | unsupported")
+            continue
+        resources = find_text_resources(lyric_data)
+        chart_data = chart_path.read_bytes()
+        lyric_markers = iter_lyric_markers_structural(chart_data)
+        coverages = compute_resource_coverages(resources, lyric_data, lyric_markers)
+        selection = select_text_resource(lyric_data, lyric_markers)
+        heuristic = [index for index, resource in enumerate(resources, start=1) if resource.is_visible_lyric_candidate]
+        selected_index = None
+        if selection.resource is not None:
+            selected_index = next(
+                (index for index, resource in enumerate(resources, start=1) if resource == selection.resource),
+                None,
+            )
+        if selection.resource is None or selection.selected_by != "chart_worddata_coverage":
+            supported_ok = False
+        conflict = bool(selected_index and (not heuristic or selected_index not in heuristic))
+        payloads = ", ".join(str(resource.payload_length) for resource in resources)
+        coverage_text = ", ".join(
+            f"R{index}:{coverage.markers_in_bounds}/{coverage.total_markers}({coverage.coverage_ratio:.1%})"
+            for index, coverage in enumerate(coverages, start=1)
+        )
+        if selection.resource is None:
+            proposed = f"none({selection.selected_by})"
+        else:
+            ratio = selection.coverage.coverage_ratio if selection.coverage else 0.0
+            proposed = f"R{selected_index}({selection.selected_by}, {ratio:.1%})"
+        lines.append(
+            f"{name} | {len(resources)} | [{payloads}] | {coverage_text or 'none'} | "
+            f"{heuristic or 'none'} | {proposed} | {'yes' if conflict else 'no'}"
+        )
+    lines.append(f"highest_worddata_coverage_selects_supported_plain_pairs: {'yes' if supported_ok else 'no'}")
     return lines
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze Lips *_Lyric.X360 text resources without modifying files.")
-    parser.add_argument("lyric_file", type=Path, help="Input *_Lyric.X360 file")
+    parser.add_argument("lyric_file", type=Path, nargs="?", help="Input *_Lyric.X360 file")
     parser.add_argument("--chart", type=Path, help="Matching chart .X360 file")
+    parser.add_argument("--batch", type=Path, help="Directory containing *_Lyric.X360 files")
+    parser.add_argument("--charts", type=Path, help="Directory containing matching chart .X360 files for --batch")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        lines = analyze_lyric_file(args.lyric_file, args.chart)
+        if args.batch:
+            if args.charts is None:
+                print("error: --batch requires --charts", file=sys.stderr)
+                return 2
+            lines = batch_summary(args.batch, args.charts)
+        else:
+            if args.lyric_file is None:
+                print("error: lyric_file is required unless --batch is used", file=sys.stderr)
+                return 2
+            lines = analyze_lyric_file(args.lyric_file, args.chart)
     except OSError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
