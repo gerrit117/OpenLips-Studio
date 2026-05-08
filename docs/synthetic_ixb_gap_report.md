@@ -195,3 +195,50 @@ chart root/sequence layer:
 This gives a cleaner in-game test boundary. If the minimal ownership pair still
 crashes, the next smallest likely step is adding one valid chart root and one
 sequence owner, not jumping directly to full duplicate mode reconstruction.
+
+## Controlled Crash-Isolation Variants
+
+After the minimal ownership pair hard-crashed the game, the builder was split
+into controlled levels so each in-game test changes only one layer:
+
+| Level | Marker tags | `NumOfElements` | Lyric ownership | Chart ownership |
+| --- | --- | --- | --- | --- |
+| `bare` | schema-index tags (`0x05` / `0x07`) | no | no | no |
+| `tags` | real file-layout tags (`0x28` / `0x40`) | yes | no | no |
+| `lyric-ownership` | real file-layout tags | yes | yes | no |
+| `full-current` | real file-layout tags | yes | yes | yes |
+
+Generation command for all local variants:
+
+```powershell
+py tools\build_minimal_ixb_pair.py `
+  --synthetic-level all `
+  --out-dir private\outputs\minimal_ixb_variants `
+  --stem 1234 `
+  --force `
+  --compare-real-lyric private\samples\lyrics\1234_Lyric.X360
+```
+
+Each level writes a pair under:
+
+```text
+private/outputs/minimal_ixb_variants/<level>/1234.X360
+private/outputs/minimal_ixb_variants/<level>/1234_Lyric.X360
+```
+
+The debug output prints:
+
+- object tags
+- `NumOfElements`
+- class inventory
+- package/asset/file-image counts
+- ownership/vector field scans
+- zero/null pointer-like fields
+- Text resource chain summary
+- an ownership-focused comparison against a real lyric file when
+  `--compare-real-lyric` is provided
+
+The current suspicion is that the hard crash is more likely caused by malformed
+ownership vector/list fields than by melody timing or lyric text. The variant
+matrix should identify whether the crash begins at `tags`, `lyric-ownership`,
+or `full-current`.
