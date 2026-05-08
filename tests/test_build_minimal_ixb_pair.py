@@ -1,6 +1,6 @@
 from tools.analyze_lyric_file import find_text_resources, select_text_resource
 from tools.build_minimal_ixb_pair import build_minimal_ixb_pair
-from tools.extract_melody_markers import iter_melody_markers_object_walker, iter_object_records, parse_ixb_document
+from tools.extract_melody_markers import iter_melody_markers_object_walker, parse_ixb_document
 from tools.patch_lyrics_mapping import iter_lyric_markers_structural
 
 
@@ -14,13 +14,15 @@ def test_minimal_ixb_pair_is_structurally_walkable():
     assert [cls.name for cls in chart_document.classes.values() if cls.name == "ixPackage"] == ["ixPackage"]
     assert [cls.name for cls in lyric_document.classes.values() if cls.name == "ixPackage"] == ["ixPackage"]
 
-    chart_records = list(iter_object_records(pair.chart_data, chart_document))
-    lyric_records = list(iter_object_records(pair.lyric_data, lyric_document))
-    assert [record[2].name for record in chart_records].count("ixPackage") == 1
-    assert [record[2].name for record in chart_records].count("lpsMelodyMarker") == len(pair.notes)
-    assert [record[2].name for record in chart_records].count("lpsLyricMarker") == len(pair.notes)
-    assert [record[2].name for record in chart_records].count("lpsLyricWordData") == len(pair.notes)
-    assert [record[2].name for record in lyric_records].count("ixPackage") == 1
+    chart_class_names = {cls.name for cls in chart_document.classes.values()}
+    lyric_class_names = {cls.name for cls in lyric_document.classes.values()}
+    assert {"ixAssetPackage", "ixAsset", "ixFileImage", "ixRawFileImage"} <= chart_class_names
+    assert {"ixAssetPackage", "ixAsset", "ixFileImage", "ixRawFileImage"} <= lyric_class_names
+    assert pair.chart_num_elements == 18
+    assert pair.lyric_num_elements == 14
+    assert [tag for name, tag in pair.chart_emitted_tags if name == "lpsMelodyMarker"] == [0x28] * len(pair.notes)
+    assert [tag for name, tag in pair.chart_emitted_tags if name == "lpsLyricMarker"] == [0x40] * len(pair.notes)
+    assert [tag for name, tag in pair.lyric_emitted_tags if name == "ixRawFileImage"] == [0x54]
 
     melody = sorted(iter_melody_markers_object_walker(pair.chart_data, chart_document), key=lambda marker: marker.time)
     lyrics = sorted(iter_lyric_markers_structural(pair.chart_data), key=lambda marker: marker.time)

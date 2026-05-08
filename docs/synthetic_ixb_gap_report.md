@@ -154,3 +154,44 @@ timing. It is incomplete as an IXB object graph. The next synthetic writer shoul
 not add more raw marker records first; it should build the package, asset, raw
 file image, chart root, and sequence ownership layers that real DLC files
 contain.
+
+## Minimal Ownership Iteration
+
+The next builder iteration intentionally does only the smallest runtime-facing
+step before full chart reconstruction:
+
+- MelodyMarker records now emit tag `0x28`, matching the real file-layout tag.
+- LyricMarker records now emit tag `0x40`, matching the real file-layout tag.
+- Chart and lyric headers now include `NumOfElements`.
+- The lyric schema now includes the same package/asset/file-image class
+  inventory as the real `1234_Lyric.X360` sample.
+- The lyric file now emits a minimal chain:
+  `ixPackage -> ixAssetPackage -> ixAsset/ixFileImage/ixRawFileImage -> Text`.
+- The Text payload is still selected by chart LyricWordData coverage.
+
+Fresh comparison against the real `1234` pair now shows:
+
+| Item | Real | Synthetic minimal ownership |
+| --- | ---: | ---: |
+| chart `NumOfElements` | 2,913 | 18 |
+| lyric `NumOfElements` | 12 | 14 |
+| chart class count | 59 | 20 |
+| lyric class count | 15 | 15 |
+| MelodyMarker tags | `0x28` | `0x28` |
+| LyricMarker tags | `0x40` | `0x40` |
+| visible Text coverage | 653/653 | 3/3 |
+
+Remaining structural gaps after this minimal step are now concentrated in the
+chart root/sequence layer:
+
+- `lpsChart` / `ixChart`
+- `ixSequence`
+- `ixTempoMap`
+- `lpsMusicInfo` / `lpsMusicIndex`
+- `ixVector<ixSeqCode *>`
+- `ixVector<lpsLyricWordData>`
+- phrase/page/hit/short-end marker families
+
+This gives a cleaner in-game test boundary. If the minimal ownership pair still
+crashes, the next smallest likely step is adding one valid chart root and one
+sequence owner, not jumping directly to full duplicate mode reconstruction.

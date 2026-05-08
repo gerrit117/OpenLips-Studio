@@ -16,15 +16,15 @@ def test_synthetic_summary_reports_marker_tags_and_text_coverage(tmp_path: Path)
 
     assert chart.melody_count == len(pair.notes)
     assert chart.lyric_count == len(pair.notes)
-    assert chart.melody_prefix_counts[0x05] == len(pair.notes)
-    assert chart.lyric_prefix_counts[0x07] == len(pair.notes)
+    assert chart.melody_prefix_counts[0x28] == len(pair.notes)
+    assert chart.lyric_prefix_counts[0x40] == len(pair.notes)
     assert lyric.text_selection is not None
     assert lyric.text_selection.resource_count == 1
     assert lyric.text_selection.coverage_in_bounds == len(pair.notes)
     assert lyric.text_selection.coverage_total == len(pair.notes)
 
 
-def test_pair_comparison_names_missing_asset_graph(tmp_path: Path):
+def test_pair_comparison_names_minimal_resource_chain(tmp_path: Path):
     pair = build_minimal_ixb_pair()
     chart_path = tmp_path / "Tiny.X360"
     lyric_path = tmp_path / "Tiny_Lyric.X360"
@@ -37,4 +37,4 @@ def test_pair_comparison_names_missing_asset_graph(tmp_path: Path):
 
     assert "Marker Record Tagging" in report
     assert "Minimum Next Structures To Model" in report
-    assert "Text payload but not the real asset graph" in report
+    assert "synthetic lyric resource chain is still minimal" in report
