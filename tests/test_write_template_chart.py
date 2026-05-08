@@ -8,6 +8,7 @@ from tools.patch_lyrics_mapping import iter_lyric_markers_structural
 from tools.write_template_chart import (
     Note,
     SongChart,
+    TemplateWriteOptions,
     load_json_chart,
     write_template_chart,
     write_template_chart_files,
@@ -118,6 +119,10 @@ def test_write_template_chart_patches_model_and_preserves_sizes_counts():
     assert result.lyric_count_before == result.lyric_count_after == 6
     assert result.notes_written == 3
     assert result.lyric_payload_bytes_used <= result.lyric_payload_capacity
+    assert result.moved_unused_melody_count == 3
+    assert result.moved_unused_lyric_count == 3
+    assert len(result.melody_changes) == 6
+    assert len(result.lyric_changes) == 6
 
     assert [(marker.time, marker.length, marker.raw_pitch) for marker in melody[:3]] == pytest.approx(
         [(10.0, 0.5, 60), (10.5, 0.25, 62), (11.0, 0.75, 64)]
@@ -129,6 +134,72 @@ def test_write_template_chart_patches_model_and_preserves_sizes_counts():
     assert [marker.time for marker in lyric[3:]] == pytest.approx([898.98, 898.99, 899.0])
     assert b"\xef\xbb\xbf\r\nHello world\r\n" in result.lyric_data
     assert [marker.text_length for marker in lyric[:3]] == [3, 2, 5]
+
+
+def test_chart_only_leaves_lyrics_unchanged():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    before_lyrics = sorted(iter_lyric_markers_structural(chart_data), key=lambda marker: marker.offset)
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(chart_only=True))
+    after_lyrics = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.offset)
+    melody = sorted(iter_melody_markers(result.chart_data), key=lambda marker: marker.time)
+
+    assert result.lyric_data == lyric_data
+    assert result.lyric_changes == []
+    assert result.moved_unused_lyric_count == 0
+    assert [(marker.time, marker.length, marker.track_index, marker.text_offset, marker.text_length) for marker in after_lyrics] == [
+        (marker.time, marker.length, marker.track_index, marker.text_offset, marker.text_length) for marker in before_lyrics
+    ]
+    assert [(marker.time, marker.length, marker.raw_pitch) for marker in melody[:2]] == pytest.approx(
+        [(10.0, 0.5, 60), (10.5, 0.25, 62)]
+    )
+
+
+def test_lyric_only_leaves_melody_markers_unchanged():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    before_melody = sorted(iter_melody_markers(chart_data), key=lambda marker: marker.offset)
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_only=True))
+    after_melody = sorted(iter_melody_markers(result.chart_data), key=lambda marker: marker.offset)
+    lyric = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.time)
+
+    assert result.melody_changes == []
+    assert result.moved_unused_melody_count == 0
+    assert [(marker.time, marker.length, marker.raw_pitch, marker.tone, marker.octave) for marker in after_melody] == [
+        (marker.time, marker.length, marker.raw_pitch, marker.tone, marker.octave) for marker in before_melody
+    ]
+    assert [(marker.time, marker.length, marker.track_index) for marker in lyric[:2]] == pytest.approx(
+        [(10.0, 0.5, 60), (10.5, 0.25, 62)]
+    )
+    assert b"\xef\xbb\xbf\r\nHello" in result.lyric_data
+
+
+def test_no_disable_unused_preserves_unused_marker_times():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(disable_unused=False))
+    melody_by_offset = sorted(iter_melody_markers(result.chart_data), key=lambda marker: marker.offset)
+    lyric_by_offset = sorted(iter_lyric_markers_structural(result.chart_data), key=lambda marker: marker.offset)
+
+    assert result.moved_unused_melody_count == 0
+    assert result.moved_unused_lyric_count == 0
+    assert [marker.time for marker in melody_by_offset[2:]] == pytest.approx([3.0, 4.0, 5.0, 6.0])
+    assert [marker.time for marker in lyric_by_offset[2:]] == pytest.approx([3.0, 4.0, 5.0, 6.0])
+
+
+def test_chart_only_and_lyric_only_are_mutually_exclusive():
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False)])
+
+    with pytest.raises(ValueError, match="cannot be used together"):
+        write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(chart_only=True, lyric_only=True))
 
 
 def test_json_loader_is_temporary_debug_input(tmp_path):
