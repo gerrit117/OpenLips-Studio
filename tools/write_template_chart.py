@@ -193,10 +193,24 @@ class LyricMappingValidation:
 
 
 @dataclass(frozen=True)
+class LyricFitContext:
+    lyric_markers: list[LyricMarker]
+    payload_capacity: int
+    visible_capacity: int
+    original_payload_chars: int
+    trailing_padding_chars: int
+    prefix: str
+    line_break: str
+
+
+@dataclass(frozen=True)
 class TemplateWriteResult:
     chart_data: bytes
     lyric_data: bytes
+    original_note_count: int
     notes_written: int
+    trimmed_note_count: int
+    last_surviving_lyric_fragment: str | None
     melody_count_before: int
     melody_count_after: int
     lyric_count_before: int
@@ -863,6 +877,94 @@ def _melody_preview_rows(before: list[MelodyMarker], after: list[MelodyMarker], 
     return rows
 
 
+def _is_tail_trim_retryable_error(exc: ValueError) -> bool:
+    message = str(exc)
+    return (
+        "new lyric text needs" in message
+        or "LyricWordData text range is outside lyric payload" in message
+    )
+
+
+def _chart_with_tail_trim(chart: SongChart, note_count: int) -> SongChart:
+    return SongChart(notes=list(chart.notes[:note_count]), title=chart.title)
+
+
+def _build_lyric_fit_context(
+    template_chart_data: bytes,
+    template_lyric_data: bytes,
+    lyric_markers: list[LyricMarker] | None = None,
+) -> LyricFitContext:
+    lyric_markers = lyric_markers or _chronological_lyrics(template_chart_data)
+    resource, _, _, _, _, _, coverage_min_offset = _select_lyric_text_resource(template_lyric_data, lyric_markers)
+    payload = template_lyric_data[resource.payload_start : resource.payload_end]
+    trailing_padding = template_lyric_data[resource.visible_end : resource.payload_end]
+    return LyricFitContext(
+        lyric_markers=lyric_markers,
+        payload_capacity=resource.payload_length,
+        visible_capacity=max(0, resource.visible_end - resource.payload_start),
+        original_payload_chars=len(payload.decode("utf-8", errors="replace")),
+        trailing_padding_chars=len(trailing_padding.decode("utf-8", errors="replace")),
+        prefix=_prefix_from_template(resource, template_lyric_data, coverage_min_offset),
+        line_break=_line_break_from_template(resource, template_lyric_data),
+    )
+
+
+def _generated_lyric_ranges_fit_with_context(
+    context: LyricFitContext,
+    chart: SongChart,
+    options: TemplateWriteOptions,
+) -> bool:
+    if not (_patch_lyric_text_enabled(options) or _patch_worddata_enabled(options)):
+        return True
+    try:
+        if _patch_lyric_text_enabled(options):
+            visible_text, placements = _build_visible_lyric_text(chart, prefix=context.prefix, line_break=context.line_break)
+            encoded_length = len(visible_text.encode("utf-8"))
+            if encoded_length > context.visible_capacity:
+                return False
+            payload_chars = len(visible_text) + (context.visible_capacity - encoded_length) + context.trailing_padding_chars
+        else:
+            payload_chars = context.original_payload_chars
+            placements = (
+                _build_lyric_payload(chart, context.payload_capacity)[1]
+                if _patch_worddata_enabled(options)
+                else {}
+            )
+    except ValueError:
+        return False
+
+    patch_worddata = _patch_worddata_enabled(options)
+    for index, marker in enumerate(context.lyric_markers):
+        if patch_worddata and index < len(chart.notes):
+            placement = placements[index]
+            text_offset = placement.offset
+            text_length = placement.length
+        else:
+            text_offset = marker.text_offset
+            text_length = marker.text_length
+        if text_offset < 0 or text_length < 0 or text_offset + text_length > payload_chars:
+            return False
+    return True
+
+
+def _find_lyric_safe_note_count(
+    template_chart_data: bytes,
+    template_lyric_data: bytes,
+    chart: SongChart,
+    options: TemplateWriteOptions,
+) -> int:
+    if options.flat_pitch_test:
+        return len(chart.notes)
+    context = _build_lyric_fit_context(template_chart_data, template_lyric_data)
+    note_count = len(chart.notes)
+    while note_count > 0:
+        candidate = _chart_with_tail_trim(chart, note_count)
+        if _generated_lyric_ranges_fit_with_context(context, candidate, options):
+            return note_count
+        note_count -= 1
+    return 0
+
+
 def write_template_chart(
     template_chart_data: bytes,
     template_lyric_data: bytes,
@@ -872,6 +974,37 @@ def write_template_chart(
     _validate_options(options)
     for index, note in enumerate(chart.notes, start=1):
         _validate_note(note, index)
+    original_note_count = len(chart.notes)
+    if template_chart_data[:4] in COMPRESSED_MAGICS or template_lyric_data[:4] in COMPRESSED_MAGICS:
+        working_note_count = original_note_count
+    else:
+        working_note_count = _find_lyric_safe_note_count(template_chart_data, template_lyric_data, chart, options)
+    while True:
+        working_chart = _chart_with_tail_trim(chart, working_note_count)
+        try:
+            return _write_template_chart_once(
+                template_chart_data,
+                template_lyric_data,
+                working_chart,
+                options,
+                original_note_count=original_note_count,
+                trimmed_note_count=original_note_count - working_note_count,
+            )
+        except ValueError as exc:
+            if options.flat_pitch_test or not _is_tail_trim_retryable_error(exc) or working_note_count == 0:
+                raise
+            working_note_count -= 1
+
+
+def _write_template_chart_once(
+    template_chart_data: bytes,
+    template_lyric_data: bytes,
+    chart: SongChart,
+    options: TemplateWriteOptions,
+    original_note_count: int,
+    trimmed_note_count: int,
+) -> TemplateWriteResult:
+    _validate_options(options)
     if template_chart_data[:4] in COMPRESSED_MAGICS:
         _, kind = describe_magic(template_chart_data)
         raise ValueError(f"chart template is {kind}; decompress it before writing")
@@ -921,7 +1054,10 @@ def write_template_chart(
     return TemplateWriteResult(
         chart_data=patched_chart,
         lyric_data=patched_lyric,
+        original_note_count=original_note_count,
         notes_written=0 if options.flat_pitch_test else len(chart.notes),
+        trimmed_note_count=trimmed_note_count,
+        last_surviving_lyric_fragment=chart.notes[-1].text if chart.notes else None,
         melody_count_before=len(melody_before),
         melody_count_after=len(melody_after),
         lyric_count_before=len(lyric_before),
@@ -1101,6 +1237,11 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         f"  mode_lyric_marker_only: {_format_bool(result.lyric_marker_only)}",
         f"  mode_flat_pitch_test: {_format_bool(result.flat_pitch_test)}",
         f"  disable_unused: {_format_bool(result.disable_unused)}",
+        f"  original_note_count: {result.original_note_count}",
+        f"  trimmed_note_count: {result.trimmed_note_count}",
+        f"  final_note_count: {result.notes_written}",
+        f"  final_payload_usage: {result.lyric_payload_bytes_used}/{result.lyric_payload_capacity} bytes",
+        f"  last_surviving_lyric_fragment: {'' if result.last_surviving_lyric_fragment is None else _escaped_text(result.last_surviving_lyric_fragment)!r}",
         f"  notes_written: {result.notes_written}",
         f"  melody_marker_count: {result.melody_count_before} -> {result.melody_count_after}",
         f"  lyric_marker_count: {result.lyric_count_before} -> {result.lyric_count_after}",

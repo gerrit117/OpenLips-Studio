@@ -263,8 +263,37 @@ def test_lyric_text_overwrite_refuses_when_new_text_exceeds_visible_range():
     lyric_data = template_lyric(capacity=32)
     model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is much too long for payload", True)])
 
-    with pytest.raises(ValueError, match="original visible Text region"):
-        write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+
+    assert result.original_note_count == 1
+    assert result.trimmed_note_count == 1
+    assert result.notes_written == 0
+    assert result.last_surviving_lyric_fragment is None
+    assert result.lyric_payload_bytes_used <= result.lyric_payload_capacity
+
+
+def test_automatically_trims_tail_notes_until_lyric_payload_fits(tmp_path):
+    chart_data = template_chart()
+    lyric_data = template_lyric(capacity=32)
+    model = SongChart(
+        notes=[
+            Note(1.0, 0.5, 60, "A", True),
+            Note(2.0, 0.5, 60, "this text is much too long for payload", True),
+        ]
+    )
+
+    result = write_template_chart(chart_data, lyric_data, model)
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert result.original_note_count == 2
+    assert result.trimmed_note_count == 1
+    assert result.notes_written == 1
+    assert result.last_surviving_lyric_fragment == "A"
+    assert result.lyric_payload_bytes_used <= result.lyric_payload_capacity
+    assert "original_note_count: 2" in summary
+    assert "trimmed_note_count: 1" in summary
+    assert "final_note_count: 1" in summary
+    assert "last_surviving_lyric_fragment: 'A'" in summary
 
 
 def test_lyric_text_preserves_bom_prefix_when_worddata_offsets_use_it():
@@ -414,6 +443,11 @@ def test_summary_reports_safe_text_overwrite_fields(tmp_path):
     summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
 
     assert "mode: lyric-text-overwrite-only" in summary
+    assert "original_note_count: 1" in summary
+    assert "trimmed_note_count: 0" in summary
+    assert "final_note_count: 1" in summary
+    assert "final_payload_usage:" in summary
+    assert "last_surviving_lyric_fragment: 'Hel'" in summary
     assert "selected_by: chart_worddata_coverage" in summary
     assert "selected_text_resource_index: 1" in summary
     assert "coverage: 6/6" in summary
@@ -545,8 +579,13 @@ def test_rejects_lyric_text_that_does_not_fit():
     lyric_data = template_lyric(capacity=16)
     model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is much too long", True)])
 
-    with pytest.raises(ValueError, match="original visible Text region"):
-        write_template_chart(chart_data, lyric_data, model)
+    result = write_template_chart(chart_data, lyric_data, model)
+
+    assert result.original_note_count == 1
+    assert result.trimmed_note_count == 1
+    assert result.notes_written == 0
+    assert result.last_surviving_lyric_fragment is None
+    assert result.lyric_payload_bytes_used <= result.lyric_payload_capacity
 
 
 def test_lyric_payload_debug_and_comparison_report_generated_bytes():
