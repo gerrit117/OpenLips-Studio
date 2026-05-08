@@ -82,6 +82,7 @@ class TemplateWriteOptions:
     chart_only: bool = False
     lyric_only: bool = False
     lyric_text_only: bool = False
+    lyric_text_overwrite_only: bool = False
     lyric_worddata_only: bool = False
     lyric_marker_only: bool = False
     disable_unused: bool = True
@@ -91,6 +92,16 @@ class TemplateWriteOptions:
 class ByteDiffSummary:
     bytes_changed: int
     changed_ranges: list[tuple[int, int]]
+
+
+@dataclass(frozen=True)
+class LyricTextOverwriteInfo:
+    range_start: int
+    range_end: int
+    original_range_length: int
+    new_text_byte_length: int
+    padding_byte: int
+    changed_only_detected_range: bool
 
 
 @dataclass(frozen=True)
@@ -149,12 +160,14 @@ class TemplateWriteResult:
     moved_unused_lyric_count: int
     chart_diff: ByteDiffSummary
     lyric_diff: ByteDiffSummary
+    lyric_text_overwrite: LyricTextOverwriteInfo | None
     lyric_worddata_bounds_valid: bool
     string_length_fields_changed: bool
     pointer_looking_fields_changed: bool
     chart_only: bool = False
     lyric_only: bool = False
     lyric_text_only: bool = False
+    lyric_text_overwrite_only: bool = False
     lyric_worddata_only: bool = False
     lyric_marker_only: bool = False
     disable_unused: bool = True
@@ -218,10 +231,28 @@ def _lyric_payload_text(lyric_data: bytes) -> str:
     return lyric_data[payload_start:payload_end].decode("utf-8", errors="replace")
 
 
+def _detect_visible_lyric_text_range(lyric_data: bytes) -> tuple[int, int, int]:
+    payload_start, payload_end = _lyric_payload_byte_bounds(lyric_data)
+    payload = lyric_data[payload_start:payload_end]
+    visible_end = len(payload)
+    while visible_end > 0 and payload[visible_end - 1] in (0x00, 0x20):
+        visible_end -= 1
+    if visible_end <= 0:
+        raise ValueError("lyric template has no visible text bytes to overwrite")
+    padding = payload[visible_end:]
+    if padding:
+        null_count = padding.count(0)
+        space_count = padding.count(0x20)
+        padding_byte = 0 if null_count > space_count else 0x20
+    else:
+        padding_byte = 0x20
+    return payload_start, payload_start + visible_end, padding_byte
+
+
 def _existing_lyric_payload_stats(lyric_data: bytes) -> tuple[int, int]:
     payload_start, payload_end = _lyric_payload_byte_bounds(lyric_data)
     payload = lyric_data[payload_start:payload_end]
-    return len(payload.rstrip(b" ")), len(payload)
+    return len(payload.rstrip(b" \x00")), len(payload)
 
 
 def _build_lyric_placements_without_writing(template_lyric_data: bytes, chart: SongChart) -> dict[int, TextPlacement]:
@@ -235,13 +266,14 @@ def _validate_options(options: TemplateWriteOptions) -> None:
         options.chart_only,
         options.lyric_only,
         options.lyric_text_only,
+        options.lyric_text_overwrite_only,
         options.lyric_worddata_only,
         options.lyric_marker_only,
     ]
     if sum(1 for enabled in isolated_modes if enabled) > 1:
         raise ValueError(
-            "--chart-only, --lyric-only, --lyric-text-only, --lyric-worddata-only, "
-            "and --lyric-marker-only cannot be combined"
+            "--chart-only, --lyric-only, --lyric-text-only, --lyric-text-overwrite-only, "
+            "--lyric-worddata-only, and --lyric-marker-only cannot be combined"
         )
 
 
@@ -249,6 +281,7 @@ def _patch_melody_enabled(options: TemplateWriteOptions) -> bool:
     return not (
         options.lyric_only
         or options.lyric_text_only
+        or options.lyric_text_overwrite_only
         or options.lyric_worddata_only
         or options.lyric_marker_only
     )
@@ -259,11 +292,21 @@ def _patch_lyric_text_enabled(options: TemplateWriteOptions) -> bool:
 
 
 def _patch_lyric_marker_fields_enabled(options: TemplateWriteOptions) -> bool:
-    return not (options.chart_only or options.lyric_text_only or options.lyric_worddata_only)
+    return not (
+        options.chart_only
+        or options.lyric_text_only
+        or options.lyric_text_overwrite_only
+        or options.lyric_worddata_only
+    )
 
 
 def _patch_worddata_enabled(options: TemplateWriteOptions) -> bool:
-    return not (options.chart_only or options.lyric_text_only or options.lyric_marker_only)
+    return not (
+        options.chart_only
+        or options.lyric_text_only
+        or options.lyric_text_overwrite_only
+        or options.lyric_marker_only
+    )
 
 
 def _mode_name(options: TemplateWriteOptions) -> str:
@@ -273,6 +316,8 @@ def _mode_name(options: TemplateWriteOptions) -> str:
         return "lyric-only"
     if options.lyric_text_only:
         return "lyric-text-only"
+    if options.lyric_text_overwrite_only:
+        return "lyric-text-overwrite-only"
     if options.lyric_worddata_only:
         return "lyric-worddata-only"
     if options.lyric_marker_only:
@@ -356,7 +401,7 @@ def _unused_time(index: int) -> float:
     return UNUSED_MARKER_START_TIME - index * UNUSED_MARKER_STEP
 
 
-def _build_lyric_payload(chart: SongChart, capacity: int) -> tuple[bytes, dict[int, TextPlacement]]:
+def _build_visible_lyric_payload(chart: SongChart) -> tuple[bytes, dict[int, TextPlacement]]:
     text = "\ufeff\r\n"
     placements: dict[int, TextPlacement] = {}
     for index, note in enumerate(chart.notes):
@@ -367,20 +412,48 @@ def _build_lyric_payload(chart: SongChart, capacity: int) -> tuple[bytes, dict[i
             text += " "
     payload = text.rstrip() + "\r\n"
     encoded = payload.encode("utf-8")
+    return encoded, placements
+
+
+def _build_lyric_payload(chart: SongChart, capacity: int) -> tuple[bytes, dict[int, TextPlacement]]:
+    encoded, placements = _build_visible_lyric_payload(chart)
     if len(encoded) > capacity:
         raise ValueError(f"new lyric text needs {len(encoded)} bytes but template has only {capacity}")
     return encoded + (b" " * (capacity - len(encoded))), placements
 
 
-def patch_lyric_file_text(template_lyric_data: bytes, chart: SongChart) -> tuple[bytes, dict[int, TextPlacement], int, int]:
-    payload_start, payload_end = _lyric_payload_byte_bounds(template_lyric_data)
-    capacity = payload_end - payload_start
-    payload, placements = _build_lyric_payload(chart, capacity)
+def patch_lyric_file_text(
+    template_lyric_data: bytes,
+    chart: SongChart,
+) -> tuple[bytes, dict[int, TextPlacement], int, int, LyricTextOverwriteInfo]:
+    visible_start, visible_end, padding_byte = _detect_visible_lyric_text_range(template_lyric_data)
+    visible_capacity = visible_end - visible_start
+    payload, placements = _build_visible_lyric_payload(chart)
+    if len(payload) > visible_capacity:
+        raise ValueError(
+            f"new lyric text needs {len(payload)} bytes but existing visible text range has only {visible_capacity}"
+        )
     patched = bytearray(template_lyric_data)
-    patched[payload_start:payload_end] = payload
+    replacement = payload + bytes([padding_byte]) * (visible_capacity - len(payload))
+    patched[visible_start:visible_end] = replacement
     if len(patched) != len(template_lyric_data):
         raise ValueError("lyric file size changed unexpectedly")
-    return bytes(patched), placements, len(payload.rstrip(b" ")), capacity
+    changed_ranges = _byte_diff_summary(template_lyric_data, bytes(patched)).changed_ranges
+    changed_only_detected_range = all(visible_start <= start and end <= visible_end for start, end in changed_ranges)
+    return (
+        bytes(patched),
+        placements,
+        len(payload),
+        visible_capacity,
+        LyricTextOverwriteInfo(
+            range_start=visible_start,
+            range_end=visible_end,
+            original_range_length=visible_capacity,
+            new_text_byte_length=len(payload),
+            padding_byte=padding_byte,
+            changed_only_detected_range=changed_only_detected_range,
+        ),
+    )
 
 
 def patch_chart_from_model(
@@ -550,8 +623,12 @@ def write_template_chart(
         key=lambda marker: marker.offset,
     )
     lyric_before = iter_lyric_markers_structural(template_chart_data)
+    lyric_text_overwrite: LyricTextOverwriteInfo | None = None
     if _patch_lyric_text_enabled(options):
-        patched_lyric, placements, lyric_bytes_used, lyric_capacity = patch_lyric_file_text(template_lyric_data, chart)
+        patched_lyric, placements, lyric_bytes_used, lyric_capacity, lyric_text_overwrite = patch_lyric_file_text(
+            template_lyric_data,
+            chart,
+        )
     else:
         patched_lyric = template_lyric_data
         lyric_bytes_used, lyric_capacity = _existing_lyric_payload_stats(template_lyric_data)
@@ -594,12 +671,14 @@ def write_template_chart(
         moved_unused_lyric_count=sum(1 for change in lyric_changes if change.action == "disable-unused"),
         chart_diff=chart_diff,
         lyric_diff=lyric_diff,
+        lyric_text_overwrite=lyric_text_overwrite,
         lyric_worddata_bounds_valid=True,
         string_length_fields_changed=_string_length_fields_changed(lyric_before, lyric_after),
         pointer_looking_fields_changed=_pointer_looking_fields_changed(lyric_before, lyric_after),
         chart_only=options.chart_only,
         lyric_only=options.lyric_only,
         lyric_text_only=options.lyric_text_only,
+        lyric_text_overwrite_only=options.lyric_text_overwrite_only,
         lyric_worddata_only=options.lyric_worddata_only,
         lyric_marker_only=options.lyric_marker_only,
         disable_unused=options.disable_unused,
@@ -675,6 +754,7 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         f"  mode_chart_only: {_format_bool(result.chart_only)}",
         f"  mode_lyric_only: {_format_bool(result.lyric_only)}",
         f"  mode_lyric_text_only: {_format_bool(result.lyric_text_only)}",
+        f"  mode_lyric_text_overwrite_only: {_format_bool(result.lyric_text_overwrite_only)}",
         f"  mode_lyric_worddata_only: {_format_bool(result.lyric_worddata_only)}",
         f"  mode_lyric_marker_only: {_format_bool(result.lyric_marker_only)}",
         f"  disable_unused: {_format_bool(result.disable_unused)}",
@@ -695,6 +775,19 @@ def format_summary(result: TemplateWriteResult, out_chart: Path, out_lyric: Path
         f"  lyric_records_changed: {len(result.lyric_changes)}",
         "  input_format: temporary JSON debug format; UltraStar TXT remains the target frontend",
     ]
+    if result.lyric_text_overwrite is not None:
+        overwrite = result.lyric_text_overwrite
+        lines.extend(
+            [
+                "  lyric_text_overwrite:",
+                f"    detected_text_range: 0x{overwrite.range_start:08X}-0x{overwrite.range_end - 1:08X}",
+                f"    original_range_length: {overwrite.original_range_length}",
+                f"    new_text_byte_length: {overwrite.new_text_byte_length}",
+                f"    padding_byte: 0x{overwrite.padding_byte:02X}",
+                f"    changed_only_detected_range: {_format_bool(overwrite.changed_only_detected_range)}",
+                "    metadata_fields_changed: no",
+            ]
+        )
     if result.melody_changes:
         lines.append("  melody_changes:")
         for change in result.melody_changes:
@@ -741,7 +834,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--lyric-text-only",
         action="store_true",
-        help="Rewrite only the visible _Lyric.X360 text payload; leave chart records unchanged",
+        help="Legacy alias for safe visible-text overwrite; leave chart records unchanged",
+    )
+    parser.add_argument(
+        "--lyric-text-overwrite-only",
+        action="store_true",
+        help="Overwrite only the existing visible _Lyric.X360 text byte range; leave chart records unchanged",
     )
     parser.add_argument(
         "--lyric-worddata-only",
@@ -771,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         chart_only=args.chart_only,
         lyric_only=args.lyric_only,
         lyric_text_only=args.lyric_text_only,
+        lyric_text_overwrite_only=args.lyric_text_overwrite_only,
         lyric_worddata_only=args.lyric_worddata_only,
         lyric_marker_only=args.lyric_marker_only,
         disable_unused=not args.no_disable_unused,

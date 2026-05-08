@@ -99,6 +99,12 @@ def template_lyric(capacity=128):
     return b"<ixb><Objects>" + payload + b"</Objects></ixb>"
 
 
+def template_lyric_null_padded(capacity=128):
+    payload = b"\xef\xbb\xbf\r\nold old old\r\n"
+    payload += b"\x00" * (capacity - len(payload))
+    return b"<ixb><Objects>" + payload + b"</Objects></ixb>"
+
+
 def test_write_template_chart_patches_model_and_preserves_sizes_counts():
     chart_data = template_chart()
     lyric_data = template_lyric()
@@ -135,6 +141,9 @@ def test_write_template_chart_patches_model_and_preserves_sizes_counts():
     assert [marker.time for marker in lyric[3:]] == pytest.approx([898.98, 898.99, 899.0])
     assert b"\xef\xbb\xbf\r\nHello world\r\n" in result.lyric_data
     assert [marker.text_length for marker in lyric[:3]] == [3, 2, 5]
+    assert result.lyric_text_overwrite is not None
+    assert result.lyric_text_overwrite.new_text_byte_length == len(b"\xef\xbb\xbf\r\nHello world\r\n")
+    assert result.lyric_text_overwrite.changed_only_detected_range is True
 
 
 def test_chart_only_leaves_lyrics_unchanged():
@@ -179,22 +188,60 @@ def test_lyric_only_leaves_melody_markers_unchanged():
     assert b"\xef\xbb\xbf\r\nHello" in result.lyric_data
 
 
-def test_lyric_text_only_changes_only_lyric_payload():
+def test_lyric_text_only_uses_safe_visible_range_overwrite():
     chart_data = template_chart()
     lyric_data = template_lyric()
     model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    visible_start = lyric_data.index(b"\xef\xbb\xbf")
+    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old\r\n")
 
     result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_only=True))
 
     assert result.chart_data == chart_data
     assert result.lyric_data != lyric_data
     assert b"\xef\xbb\xbf\r\nHello\r\n" in result.lyric_data
+    assert result.lyric_data[visible_end:] == lyric_data[visible_end:]
     assert result.chart_diff.bytes_changed == 0
     assert result.lyric_diff.bytes_changed > 0
+    assert result.lyric_text_overwrite is not None
+    assert result.lyric_text_overwrite.range_start == visible_start
+    assert result.lyric_text_overwrite.range_end == visible_end
+    assert result.lyric_text_overwrite.original_range_length == visible_end - visible_start
+    assert result.lyric_text_overwrite.padding_byte == 0x20
+    assert result.lyric_text_overwrite.changed_only_detected_range is True
     assert result.melody_changes == []
     assert result.lyric_changes == []
     assert result.string_length_fields_changed is False
     assert result.pointer_looking_fields_changed is False
+
+
+def test_lyric_text_overwrite_only_preserves_null_padding_style():
+    chart_data = template_chart()
+    lyric_data = template_lyric_null_padded()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False), Note(10.5, 0.25, 62, "lo", True)])
+    visible_start = lyric_data.index(b"\xef\xbb\xbf")
+    visible_end = visible_start + len(b"\xef\xbb\xbf\r\nold old old\r\n")
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+
+    assert result.chart_data == chart_data
+    assert result.lyric_text_overwrite is not None
+    assert result.lyric_text_overwrite.padding_byte == 0
+    assert result.lyric_text_overwrite.range_start == visible_start
+    assert result.lyric_text_overwrite.range_end == visible_end
+    assert result.lyric_data[visible_end:] == lyric_data[visible_end:]
+    replacement = result.lyric_data[visible_start:visible_end]
+    assert replacement.startswith(b"\xef\xbb\xbf\r\nHello\r\n")
+    assert replacement.endswith(b"\x00" * (len(b"\xef\xbb\xbf\r\nold old old\r\n") - len(b"\xef\xbb\xbf\r\nHello\r\n")))
+
+
+def test_lyric_text_overwrite_refuses_when_new_text_exceeds_visible_range():
+    chart_data = template_chart()
+    lyric_data = template_lyric(capacity=128)
+    model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is too long for visible range", True)])
+
+    with pytest.raises(ValueError, match="existing visible text range"):
+        write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
 
 
 def test_lyric_worddata_only_changes_only_worddata_offsets_and_lengths():
@@ -277,6 +324,23 @@ def test_summary_reports_diff_validation_fields(tmp_path):
     assert "pointer_looking_fields_changed: no" in summary
 
 
+def test_summary_reports_safe_text_overwrite_fields(tmp_path):
+    chart_data = template_chart()
+    lyric_data = template_lyric()
+    model = SongChart(notes=[Note(10.0, 0.5, 60, "Hel", False)])
+
+    result = write_template_chart(chart_data, lyric_data, model, TemplateWriteOptions(lyric_text_overwrite_only=True))
+    summary = "\n".join(format_summary(result, tmp_path / "out.X360", tmp_path / "out_Lyric.X360"))
+
+    assert "mode: lyric-text-overwrite-only" in summary
+    assert "detected_text_range:" in summary
+    assert "original_range_length:" in summary
+    assert "new_text_byte_length:" in summary
+    assert "padding_byte: 0x20" in summary
+    assert "changed_only_detected_range: yes" in summary
+    assert "metadata_fields_changed: no" in summary
+
+
 def test_no_disable_unused_preserves_unused_marker_times():
     chart_data = template_chart()
     lyric_data = template_lyric()
@@ -326,7 +390,7 @@ def test_rejects_lyric_text_that_does_not_fit():
     lyric_data = template_lyric(capacity=16)
     model = SongChart(notes=[Note(1.0, 0.5, 60, "this text is much too long", True)])
 
-    with pytest.raises(ValueError, match="template has only"):
+    with pytest.raises(ValueError, match="existing visible text range"):
         write_template_chart(chart_data, lyric_data, model)
 
 
