@@ -39,6 +39,13 @@ RAW_FILE_IMAGE_TAG = 0x54
 WORD_DATA_TAG = 0x06
 MELODY_MARKER_TAG = 0x28
 LYRIC_MARKER_TAG = 0x40
+CHART_SEQUENCE_VECTOR_TAG = 0x15
+SEQ_CODE_VECTOR_TAG = 0x1C
+MUSIC_INFO_TAG = 0x28
+MUSIC_INDEX_TAG = 0x60
+LPS_CHART_TAG = 0xB8
+IX_SEQUENCE_TAG = 0x68
+IX_TEMPO_MAP_TAG = 0x68
 
 TEXT_RESOURCE_HASH = 0x12345678
 LYRIC_PREFIX = "\ufeff\r\n"
@@ -59,8 +66,17 @@ ASSET_POINTER = 0x05000600
 ASSET_NAME_POINTER = 0x05000700
 TYPE_NAME_POINTER = 0x05000800
 TEXT_PAYLOAD_POINTER = 0x05000900
+CHART_POINTER = 0x05001000
+CHART_SEQUENCE_VECTOR_POINTER = 0x05001100
+EXTRA_SEQUENCE_VECTOR_POINTER = 0x05001200
+TEMPO_MAP_POINTER = 0x05001300
+MAIN_SEQUENCE_POINTER = 0x05001400
+SEQ_CODE_VECTOR_POINTER = 0x05001500
+LISTENER_VECTOR_POINTER = 0x05001600
+MUSIC_INFO_POINTER = 0x05001700
+MUSIC_INDEX_POINTER = 0x05001800
 
-SYNTHETIC_LEVELS = ("bare", "tags", "lyric-ownership", "full-current")
+SYNTHETIC_LEVELS = ("bare", "tags", "lyric-ownership", "full-current", "chart-root-minimal")
 
 
 @dataclass(frozen=True)
@@ -84,6 +100,8 @@ class MinimalIxbPair:
     lyric_num_elements: int | None
     chart_emitted_tags: tuple[tuple[str, int], ...]
     lyric_emitted_tags: tuple[tuple[str, int], ...]
+    chart_emitted_offsets: tuple[tuple[str, int, int], ...] = ()
+    lyric_emitted_offsets: tuple[tuple[str, int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -248,6 +266,60 @@ CHART_CLASSES = (
 )
 
 
+CHART_ROOT_CLASSES = (
+    CHART_CLASSES[: -len(b"</Classes>")]
+    + b'<Class Name="ixVector&lt;ixSequence *,1,ixAllocator&lt;ixSequence *,1&gt;,ixIterator&lt;ixSequence *&gt; &gt;" Size="16"><Members>'
+    + b'<Member Name="_data" Offset="0"/>'
+    + b'<Member Name="_reserve" Offset="4"/>'
+    + b'<Member Name="_size" Offset="8"/>'
+    + b'<Member Name="_allocator" Offset="12"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="lpsMusicInfo" Base="2" Size="296"><Members>'
+    + b'<Member Name="UintID" Offset="36"/>'
+    + b'<Member Name="Title" Offset="40"/>'
+    + b'<Member Name="Artist" Offset="56"/>'
+    + b'<Member Name="Length" Offset="112"/>'
+    + b'<Member Name="LyricUri" Offset="244"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="lpsMusicIndex" Base="22" Size="608"><Members>'
+    + b'<Member Name="ID" Offset="376"/>'
+    + b'<Member Name="ChartUri" Offset="408"/>'
+    + b'<Member Name="Source" Offset="472"/>'
+    + b'<Member Name="ChartState" Offset="484"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="ixPrototype" Base="13" Size="56"><Members></Members></Class>'
+    + b'<Class Name="ixAgentPrototype" Base="24" Size="72"><Members>'
+    + b'<Member Name="strStateName" Offset="56"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="ixChart" Base="25" Size="108"><Members>'
+    + b'<Member Name="m_vpSequence" Offset="72"/>'
+    + b'<Member Name="m_vpExtraSequence" Offset="88"/>'
+    + b'<Member Name="m_MusicStartOffset" Offset="104"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="lpsChart" Base="26" Size="184"><Members>'
+    + b'<Member Name="m_strNoiseMaker" Offset="108"/>'
+    + b'<Member Name="m_strNoiseMakerForLS2" Offset="124"/>'
+    + b'<Member Name="m_BaseCentOffset" Offset="140"/>'
+    + b'<Member Name="m_pIndex" Offset="144"/>'
+    + b'<Member Name="m_pMusicData" Offset="148"/>'
+    + b'<Member Name="m_strAudioEffectPresetPath" Offset="152"/>'
+    + b'<Member Name="m_strLyricPathCash" Offset="168"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="ixVector&lt;ixSeqCode *,1,ixAllocator&lt;ixSeqCode *,1&gt;,ixIterator&lt;ixSeqCode *&gt; &gt;" Size="16"><Members>'
+    + b'<Member Name="_data" Offset="0"/>'
+    + b'<Member Name="_reserve" Offset="4"/>'
+    + b'<Member Name="_size" Offset="8"/>'
+    + b'<Member Name="_allocator" Offset="12"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="ixSequence" Base="25" Size="104"><Members>'
+    + b'<Member Name="m_vpSeqCode" Offset="72"/>'
+    + b'<Member Name="m_vpListeners" Offset="88"/>'
+    + b"</Members></Class>"
+    + b'<Class Name="ixTempoMap" Base="29" Size="104"><Members></Members></Class>'
+    + b"</Classes>"
+)
+
+
 LYRIC_CLASSES = (
     b"<Classes>"
     b'<Class Name="ixObject" Size="4"><Members></Members></Class>'
@@ -340,6 +412,11 @@ def _asset_pointer_vector(pointer: int, asset_pointer: int) -> EmittedChunk:
     return _object("ixVector<ixAsset *>", ASSET_VECTOR_TAG, bytes(body) + struct.pack(">I", asset_pointer))
 
 
+def _pointer_vector(name: str, tag: int, pointer: int, pointers: Sequence[int], reserve: int = 0x20) -> EmittedChunk:
+    body = _vector_body(pointer, reserve if pointers else 0, len(pointers))
+    return _object(name, tag, bytes(body) + b"".join(struct.pack(">I", value) for value in pointers))
+
+
 def _package_pointer_vector(pointer: int) -> EmittedChunk:
     body = _vector_body(pointer, 0, 0)
     return _object("ixVector<ixPackage *>", PACKAGE_VECTOR_TAG, bytes(body))
@@ -430,6 +507,55 @@ def _raw_file_image_object(asset_name: str, asset_package_pointer: int, payload_
     struct.pack_into(">IIII", body, 52, TEXT_RESOURCE_HASH, payload_length, payload_length, 0)
     struct.pack_into(">IIII", body, 68, TYPE_NAME_POINTER, type_name_len, type_name_len, 0)
     return _object("ixRawFileImage", RAW_FILE_IMAGE_TAG, bytes(body))
+
+
+def _music_info_object() -> EmittedChunk:
+    body = bytearray(296)
+    struct.pack_into(">I", body, 4, 1)
+    struct.pack_into(">I", body, 36, 1)
+    struct.pack_into(">I", body, 112, 30)
+    struct.pack_into(">I", body, 116, 0xFFFFFFFF)
+    return _object("lpsMusicInfo", MUSIC_INFO_TAG, bytes(body))
+
+
+def _music_index_object() -> EmittedChunk:
+    body = bytearray(608)
+    struct.pack_into(">I", body, 4, 1)
+    struct.pack_into(">I", body, 36, 1)
+    struct.pack_into(">I", body, 112, 30)
+    struct.pack_into(">I", body, 116, 0xFFFFFFFF)
+    struct.pack_into(">I", body, 376, 1)
+    struct.pack_into(">I", body, 472, 1)
+    struct.pack_into(">I", body, 484, 1)
+    return _object("lpsMusicIndex", MUSIC_INDEX_TAG, bytes(body))
+
+
+def _lps_chart_object() -> EmittedChunk:
+    body = bytearray(184)
+    struct.pack_into(">I", body, 4, 1)
+    struct.pack_into(">IIII", body, 72, CHART_SEQUENCE_VECTOR_POINTER, 0x20, 2, 0)
+    struct.pack_into(">IIII", body, 88, 0, 0, 0, 0)
+    struct.pack_into(">f", body, 104, 0.0)
+    struct.pack_into(">f", body, 140, 0.0)
+    struct.pack_into(">I", body, 144, MUSIC_INDEX_POINTER)
+    struct.pack_into(">I", body, 148, MUSIC_INFO_POINTER)
+    return _object("lpsChart", LPS_CHART_TAG, bytes(body))
+
+
+def _ix_tempo_map_object() -> EmittedChunk:
+    body = bytearray(104)
+    struct.pack_into(">I", body, 4, 1)
+    struct.pack_into(">IIII", body, 72, 0, 0, 0, 0)
+    struct.pack_into(">IIII", body, 88, 0, 0, 0, 0)
+    return _object("ixTempoMap", IX_TEMPO_MAP_TAG, bytes(body))
+
+
+def _ix_sequence_object(seq_code_count: int) -> EmittedChunk:
+    body = bytearray(104)
+    struct.pack_into(">I", body, 4, 1)
+    struct.pack_into(">IIII", body, 72, SEQ_CODE_VECTOR_POINTER, 0x20, seq_code_count, 0)
+    struct.pack_into(">IIII", body, 88, 0, 0, 0, 0)
+    return _object("ixSequence", IX_SEQUENCE_TAG, bytes(body))
 
 
 def _word_data(pointer: int, text_offset: int, text_length: int) -> EmittedChunk:
@@ -527,6 +653,28 @@ def _lyric_resource_chunks(payload_length: int) -> list[EmittedChunk]:
     ]
 
 
+def _chart_root_chunks(seq_code_pointers: Sequence[int]) -> list[EmittedChunk]:
+    return [
+        _pointer_vector(
+            "ixVector<ixSequence *> chart sequences",
+            CHART_SEQUENCE_VECTOR_TAG,
+            CHART_SEQUENCE_VECTOR_POINTER,
+            (TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
+        ),
+        _pointer_vector(
+            "ixVector<ixSeqCode *> main sequence codes",
+            SEQ_CODE_VECTOR_TAG,
+            SEQ_CODE_VECTOR_POINTER,
+            seq_code_pointers,
+        ),
+        _music_info_object(),
+        _music_index_object(),
+        _lps_chart_object(),
+        _ix_tempo_map_object(),
+        _ix_sequence_object(len(seq_code_pointers)),
+    ]
+
+
 def _join_ixb(classes: bytes, chunks: Sequence[EmittedChunk], *, include_num_elements: bool) -> tuple[bytes, int | None]:
     num_elements = sum(1 for chunk in chunks if chunk.is_element)
     declared_num_elements = num_elements if include_num_elements else None
@@ -534,18 +682,36 @@ def _join_ixb(classes: bytes, chunks: Sequence[EmittedChunk], *, include_num_ele
     return data, declared_num_elements
 
 
+def _chunk_offsets(
+    classes: bytes,
+    chunks: Sequence[EmittedChunk],
+    *,
+    include_num_elements: bool,
+) -> tuple[tuple[str, int, int], ...]:
+    num_elements = sum(1 for chunk in chunks if chunk.is_element)
+    declared_num_elements = num_elements if include_num_elements else None
+    cursor = len(_ixb_open(declared_num_elements)) + len(classes) + len(b"<Objects>")
+    offsets: list[tuple[str, int, int]] = []
+    for chunk in chunks:
+        if chunk.tag is not None:
+            offsets.append((chunk.name, chunk.tag, cursor))
+        cursor += len(chunk.data)
+    return tuple(offsets)
+
+
 def _tag_summary(chunks: Sequence[EmittedChunk]) -> tuple[tuple[str, int], ...]:
     return tuple((chunk.name, chunk.tag) for chunk in chunks if chunk.tag is not None)
 
 
-def _level_flags(synthetic_level: str) -> tuple[bool, bool, bool, bool]:
+def _level_flags(synthetic_level: str) -> tuple[bool, bool, bool, bool, bool]:
     if synthetic_level not in SYNTHETIC_LEVELS:
         raise ValueError(f"unknown synthetic level {synthetic_level!r}; choose one of {', '.join(SYNTHETIC_LEVELS)}")
     use_real_marker_tags = synthetic_level != "bare"
     include_num_elements = synthetic_level != "bare"
-    include_chart_ownership = synthetic_level == "full-current"
-    include_lyric_ownership = synthetic_level in {"lyric-ownership", "full-current"}
-    return use_real_marker_tags, include_num_elements, include_chart_ownership, include_lyric_ownership
+    include_chart_ownership = synthetic_level in {"full-current", "chart-root-minimal"}
+    include_lyric_ownership = synthetic_level in {"lyric-ownership", "full-current", "chart-root-minimal"}
+    include_chart_root = synthetic_level == "chart-root-minimal"
+    return use_real_marker_tags, include_num_elements, include_chart_ownership, include_lyric_ownership, include_chart_root
 
 
 def build_minimal_ixb_pair(
@@ -555,26 +721,41 @@ def build_minimal_ixb_pair(
 ) -> MinimalIxbPair:
     if not notes:
         raise ValueError("at least one note is required")
-    use_real_marker_tags, include_num_elements, include_chart_ownership, include_lyric_ownership = _level_flags(synthetic_level)
+    (
+        use_real_marker_tags,
+        include_num_elements,
+        include_chart_ownership,
+        include_lyric_ownership,
+        include_chart_root,
+    ) = _level_flags(synthetic_level)
     normalized_notes = tuple(notes)
     lyric_text, text_offsets = _build_lyric_text(normalized_notes)
     lyric_payload = lyric_text.encode("utf-8")
+    marker_pointers = tuple(
+        (
+            0x07160000 + index * 0x80,
+            0x2FA10000 + index * 0x80,
+            0x2FA20000 + index * 0x80,
+        )
+        for index, _note in enumerate(normalized_notes)
+    )
+    seq_code_pointers = tuple(pointer for _word_pointer, melody_pointer, lyric_pointer in marker_pointers for pointer in (melody_pointer, lyric_pointer))
 
     if include_chart_ownership:
-        chart_classes = CHART_CLASSES
+        chart_classes = CHART_ROOT_CLASSES if include_chart_root else CHART_CLASSES
         chart_chunks = [
             *_package_ownership_chunks(CHART_PACKAGE_NAME, packed_size=0, include_asset_vector=True),
             _asset_object(CHART_PACKAGE_NAME, ASSET_PACKAGE_POINTER),
         ]
+        if include_chart_root:
+            chart_chunks.extend(_chart_root_chunks(seq_code_pointers))
     else:
         chart_classes = BARE_CHART_CLASSES
         chart_chunks = [_bare_package_object("ixPackage", 0x08)]
     melody_tag = MELODY_MARKER_TAG if use_real_marker_tags else 0x05
     lyric_tag = LYRIC_MARKER_TAG if use_real_marker_tags else 0x07
     for index, note in enumerate(normalized_notes):
-        word_data_pointer = 0x07160000 + index * 0x80
-        melody_pointer = 0x2FA10000 + index * 0x80
-        lyric_pointer = 0x2FA20000 + index * 0x80
+        word_data_pointer, melody_pointer, lyric_pointer = marker_pointers[index]
         text_offset, text_length = text_offsets[index]
         chart_chunks.append(_word_data(word_data_pointer, text_offset, text_length))
         chart_chunks.append(_melody_marker(note, melody_pointer, lyric_pointer, tag=melody_tag))
@@ -606,6 +787,8 @@ def build_minimal_ixb_pair(
         lyric_num_elements=lyric_num_elements,
         chart_emitted_tags=_tag_summary(chart_chunks),
         lyric_emitted_tags=_tag_summary(lyric_chunks),
+        chart_emitted_offsets=_chunk_offsets(chart_classes, chart_chunks, include_num_elements=include_num_elements),
+        lyric_emitted_offsets=_chunk_offsets(lyric_classes, lyric_chunks, include_num_elements=include_num_elements),
     )
 
 
@@ -850,7 +1033,10 @@ OWNERSHIP_SCAN_TAGS = (
 
 
 def _format_ownership_scan(label: str, data: bytes, *, limit: int = 4) -> list[str]:
-    lines = [f"  {label} ownership/vector field scan:"]
+    lines = [
+        f"  {label} ownership/vector field scan:",
+        "    note: generic tag scan; chart-root debug uses emitted offsets when available",
+    ]
     class_names = {cls.name for cls in parse_ixb_document(data).classes.values()}
     if not any(name in class_names for name in ("ixTreeNode<ixPackage>", "ixAssetPackage", "ixRawFileImage")):
         lines.append("    skipped: rich ownership classes are not present in this variant")
@@ -871,6 +1057,205 @@ def _format_ownership_scan(label: str, data: bytes, *, limit: int = 4) -> list[s
     if not any_offsets:
         lines.append("    none")
     lines.append("    zero/null pointer-like fields: " + (", ".join(zero_fields[:24]) if zero_fields else "none"))
+    return lines
+
+
+def _emitted_offsets_by_name(pair: MinimalIxbPair, name: str) -> list[int]:
+    return [offset for chunk_name, _tag, offset in pair.chart_emitted_offsets if chunk_name == name]
+
+
+def _first_emitted_offset(pair: MinimalIxbPair, name: str) -> int | None:
+    offsets = _emitted_offsets_by_name(pair, name)
+    return offsets[0] if offsets else None
+
+
+def _format_offsets(pair: MinimalIxbPair, names: Sequence[str]) -> str:
+    parts: list[str] = []
+    for name in names:
+        offsets = _emitted_offsets_by_name(pair, name)
+        if offsets:
+            parts.append(f"{name}=" + ",".join(f"0x{offset:08X}" for offset in offsets))
+        else:
+            parts.append(f"{name}=missing")
+    return "; ".join(parts)
+
+
+def _read_vector_tuple(data: bytes, offset: int) -> tuple[int | None, int | None, int | None, int | None]:
+    return (
+        _safe_u32(data, offset),
+        _safe_u32(data, offset + 4),
+        _safe_u32(data, offset + 8),
+        _safe_u32(data, offset + 12),
+    )
+
+
+def _format_vector_tuple(values: tuple[int | None, int | None, int | None, int | None]) -> str:
+    data_ptr, reserve, size, allocator = values
+    return (
+        f"data={_hex_or_none(data_ptr)} reserve={_int_or_none(reserve)} "
+        f"size={_int_or_none(size)} allocator={_hex_or_none(allocator)}"
+    )
+
+
+def _chart_pointer_targets(pair: MinimalIxbPair) -> dict[int, str]:
+    targets = {
+        CHART_SEQUENCE_VECTOR_POINTER: "ixVector<ixSequence *> chart sequences",
+        SEQ_CODE_VECTOR_POINTER: "ixVector<ixSeqCode *> main sequence codes",
+        TEMPO_MAP_POINTER: "ixTempoMap",
+        MAIN_SEQUENCE_POINTER: "ixSequence",
+        MUSIC_INFO_POINTER: "lpsMusicInfo",
+        MUSIC_INDEX_POINTER: "lpsMusicIndex",
+    }
+    for index, _note in enumerate(pair.notes):
+        targets[0x07160000 + index * 0x80] = f"lpsLyricWordData[{index}]"
+        targets[0x2FA10000 + index * 0x80] = f"lpsMelodyMarker[{index}]"
+        targets[0x2FA20000 + index * 0x80] = f"lpsLyricMarker[{index}]"
+    return targets
+
+
+def _format_pointer_ref(value: int | None, targets: dict[int, str]) -> str:
+    if value is None:
+        return "n/a"
+    target = targets.get(value)
+    status = f" -> {target}" if target else " -> INVALID"
+    return f"0x{value:08X}{status}"
+
+
+def _format_backing_vector(
+    label: str,
+    data: bytes,
+    object_offset: int | None,
+    targets: dict[int, str],
+    invalid_refs: list[str],
+) -> list[str]:
+    if object_offset is None:
+        invalid_refs.append(f"{label}: missing vector object")
+        return [f"    {label}: missing"]
+    body = object_offset + 1
+    fields = _read_vector_tuple(data, body)
+    size = fields[2] or 0
+    entries: list[int | None] = [_safe_u32(data, body + 16 + index * 4) for index in range(size)]
+    for index, value in enumerate(entries):
+        if value not in targets:
+            invalid_refs.append(f"{label}[{index}]={_hex_or_none(value)}")
+    lines = [f"    {label} @0x{object_offset:08X}: {_format_vector_tuple(fields)}"]
+    lines.append("      entries: " + (", ".join(_format_pointer_ref(value, targets) for value in entries) if entries else "empty"))
+    return lines
+
+
+def _format_embedded_vector(
+    label: str,
+    data: bytes,
+    object_offset: int | None,
+    relative_offset: int,
+    targets: dict[int, str],
+    invalid_refs: list[str],
+    *,
+    empty_allowed: bool = False,
+) -> str:
+    if object_offset is None:
+        invalid_refs.append(f"{label}: missing owner object")
+        return f"    {label}: missing owner object"
+    fields = _read_vector_tuple(data, object_offset + 1 + relative_offset)
+    data_ptr, _reserve, size, _allocator = fields
+    if size and data_ptr not in targets:
+        invalid_refs.append(f"{label}.data={_hex_or_none(data_ptr)}")
+    elif not size and data_ptr and data_ptr not in targets:
+        invalid_refs.append(f"{label}.data={_hex_or_none(data_ptr)}")
+    elif not empty_allowed and not size:
+        invalid_refs.append(f"{label}: empty")
+    return f"    {label} offset={relative_offset}: {_format_vector_tuple(fields)}"
+
+
+def _format_chart_root_debug(pair: MinimalIxbPair) -> list[str]:
+    class_names = {cls.name for cls in parse_ixb_document(pair.chart_data).classes.values()}
+    if "lpsChart" not in class_names:
+        return ["  chart root debug: skipped; lpsChart/ixSequence classes are not present in this variant"]
+
+    targets = _chart_pointer_targets(pair)
+    invalid_refs: list[str] = []
+    chart_offset = _first_emitted_offset(pair, "lpsChart")
+    sequence_offset = _first_emitted_offset(pair, "ixSequence")
+    sequence_vector_offset = _first_emitted_offset(pair, "ixVector<ixSequence *> chart sequences")
+    seq_code_vector_offset = _first_emitted_offset(pair, "ixVector<ixSeqCode *> main sequence codes")
+    tempo_offsets = _emitted_offsets_by_name(pair, "ixTempoMap")
+    seq_code_count = 2 * len(pair.notes)
+
+    lines = [
+        "  chart root debug:",
+        "    object offsets: "
+        + _format_offsets(
+            pair,
+            (
+                "lpsChart",
+                "ixSequence",
+                "ixTempoMap",
+                "ixVector<ixSequence *> chart sequences",
+                "ixVector<ixSeqCode *> main sequence codes",
+                "lpsMusicInfo",
+                "lpsMusicIndex",
+            ),
+        ),
+        f"    seq codes inserted: {seq_code_count} ({len(pair.notes)} MelodyMarkers + {len(pair.notes)} LyricMarkers)",
+    ]
+    lines.extend(_format_backing_vector("ixVector<ixSequence *> backing", pair.chart_data, sequence_vector_offset, targets, invalid_refs))
+    lines.extend(_format_backing_vector("ixVector<ixSeqCode *> backing", pair.chart_data, seq_code_vector_offset, targets, invalid_refs))
+    lines.append(
+        _format_embedded_vector(
+            "ixChart.m_vpSequence",
+            pair.chart_data,
+            chart_offset,
+            72,
+            targets,
+            invalid_refs,
+        )
+    )
+    lines.append(
+        _format_embedded_vector(
+            "ixChart.m_vpExtraSequence",
+            pair.chart_data,
+            chart_offset,
+            88,
+            targets,
+            invalid_refs,
+            empty_allowed=True,
+        )
+    )
+    lines.append(
+        _format_embedded_vector(
+            "ixSequence.m_vpSeqCode",
+            pair.chart_data,
+            sequence_offset,
+            72,
+            targets,
+            invalid_refs,
+        )
+    )
+    lines.append(
+        _format_embedded_vector(
+            "ixSequence.m_vpListeners",
+            pair.chart_data,
+            sequence_offset,
+            88,
+            targets,
+            invalid_refs,
+            empty_allowed=True,
+        )
+    )
+    if chart_offset is not None:
+        index_ptr = _safe_u32(pair.chart_data, chart_offset + 1 + 144)
+        music_ptr = _safe_u32(pair.chart_data, chart_offset + 1 + 148)
+        for label, value in (("lpsChart.m_pIndex", index_ptr), ("lpsChart.m_pMusicData", music_ptr)):
+            if value not in targets:
+                invalid_refs.append(f"{label}={_hex_or_none(value)}")
+        lines.append(f"    lpsChart.m_pIndex offset=144: {_format_pointer_ref(index_ptr, targets)}")
+        lines.append(f"    lpsChart.m_pMusicData offset=148: {_format_pointer_ref(music_ptr, targets)}")
+    if tempo_offsets:
+        lines.append("    ixTempoMap object offsets: " + ", ".join(f"0x{offset:08X}" for offset in tempo_offsets))
+    lines.append(
+        "    intentional empty vectors: ixChart.m_vpExtraSequence and ixSequence.m_vpListeners for the one-sequence test"
+    )
+    lines.append("    invalid required pointer-like fields: " + (", ".join(invalid_refs) if invalid_refs else "none"))
     return lines
 
 
@@ -932,6 +1317,7 @@ def _format_summary(chart_path: Path, lyric_path: Path, pair: MinimalIxbPair) ->
     ]
     lines.extend(_format_ownership_scan("chart", pair.chart_data))
     lines.extend(_format_ownership_scan("lyric", pair.lyric_data))
+    lines.extend(_format_chart_root_debug(pair))
     lines.append(
         "  resource chain note: ixRawFileImage should point to the Text payload only in lyric-ownership/full-current variants."
     )

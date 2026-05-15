@@ -88,6 +88,16 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
             "lyric_tag": 0x40,
             "chart_has_assets": True,
             "lyric_has_assets": True,
+            "chart_has_root": False,
+        },
+        "chart-root-minimal": {
+            "chart_num": 25,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
         },
     }
 
@@ -111,6 +121,18 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
         ] * len(pair.notes)
         assert ("ixAssetPackage" in chart_classes) is config["chart_has_assets"]
         assert ("ixRawFileImage" in lyric_classes) is config["lyric_has_assets"]
+        assert ("lpsChart" in chart_classes) is config.get("chart_has_root", False)
+        if config.get("chart_has_root", False):
+            assert {
+                "ixChart",
+                "lpsChart",
+                "ixSequence",
+                "ixTempoMap",
+                "lpsMusicInfo",
+                "lpsMusicIndex",
+            } <= chart_classes
+            assert any(name == "ixVector<ixSequence *> chart sequences" for name, _tag in pair.chart_emitted_tags)
+            assert any(name == "ixVector<ixSeqCode *> main sequence codes" for name, _tag in pair.chart_emitted_tags)
         assert len(melody) == len(pair.notes)
         assert len(lyrics) == len(pair.notes)
 

@@ -284,3 +284,34 @@ Next minimal runtime step:
 The key test is whether adding a valid chart root and sequence vector changes
 the `full-current` behavior from hard crash back to safe rejection or load
 progression.
+
+## Implemented Follow-Up Variant
+
+The next controlled variant is now implemented as:
+
+```powershell
+py tools\build_minimal_ixb_pair.py `
+  --synthetic-level chart-root-minimal `
+  --out-dir private\outputs\minimal_ixb_variants\chart-root-minimal `
+  --stem 1234 `
+  --force
+```
+
+It keeps lyric ownership identical to the fixed `lyric-ownership` path and adds
+only the smallest extended-layout chart root layer:
+
+- `lpsChart`
+- `ixChart.m_vpSequence`
+- `ixChart.m_vpExtraSequence`
+- `ixTempoMap`
+- `ixSequence`
+- `ixSequence.m_vpSeqCode`
+- `ixSequence.m_vpListeners`
+- minimal `lpsMusicInfo`
+- minimal `lpsMusicIndex`
+
+The existing synthetic MelodyMarkers and LyricMarkers are inserted into the
+sequence's `ixVector<ixSeqCode *>`.
+
+See `docs/chart_root_minimal_report.md` for the corpus counts, the compact vs
+extended `lpsChart` layout split, and the exact synthetic field choices.
