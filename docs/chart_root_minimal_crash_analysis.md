@@ -238,9 +238,9 @@ called this helper.
 
 ## Next Minimal Test Ideas
 
-Do not implement these until the register/stack evidence is reviewed.
-
-Potential isolation variants:
+These isolation variants are now available in `tools/build_minimal_ixb_pair.py`.
+They do not add new chart classes; they only vary suspected vector counts and
+music pointer fields from the existing extended-layout chart root:
 
 - keep `lpsChart` and `ixSequence`, but set `ixChart.m_vpSequence.size = 0`
 - keep the sequence vector, but set `ixSequence.m_vpSeqCode.size = 0`
@@ -250,3 +250,12 @@ Potential isolation variants:
 
 These would isolate whether the null copy destination is triggered by the
 sequence vector, the seq-code vector, or music metadata traversal.
+
+The exact level names are:
+
+- `chart-root-empty-sequence-vector`
+- `chart-root-empty-seqcode-vector`
+- `chart-root-one-seqcode`
+- `chart-root-no-music-pointers`
+- `chart-root-index-only`
+- `chart-root-musicdata-only`

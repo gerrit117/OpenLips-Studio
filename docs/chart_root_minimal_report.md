@@ -83,6 +83,41 @@ The raw object field walker is still not trusted enough to infer exact runtime
 pointer values from arbitrary samples. The high-confidence data here comes from
 the parsed schema/class/member definitions across all plain chart samples.
 
+## Isolation Variant Field Choices
+
+After the `chart-root-minimal` Xbox test still hard-crashed, but at a different
+offset inside the same copy helper, the builder gained controlled isolation
+variants. These do not add new chart classes. They reuse the same extended
+layout and vary only the suspected vector sizes or music pointers.
+
+The same corpus scan above guides these choices:
+
+- `ixChart.m_vpSequence` exists in 58/58 plain chart schemas at offset `72`
+- `ixSequence.m_vpSeqCode` exists in 58/58 plain chart schemas at offset `72`
+- `ixSequence.m_vpListeners` exists in 58/58 plain chart schemas at offset `88`
+- `lpsChart.m_pIndex` exists in 58/58, but its offset is layout-dependent
+- `lpsChart.m_pMusicData` exists only in the extended family, 16/58
+
+The variants intentionally keep the extended family because the current
+synthetic test fixture and the crash report are based on the extended-layout
+`1234` path.
+
+| Variant | `ixChart.m_vpSequence` | `ixSequence.m_vpSeqCode` | Music pointers | Purpose |
+| --- | --- | --- | --- | --- |
+| `chart-root-minimal` | size `2`: tempo map + sequence | size `6`: all Melody/Lyric markers | index + music data | current crashing baseline |
+| `chart-root-empty-sequence-vector` | size `0`, no sequence entries | omitted, no sequence owner | index + music data | test whether any sequence traversal triggers the crash |
+| `chart-root-empty-seqcode-vector` | size `1`: one sequence | size `0` | index + music data | test whether seq-code traversal triggers the crash |
+| `chart-root-one-seqcode` | size `1`: one sequence | size `1`: first MelodyMarker | index + music data | test whether one seq-code entry is already enough |
+| `chart-root-no-music-pointers` | same as baseline | same as baseline | both null | test music pointer traversal as a trigger |
+| `chart-root-index-only` | same as baseline | same as baseline | index only | split `lpsMusicIndex` from `lpsMusicInfo` |
+| `chart-root-musicdata-only` | same as baseline | same as baseline | music data only | split `lpsMusicInfo` from `lpsMusicIndex` |
+
+The music-pointer isolation variants still emit the minimal `lpsMusicInfo` and
+`lpsMusicIndex` objects so the only intended behavioral difference is whether
+`lpsChart` points at them. If all three music-pointer variants crash the same
+way, construction of those minimal objects or vector traversal is more likely
+than pointer traversal alone.
+
 ## Implemented Variant
 
 `--synthetic-level chart-root-minimal` is based on the fixed
@@ -112,7 +147,7 @@ controller, audio-effect, or LED sequences are generated in this iteration.
 
 ## Generated Debug Output
 
-The builder now prints, for `chart-root-minimal`:
+The builder now prints, for every chart-root variant:
 
 - chart root object offsets
 - sequence object offsets
@@ -130,8 +165,8 @@ Example command:
 
 ```powershell
 py tools\build_minimal_ixb_pair.py `
-  --synthetic-level chart-root-minimal `
-  --out-dir private\outputs\minimal_ixb_variants\chart-root-minimal `
+  --synthetic-level all `
+  --out-dir private\outputs\minimal_ixb_variants `
   --stem 1234 `
   --force
 ```

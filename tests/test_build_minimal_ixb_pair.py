@@ -1,6 +1,15 @@
 from tools.analyze_lyric_file import find_text_resources, select_text_resource
-from tools.build_minimal_ixb_pair import SYNTHETIC_LEVELS, build_minimal_ixb_pair, format_ownership_chain_compare
-from tools.extract_melody_markers import iter_melody_markers_object_walker, parse_ixb_document
+from tools.build_minimal_ixb_pair import (
+    CHART_SEQUENCE_VECTOR_POINTER,
+    MAIN_SEQUENCE_POINTER,
+    MUSIC_INDEX_POINTER,
+    MUSIC_INFO_POINTER,
+    SEQ_CODE_VECTOR_POINTER,
+    SYNTHETIC_LEVELS,
+    build_minimal_ixb_pair,
+    format_ownership_chain_compare,
+)
+from tools.extract_melody_markers import _u32be, iter_melody_markers_object_walker, parse_ixb_document
 from tools.patch_lyrics_mapping import iter_lyric_markers_structural
 
 
@@ -99,6 +108,61 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
             "lyric_has_assets": True,
             "chart_has_root": True,
         },
+        "chart-root-empty-sequence-vector": {
+            "chart_num": 22,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+            "chart_has_seqcode_vector": False,
+        },
+        "chart-root-empty-seqcode-vector": {
+            "chart_num": 24,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+        },
+        "chart-root-one-seqcode": {
+            "chart_num": 24,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+        },
+        "chart-root-no-music-pointers": {
+            "chart_num": 25,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+        },
+        "chart-root-index-only": {
+            "chart_num": 25,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+        },
+        "chart-root-musicdata-only": {
+            "chart_num": 25,
+            "lyric_num": 13,
+            "melody_tag": 0x28,
+            "lyric_tag": 0x40,
+            "chart_has_assets": True,
+            "lyric_has_assets": True,
+            "chart_has_root": True,
+        },
     }
 
     for level in SYNTHETIC_LEVELS:
@@ -132,9 +196,66 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
                 "lpsMusicIndex",
             } <= chart_classes
             assert any(name == "ixVector<ixSequence *> chart sequences" for name, _tag in pair.chart_emitted_tags)
-            assert any(name == "ixVector<ixSeqCode *> main sequence codes" for name, _tag in pair.chart_emitted_tags)
+            assert any(name == "ixVector<ixSeqCode *> main sequence codes" for name, _tag in pair.chart_emitted_tags) is config.get(
+                "chart_has_seqcode_vector", True
+            )
         assert len(melody) == len(pair.notes)
         assert len(lyrics) == len(pair.notes)
+
+
+def _offset(pair, name):
+    return next(offset for chunk_name, _tag, offset in pair.chart_emitted_offsets if chunk_name == name)
+
+
+def _vector_fields(data, offset):
+    body = offset + 1
+    return tuple(_u32be(data, body + delta) for delta in (0, 4, 8, 12))
+
+
+def _embedded_vector_fields(data, offset, relative_offset):
+    body = offset + 1 + relative_offset
+    return tuple(_u32be(data, body + delta) for delta in (0, 4, 8, 12))
+
+
+def test_chart_root_isolation_variant_fields():
+    empty_sequence = build_minimal_ixb_pair(synthetic_level="chart-root-empty-sequence-vector")
+    lps_chart = _offset(empty_sequence, "lpsChart")
+    sequence_vector = _offset(empty_sequence, "ixVector<ixSequence *> chart sequences")
+    assert _vector_fields(empty_sequence.chart_data, sequence_vector) == (CHART_SEQUENCE_VECTOR_POINTER, 0, 0, 0)
+    assert _embedded_vector_fields(empty_sequence.chart_data, lps_chart, 72) == (CHART_SEQUENCE_VECTOR_POINTER, 0, 0, 0)
+    assert not any(name == "ixSequence" for name, _tag in empty_sequence.chart_emitted_tags)
+
+    empty_seqcode = build_minimal_ixb_pair(synthetic_level="chart-root-empty-seqcode-vector")
+    lps_chart = _offset(empty_seqcode, "lpsChart")
+    sequence = _offset(empty_seqcode, "ixSequence")
+    sequence_vector = _offset(empty_seqcode, "ixVector<ixSequence *> chart sequences")
+    seqcode_vector = _offset(empty_seqcode, "ixVector<ixSeqCode *> main sequence codes")
+    assert _vector_fields(empty_seqcode.chart_data, sequence_vector) == (CHART_SEQUENCE_VECTOR_POINTER, 0x20, 1, 0)
+    assert _u32be(empty_seqcode.chart_data, sequence_vector + 1 + 16) == MAIN_SEQUENCE_POINTER
+    assert _embedded_vector_fields(empty_seqcode.chart_data, lps_chart, 72) == (CHART_SEQUENCE_VECTOR_POINTER, 0x20, 1, 0)
+    assert _vector_fields(empty_seqcode.chart_data, seqcode_vector) == (SEQ_CODE_VECTOR_POINTER, 0, 0, 0)
+    assert _embedded_vector_fields(empty_seqcode.chart_data, sequence, 72) == (SEQ_CODE_VECTOR_POINTER, 0, 0, 0)
+
+    one_seqcode = build_minimal_ixb_pair(synthetic_level="chart-root-one-seqcode")
+    sequence = _offset(one_seqcode, "ixSequence")
+    seqcode_vector = _offset(one_seqcode, "ixVector<ixSeqCode *> main sequence codes")
+    assert _vector_fields(one_seqcode.chart_data, seqcode_vector) == (SEQ_CODE_VECTOR_POINTER, 0x20, 1, 0)
+    assert _embedded_vector_fields(one_seqcode.chart_data, sequence, 72) == (SEQ_CODE_VECTOR_POINTER, 0x20, 1, 0)
+
+    no_music = build_minimal_ixb_pair(synthetic_level="chart-root-no-music-pointers")
+    lps_chart = _offset(no_music, "lpsChart")
+    assert _u32be(no_music.chart_data, lps_chart + 1 + 144) == 0
+    assert _u32be(no_music.chart_data, lps_chart + 1 + 148) == 0
+
+    index_only = build_minimal_ixb_pair(synthetic_level="chart-root-index-only")
+    lps_chart = _offset(index_only, "lpsChart")
+    assert _u32be(index_only.chart_data, lps_chart + 1 + 144) == MUSIC_INDEX_POINTER
+    assert _u32be(index_only.chart_data, lps_chart + 1 + 148) == 0
+
+    musicdata_only = build_minimal_ixb_pair(synthetic_level="chart-root-musicdata-only")
+    lps_chart = _offset(musicdata_only, "lpsChart")
+    assert _u32be(musicdata_only.chart_data, lps_chart + 1 + 144) == 0
+    assert _u32be(musicdata_only.chart_data, lps_chart + 1 + 148) == MUSIC_INFO_POINTER
 
 
 def test_ownership_chain_compare_reports_real_and_synthetic_fields(tmp_path):

@@ -76,7 +76,16 @@ LISTENER_VECTOR_POINTER = 0x05001600
 MUSIC_INFO_POINTER = 0x05001700
 MUSIC_INDEX_POINTER = 0x05001800
 
-SYNTHETIC_LEVELS = ("bare", "tags", "lyric-ownership", "full-current", "chart-root-minimal")
+CHART_ROOT_LEVELS = (
+    "chart-root-minimal",
+    "chart-root-empty-sequence-vector",
+    "chart-root-empty-seqcode-vector",
+    "chart-root-one-seqcode",
+    "chart-root-no-music-pointers",
+    "chart-root-index-only",
+    "chart-root-musicdata-only",
+)
+SYNTHETIC_LEVELS = ("bare", "tags", "lyric-ownership", "full-current", *CHART_ROOT_LEVELS)
 
 
 @dataclass(frozen=True)
@@ -114,6 +123,18 @@ class EmittedChunk:
     @property
     def is_element(self) -> bool:
         return self.counts_as_element
+
+
+@dataclass(frozen=True)
+class ChartRootProfile:
+    sequence_pointers: tuple[int, ...]
+    seq_code_pointers: tuple[int, ...]
+    index_pointer: int = MUSIC_INDEX_POINTER
+    music_data_pointer: int = MUSIC_INFO_POINTER
+    include_sequence_vector: bool = True
+    include_seqcode_vector: bool = True
+    include_music_info: bool = True
+    include_music_index: bool = True
 
 
 DEFAULT_NOTES: tuple[MinimalNote, ...] = (
@@ -530,15 +551,21 @@ def _music_index_object() -> EmittedChunk:
     return _object("lpsMusicIndex", MUSIC_INDEX_TAG, bytes(body))
 
 
-def _lps_chart_object() -> EmittedChunk:
+def _lps_chart_object(
+    sequence_count: int,
+    *,
+    index_pointer: int = MUSIC_INDEX_POINTER,
+    music_data_pointer: int = MUSIC_INFO_POINTER,
+) -> EmittedChunk:
     body = bytearray(184)
     struct.pack_into(">I", body, 4, 1)
-    struct.pack_into(">IIII", body, 72, CHART_SEQUENCE_VECTOR_POINTER, 0x20, 2, 0)
+    sequence_reserve = 0x20 if sequence_count else 0
+    struct.pack_into(">IIII", body, 72, CHART_SEQUENCE_VECTOR_POINTER, sequence_reserve, sequence_count, 0)
     struct.pack_into(">IIII", body, 88, 0, 0, 0, 0)
     struct.pack_into(">f", body, 104, 0.0)
     struct.pack_into(">f", body, 140, 0.0)
-    struct.pack_into(">I", body, 144, MUSIC_INDEX_POINTER)
-    struct.pack_into(">I", body, 148, MUSIC_INFO_POINTER)
+    struct.pack_into(">I", body, 144, index_pointer)
+    struct.pack_into(">I", body, 148, music_data_pointer)
     return _object("lpsChart", LPS_CHART_TAG, bytes(body))
 
 
@@ -553,7 +580,8 @@ def _ix_tempo_map_object() -> EmittedChunk:
 def _ix_sequence_object(seq_code_count: int) -> EmittedChunk:
     body = bytearray(104)
     struct.pack_into(">I", body, 4, 1)
-    struct.pack_into(">IIII", body, 72, SEQ_CODE_VECTOR_POINTER, 0x20, seq_code_count, 0)
+    seq_code_reserve = 0x20 if seq_code_count else 0
+    struct.pack_into(">IIII", body, 72, SEQ_CODE_VECTOR_POINTER, seq_code_reserve, seq_code_count, 0)
     struct.pack_into(">IIII", body, 88, 0, 0, 0, 0)
     return _object("ixSequence", IX_SEQUENCE_TAG, bytes(body))
 
@@ -653,26 +681,80 @@ def _lyric_resource_chunks(payload_length: int) -> list[EmittedChunk]:
     ]
 
 
-def _chart_root_chunks(seq_code_pointers: Sequence[int]) -> list[EmittedChunk]:
-    return [
-        _pointer_vector(
-            "ixVector<ixSequence *> chart sequences",
-            CHART_SEQUENCE_VECTOR_TAG,
-            CHART_SEQUENCE_VECTOR_POINTER,
-            (TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
-        ),
-        _pointer_vector(
-            "ixVector<ixSeqCode *> main sequence codes",
-            SEQ_CODE_VECTOR_TAG,
-            SEQ_CODE_VECTOR_POINTER,
-            seq_code_pointers,
-        ),
-        _music_info_object(),
-        _music_index_object(),
-        _lps_chart_object(),
-        _ix_tempo_map_object(),
-        _ix_sequence_object(len(seq_code_pointers)),
-    ]
+def _chart_root_profile(synthetic_level: str, seq_code_pointers: Sequence[int]) -> ChartRootProfile:
+    full_seq_codes = tuple(seq_code_pointers)
+    one_seq_code = full_seq_codes[:1]
+    if synthetic_level == "chart-root-empty-sequence-vector":
+        return ChartRootProfile(sequence_pointers=(), seq_code_pointers=(), include_seqcode_vector=False)
+    if synthetic_level == "chart-root-empty-seqcode-vector":
+        return ChartRootProfile(sequence_pointers=(MAIN_SEQUENCE_POINTER,), seq_code_pointers=())
+    if synthetic_level == "chart-root-one-seqcode":
+        return ChartRootProfile(sequence_pointers=(MAIN_SEQUENCE_POINTER,), seq_code_pointers=one_seq_code)
+    if synthetic_level == "chart-root-no-music-pointers":
+        return ChartRootProfile(
+            sequence_pointers=(TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
+            seq_code_pointers=full_seq_codes,
+            index_pointer=0,
+            music_data_pointer=0,
+        )
+    if synthetic_level == "chart-root-index-only":
+        return ChartRootProfile(
+            sequence_pointers=(TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
+            seq_code_pointers=full_seq_codes,
+            index_pointer=MUSIC_INDEX_POINTER,
+            music_data_pointer=0,
+        )
+    if synthetic_level == "chart-root-musicdata-only":
+        return ChartRootProfile(
+            sequence_pointers=(TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
+            seq_code_pointers=full_seq_codes,
+            index_pointer=0,
+            music_data_pointer=MUSIC_INFO_POINTER,
+        )
+    return ChartRootProfile(
+        sequence_pointers=(TEMPO_MAP_POINTER, MAIN_SEQUENCE_POINTER),
+        seq_code_pointers=full_seq_codes,
+        index_pointer=MUSIC_INDEX_POINTER,
+        music_data_pointer=MUSIC_INFO_POINTER,
+    )
+
+
+def _chart_root_chunks(profile: ChartRootProfile) -> list[EmittedChunk]:
+    chunks: list[EmittedChunk] = []
+    if profile.include_sequence_vector:
+        chunks.append(
+            _pointer_vector(
+                "ixVector<ixSequence *> chart sequences",
+                CHART_SEQUENCE_VECTOR_TAG,
+                CHART_SEQUENCE_VECTOR_POINTER,
+                profile.sequence_pointers,
+            )
+        )
+    if profile.include_seqcode_vector:
+        chunks.append(
+            _pointer_vector(
+                "ixVector<ixSeqCode *> main sequence codes",
+                SEQ_CODE_VECTOR_TAG,
+                SEQ_CODE_VECTOR_POINTER,
+                profile.seq_code_pointers,
+            )
+        )
+    if profile.include_music_info:
+        chunks.append(_music_info_object())
+    if profile.include_music_index:
+        chunks.append(_music_index_object())
+    chunks.append(
+        _lps_chart_object(
+            len(profile.sequence_pointers),
+            index_pointer=profile.index_pointer,
+            music_data_pointer=profile.music_data_pointer,
+        )
+    )
+    if TEMPO_MAP_POINTER in profile.sequence_pointers:
+        chunks.append(_ix_tempo_map_object())
+    if MAIN_SEQUENCE_POINTER in profile.sequence_pointers:
+        chunks.append(_ix_sequence_object(len(profile.seq_code_pointers)))
+    return chunks
 
 
 def _join_ixb(classes: bytes, chunks: Sequence[EmittedChunk], *, include_num_elements: bool) -> tuple[bytes, int | None]:
@@ -708,9 +790,9 @@ def _level_flags(synthetic_level: str) -> tuple[bool, bool, bool, bool, bool]:
         raise ValueError(f"unknown synthetic level {synthetic_level!r}; choose one of {', '.join(SYNTHETIC_LEVELS)}")
     use_real_marker_tags = synthetic_level != "bare"
     include_num_elements = synthetic_level != "bare"
-    include_chart_ownership = synthetic_level in {"full-current", "chart-root-minimal"}
-    include_lyric_ownership = synthetic_level in {"lyric-ownership", "full-current", "chart-root-minimal"}
-    include_chart_root = synthetic_level == "chart-root-minimal"
+    include_chart_root = synthetic_level in CHART_ROOT_LEVELS
+    include_chart_ownership = synthetic_level == "full-current" or include_chart_root
+    include_lyric_ownership = synthetic_level in {"lyric-ownership", "full-current"} or include_chart_root
     return use_real_marker_tags, include_num_elements, include_chart_ownership, include_lyric_ownership, include_chart_root
 
 
@@ -748,7 +830,7 @@ def build_minimal_ixb_pair(
             _asset_object(CHART_PACKAGE_NAME, ASSET_PACKAGE_POINTER),
         ]
         if include_chart_root:
-            chart_chunks.extend(_chart_root_chunks(seq_code_pointers))
+            chart_chunks.extend(_chart_root_chunks(_chart_root_profile(synthetic_level, seq_code_pointers)))
     else:
         chart_classes = BARE_CHART_CLASSES
         chart_chunks = [_bare_package_object("ixPackage", 0x08)]
@@ -1116,6 +1198,8 @@ def _chart_pointer_targets(pair: MinimalIxbPair) -> dict[int, str]:
 def _format_pointer_ref(value: int | None, targets: dict[int, str]) -> str:
     if value is None:
         return "n/a"
+    if value == 0:
+        return "0x00000000 -> null"
     target = targets.get(value)
     status = f" -> {target}" if target else " -> INVALID"
     return f"0x{value:08X}{status}"
@@ -1179,7 +1263,11 @@ def _format_chart_root_debug(pair: MinimalIxbPair) -> list[str]:
     sequence_vector_offset = _first_emitted_offset(pair, "ixVector<ixSequence *> chart sequences")
     seq_code_vector_offset = _first_emitted_offset(pair, "ixVector<ixSeqCode *> main sequence codes")
     tempo_offsets = _emitted_offsets_by_name(pair, "ixTempoMap")
-    seq_code_count = 2 * len(pair.notes)
+    seq_code_count = 0
+    if seq_code_vector_offset is not None:
+        seq_code_count = _safe_u32(pair.chart_data, seq_code_vector_offset + 1 + 8) or 0
+    intentional_empty_sequence = pair.synthetic_level == "chart-root-empty-sequence-vector"
+    intentional_empty_seqcode = pair.synthetic_level == "chart-root-empty-seqcode-vector"
 
     lines = [
         "  chart root debug:",
@@ -1196,10 +1284,13 @@ def _format_chart_root_debug(pair: MinimalIxbPair) -> list[str]:
                 "lpsMusicIndex",
             ),
         ),
-        f"    seq codes inserted: {seq_code_count} ({len(pair.notes)} MelodyMarkers + {len(pair.notes)} LyricMarkers)",
+        f"    seq codes inserted into ixSequence vector: {seq_code_count}",
     ]
     lines.extend(_format_backing_vector("ixVector<ixSequence *> backing", pair.chart_data, sequence_vector_offset, targets, invalid_refs))
-    lines.extend(_format_backing_vector("ixVector<ixSeqCode *> backing", pair.chart_data, seq_code_vector_offset, targets, invalid_refs))
+    if seq_code_vector_offset is None and intentional_empty_sequence:
+        lines.append("    ixVector<ixSeqCode *> backing: intentionally omitted; no sequence owner in this variant")
+    else:
+        lines.extend(_format_backing_vector("ixVector<ixSeqCode *> backing", pair.chart_data, seq_code_vector_offset, targets, invalid_refs))
     lines.append(
         _format_embedded_vector(
             "ixChart.m_vpSequence",
@@ -1208,6 +1299,7 @@ def _format_chart_root_debug(pair: MinimalIxbPair) -> list[str]:
             72,
             targets,
             invalid_refs,
+            empty_allowed=intentional_empty_sequence,
         )
     )
     lines.append(
@@ -1221,32 +1313,37 @@ def _format_chart_root_debug(pair: MinimalIxbPair) -> list[str]:
             empty_allowed=True,
         )
     )
-    lines.append(
-        _format_embedded_vector(
-            "ixSequence.m_vpSeqCode",
-            pair.chart_data,
-            sequence_offset,
-            72,
-            targets,
-            invalid_refs,
+    if sequence_offset is None and intentional_empty_sequence:
+        lines.append("    ixSequence.m_vpSeqCode: intentionally omitted; ixChart.m_vpSequence has no entries")
+        lines.append("    ixSequence.m_vpListeners: intentionally omitted; ixChart.m_vpSequence has no entries")
+    else:
+        lines.append(
+            _format_embedded_vector(
+                "ixSequence.m_vpSeqCode",
+                pair.chart_data,
+                sequence_offset,
+                72,
+                targets,
+                invalid_refs,
+                empty_allowed=intentional_empty_seqcode,
+            )
         )
-    )
-    lines.append(
-        _format_embedded_vector(
-            "ixSequence.m_vpListeners",
-            pair.chart_data,
-            sequence_offset,
-            88,
-            targets,
-            invalid_refs,
-            empty_allowed=True,
+        lines.append(
+            _format_embedded_vector(
+                "ixSequence.m_vpListeners",
+                pair.chart_data,
+                sequence_offset,
+                88,
+                targets,
+                invalid_refs,
+                empty_allowed=True,
+            )
         )
-    )
     if chart_offset is not None:
         index_ptr = _safe_u32(pair.chart_data, chart_offset + 1 + 144)
         music_ptr = _safe_u32(pair.chart_data, chart_offset + 1 + 148)
         for label, value in (("lpsChart.m_pIndex", index_ptr), ("lpsChart.m_pMusicData", music_ptr)):
-            if value not in targets:
+            if value and value not in targets:
                 invalid_refs.append(f"{label}={_hex_or_none(value)}")
         lines.append(f"    lpsChart.m_pIndex offset=144: {_format_pointer_ref(index_ptr, targets)}")
         lines.append(f"    lpsChart.m_pMusicData offset=148: {_format_pointer_ref(music_ptr, targets)}")
