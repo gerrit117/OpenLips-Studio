@@ -19,7 +19,7 @@ def test_minimal_ixb_pair_is_structurally_walkable():
     assert {"ixAssetPackage", "ixAsset", "ixFileImage", "ixRawFileImage"} <= chart_class_names
     assert {"ixAssetPackage", "ixAsset", "ixFileImage", "ixRawFileImage"} <= lyric_class_names
     assert pair.chart_num_elements == 18
-    assert pair.lyric_num_elements == 14
+    assert pair.lyric_num_elements == 13
     assert [tag for name, tag in pair.chart_emitted_tags if name == "lpsMelodyMarker"] == [0x28] * len(pair.notes)
     assert [tag for name, tag in pair.chart_emitted_tags if name == "lpsLyricMarker"] == [0x40] * len(pair.notes)
     assert [tag for name, tag in pair.lyric_emitted_tags if name == "ixRawFileImage"] == [0x54]
@@ -75,7 +75,7 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
         },
         "lyric-ownership": {
             "chart_num": 10,
-            "lyric_num": 14,
+            "lyric_num": 13,
             "melody_tag": 0x28,
             "lyric_tag": 0x40,
             "chart_has_assets": False,
@@ -83,7 +83,7 @@ def test_synthetic_levels_isolate_marker_tags_and_ownership():
         },
         "full-current": {
             "chart_num": 18,
-            "lyric_num": 14,
+            "lyric_num": 13,
             "melody_tag": 0x28,
             "lyric_tag": 0x40,
             "chart_has_assets": True,

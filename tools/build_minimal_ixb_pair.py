@@ -331,12 +331,12 @@ def _vector_body(pointer: int, reserve: int, size: int, allocator: int = 0) -> b
 
 def _char_vector(name: str, pointer: int, text: str) -> EmittedChunk:
     raw = text.encode("utf-8")
-    body = _vector_body(pointer, len(raw), len(raw))
+    body = struct.pack(">II", pointer, len(raw))
     return _object(name, CHAR_VECTOR_TAG, bytes(body) + raw)
 
 
 def _asset_pointer_vector(pointer: int, asset_pointer: int) -> EmittedChunk:
-    body = _vector_body(pointer, 1, 1)
+    body = _vector_body(pointer, 0x20, 1)
     return _object("ixVector<ixAsset *>", ASSET_VECTOR_TAG, bytes(body) + struct.pack(">I", asset_pointer))
 
 
@@ -390,7 +390,8 @@ def _asset_package_object(package_name: str, name_pointer: int, packed_size: int
     struct.pack_into(">I", body, 40, 1)
     struct.pack_into(">I", body, 44, packed_size)
     struct.pack_into(">IIII", body, 52, PACKAGE_VECTOR_POINTER, 0, 0, 0)
-    struct.pack_into(">IIII", body, 72, ASSET_VECTOR_POINTER, asset_count, asset_count, 0)
+    asset_reserve = 0x20 if asset_count else 0
+    struct.pack_into(">IIII", body, 72, ASSET_VECTOR_POINTER, asset_reserve, asset_count, 0)
     return _object("ixAssetPackage", ASSET_PACKAGE_TAG, bytes(body))
 
 
@@ -413,7 +414,7 @@ def _file_image_object(asset_name: str, asset_package_pointer: int, payload_leng
     struct.pack_into(">I", body, 24, asset_package_pointer)
     struct.pack_into(">I", body, 28, 0xFFFFFFFF)
     struct.pack_into(">IIII", body, 36, TEXT_RESOURCE_HASH, 0, 0, 0)
-    struct.pack_into(">IIII", body, 52, TEXT_PAYLOAD_POINTER, payload_length, payload_length, 0)
+    struct.pack_into(">IIII", body, 52, TEXT_RESOURCE_HASH, payload_length, payload_length, 0)
     return _object("ixFileImage", FILE_IMAGE_TAG, bytes(body))
 
 
@@ -426,7 +427,7 @@ def _raw_file_image_object(asset_name: str, asset_package_pointer: int, payload_
     struct.pack_into(">I", body, 24, asset_package_pointer)
     struct.pack_into(">I", body, 28, 0xFFFFFFFF)
     struct.pack_into(">IIII", body, 36, TEXT_RESOURCE_HASH, 0, 0, 0)
-    struct.pack_into(">IIII", body, 52, TEXT_PAYLOAD_POINTER, payload_length, payload_length, 0)
+    struct.pack_into(">IIII", body, 52, TEXT_RESOURCE_HASH, payload_length, payload_length, 0)
     struct.pack_into(">IIII", body, 68, TYPE_NAME_POINTER, type_name_len, type_name_len, 0)
     return _object("ixRawFileImage", RAW_FILE_IMAGE_TAG, bytes(body))
 
@@ -474,7 +475,14 @@ def _lyric_marker(note: MinimalNote, word_data_pointer: int, melody_pointer: int
 
 
 def _text_resource(payload: bytes) -> EmittedChunk:
-    data = b"\x00\x00\x00\x05Text\x00\x00\x00\x00" + struct.pack(">II", TEXT_RESOURCE_HASH, len(payload)) + payload
+    type_name = TEXT_TYPE_NAME.encode("utf-8")
+    data = (
+        struct.pack(">II", TYPE_NAME_POINTER, len(type_name))
+        + type_name
+        + b"\x00\x00\x00\x00"
+        + struct.pack(">II", TEXT_RESOURCE_HASH, len(payload))
+        + payload
+    )
     return _payload("Text resource", data)
 
 
@@ -513,7 +521,6 @@ def _package_ownership_chunks(package_name: str, packed_size: int, *, include_as
 def _lyric_resource_chunks(payload_length: int) -> list[EmittedChunk]:
     return [
         _char_vector("ixVector<char> asset name", ASSET_NAME_POINTER, LYRIC_ASSET_NAME + "\0"),
-        _char_vector("ixVector<char> raw type name", TYPE_NAME_POINTER, TEXT_TYPE_NAME),
         _asset_object(LYRIC_ASSET_NAME, ASSET_PACKAGE_POINTER),
         _file_image_object(LYRIC_ASSET_NAME, ASSET_PACKAGE_POINTER, payload_length),
         _raw_file_image_object(LYRIC_ASSET_NAME, ASSET_PACKAGE_POINTER, payload_length),
@@ -929,8 +936,9 @@ def _format_summary(chart_path: Path, lyric_path: Path, pair: MinimalIxbPair) ->
         "  resource chain note: ixRawFileImage should point to the Text payload only in lyric-ownership/full-current variants."
     )
     lines.append(
-        f"  synthetic Text constants: type_name='{TEXT_TYPE_NAME[:-1]}' m_vData_ptr=0x{TEXT_PAYLOAD_POINTER:08X} "
-        f"payload_hash=0x{TEXT_RESOURCE_HASH:08X}"
+        f"  synthetic Text constants: type_name='{TEXT_TYPE_NAME[:-1]}' "
+        f"raw_file_image_data_ref=0x{TEXT_RESOURCE_HASH:08X} payload_hash=0x{TEXT_RESOURCE_HASH:08X} "
+        f"legacy_fake_payload_ptr=0x{TEXT_PAYLOAD_POINTER:08X}"
     )
     lines.append(
         "  notes:",

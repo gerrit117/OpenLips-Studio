@@ -102,6 +102,23 @@ class FileOwnershipAnalysis:
     records_by_kind: dict[str, tuple[OwnershipRecord, ...]]
 
 
+@dataclass(frozen=True)
+class CorpusFileSummary:
+    path: Path
+    plain_ixb: bool
+    text_resource_count: int
+    raw_file_image_present: bool
+    raw_data_ptr_matches_text_hash: bool
+    raw_data_size_matches_payload: bool
+    raw_type_is_text: bool
+    asset_package_present: bool
+    asset_vector_reserve: int | None
+    asset_vector_size: int | None
+    compact_text_type_header_count: int
+    compact_char_vector_count: int
+    runtime_char_vector_count: int
+
+
 RECORD_DEFS: tuple[RecordDef, ...] = (
     RecordDef(
         "ixTreeNode<ixPackage>",
@@ -485,6 +502,177 @@ def analyze_ownership_fields(path: Path) -> FileOwnershipAnalysis:
     )
 
 
+def _is_printable_bytes(chunk: bytes) -> bool:
+    if not chunk:
+        return False
+    printable = sum(1 for byte in chunk if byte == 0 or byte in (0x09, 0x0A, 0x0D) or 0x20 <= byte <= 0x7E)
+    return printable / len(chunk) >= 0.75
+
+
+def scan_char_vector_layouts(data: bytes) -> tuple[int, int]:
+    """Return (compact_file_layout_count, runtime_style_count)."""
+    document = parse_ixb_document(data)
+    start = document.objects_start or 0
+    end = document.objects_end or len(data)
+    compact_count = 0
+    runtime_count = 0
+    for offset in _iter_tag_offsets(data[start:end], 0x06):
+        absolute = start + offset
+        body = absolute + 1
+        compact_length = _safe_u32(data, body + 4)
+        if compact_length is not None and 0 < compact_length <= 256 and body + 8 + compact_length <= len(data):
+            compact_payload = data[body + 8 : body + 8 + compact_length]
+            if _is_printable_bytes(compact_payload):
+                compact_count += 1
+        reserve = _safe_u32(data, body + 4)
+        size = _safe_u32(data, body + 8)
+        allocator = _safe_u32(data, body + 12)
+        if (
+            reserve is not None
+            and size is not None
+            and allocator is not None
+            and 0 < reserve <= 256
+            and reserve == size
+            and allocator == 0
+            and body + 16 + size <= len(data)
+            and _is_printable_bytes(data[body + 16 : body + 16 + size])
+        ):
+            runtime_count += 1
+    return compact_count, runtime_count
+
+
+def count_compact_text_type_headers(data: bytes, resources: Sequence[TextResource]) -> int:
+    count = 0
+    for resource in resources:
+        pointer_offset = resource.type_length_offset - 4
+        if pointer_offset < 0:
+            continue
+        pointer = _safe_u32(data, pointer_offset)
+        if (
+            pointer
+            and resource.type_length == 5
+            and data[resource.type_name_offset : resource.type_name_offset + resource.type_length] == b"Text\x00"
+        ):
+            count += 1
+    return count
+
+
+def summarize_corpus_file(path: Path) -> CorpusFileSummary:
+    analysis = analyze_ownership_fields(path)
+    raw = _canonical_raw_file_image(analysis)
+    asset_package = _canonical_asset_package(analysis)
+    text_hashes = {resource.payload_hash for resource in analysis.text_resources}
+    resources_by_hash = {resource.payload_hash: resource for resource in analysis.text_resources}
+    raw_data_ptr = raw.get("data_ptr") if raw else None
+    matched_resource = resources_by_hash.get(raw_data_ptr) if raw_data_ptr is not None else None
+    compact_count, runtime_count = scan_char_vector_layouts(analysis.data)
+    return CorpusFileSummary(
+        path=path,
+        plain_ixb=analysis.data.startswith(b"<ixb"),
+        text_resource_count=len(analysis.text_resources),
+        raw_file_image_present=raw is not None,
+        raw_data_ptr_matches_text_hash=bool(raw and raw_data_ptr in text_hashes),
+        raw_data_size_matches_payload=bool(
+            raw
+            and matched_resource
+            and raw.get("data_reserve") == matched_resource.payload_length
+            and raw.get("data_size") == matched_resource.payload_length
+        ),
+        raw_type_is_text=bool(raw and raw.get("type_reserve") == 5 and raw.get("type_size") == 5),
+        asset_package_present=asset_package is not None,
+        asset_vector_reserve=asset_package.get("asset_vector_reserve") if asset_package else None,
+        asset_vector_size=asset_package.get("asset_vector_size") if asset_package else None,
+        compact_text_type_header_count=count_compact_text_type_headers(analysis.data, analysis.text_resources),
+        compact_char_vector_count=compact_count,
+        runtime_char_vector_count=runtime_count,
+    )
+
+
+def find_lyric_samples(roots: Sequence[Path]) -> list[Path]:
+    paths: list[Path] = []
+    for root in roots:
+        if root.is_file() and root.name.endswith("_Lyric.X360"):
+            paths.append(root)
+        elif root.exists():
+            paths.extend(path for path in root.rglob("*_Lyric.X360") if path.is_file())
+    return sorted(set(paths), key=lambda path: str(path).lower())
+
+
+def _confidence(count: int, total: int) -> str:
+    if total <= 0:
+        return "low"
+    ratio = count / total
+    if ratio >= 0.90:
+        return "high"
+    if ratio >= 0.50:
+        return "medium"
+    return "low"
+
+
+def _frequency_line(label: str, count: int, total: int) -> str:
+    return f"- {label}: {count}/{total} confidence={_confidence(count, total)}"
+
+
+def _distribution(values: Iterable[int | None]) -> str:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = "None" if value is None else str(value)
+        counts[key] = counts.get(key, 0) + 1
+    return ", ".join(f"{key}:{count}" for key, count in sorted(counts.items(), key=lambda item: (item[0] == "None", item[0])))
+
+
+def format_ownership_corpus_report(roots: Sequence[Path]) -> str:
+    paths = find_lyric_samples(roots)
+    summaries = [summarize_corpus_file(path) for path in paths]
+    total = len(summaries)
+    plain = sum(1 for summary in summaries if summary.plain_ixb)
+    raw_present = sum(1 for summary in summaries if summary.raw_file_image_present)
+    asset_present = sum(1 for summary in summaries if summary.asset_package_present)
+    compact_text_type_present = sum(1 for summary in summaries if summary.compact_text_type_header_count == summary.text_resource_count and summary.text_resource_count > 0)
+    compact_tag_scanned_present = sum(1 for summary in summaries if summary.compact_char_vector_count > 0)
+    runtime_present = sum(1 for summary in summaries if summary.runtime_char_vector_count > 0)
+    raw_ptr_hash = sum(1 for summary in summaries if summary.raw_data_ptr_matches_text_hash)
+    raw_size = sum(1 for summary in summaries if summary.raw_data_size_matches_payload)
+    raw_type = sum(1 for summary in summaries if summary.raw_type_is_text)
+
+    lines = [
+        "# IXB Ownership Corpus Report",
+        "",
+        "Sample roots:",
+        *(f"- {root}" for root in roots),
+        "",
+        f"Lyric samples analyzed: {total}",
+        f"Plain IXB samples: {plain}/{total} confidence={_confidence(plain, total)}",
+        "",
+        "Files analyzed:",
+        *(f"- {summary.path}" for summary in summaries),
+        "",
+        "Occurrence frequencies:",
+        _frequency_line("canonical ixRawFileImage present", raw_present, total),
+        _frequency_line("ixRawFileImage.data_ptr equals a Text payload hash", raw_ptr_hash, raw_present),
+        _frequency_line("ixRawFileImage data_reserve/data_size equal matched Text payload length", raw_size, raw_present),
+        _frequency_line("ixRawFileImage type reserve/size are 5/5", raw_type, raw_present),
+        _frequency_line("ixAssetPackage with asset vector present", asset_present, total),
+        _frequency_line("all Text resources use compact type header pointer/length/inline Text", compact_text_type_present, total),
+        _frequency_line("tag-scanned standalone compact ixVector<char> strings found", compact_tag_scanned_present, total),
+        _frequency_line("tag-scanned runtime-style ixVector<char> strings found", runtime_present, total),
+        "",
+        "Distributions:",
+        f"- Text resource count: {_distribution(summary.text_resource_count for summary in summaries)}",
+        f"- ixAssetPackage asset_vector_reserve: {_distribution(summary.asset_vector_reserve for summary in summaries)}",
+        f"- ixAssetPackage asset_vector_size: {_distribution(summary.asset_vector_size for summary in summaries)}",
+        f"- compact Text type header count per file: {_distribution(summary.compact_text_type_header_count for summary in summaries)}",
+        f"- tag-scanned compact ixVector<char> count per file: {_distribution(summary.compact_char_vector_count for summary in summaries)}",
+        f"- tag-scanned runtime-style ixVector<char> count per file: {_distribution(summary.runtime_char_vector_count for summary in summaries)}",
+        "",
+        "Confidence notes:",
+        "- high: present in at least 90% of applicable samples",
+        "- medium: present in at least 50% of applicable samples",
+        "- low: present in less than 50% of applicable samples or only one/few files",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _hex(value: int | None) -> str:
     return "None" if value is None else f"0x{value:08X}"
 
@@ -575,6 +763,10 @@ def _high_signal_findings(real: FileOwnershipAnalysis, synthetic: FileOwnershipA
             "  ixRawFileImage.data_ptr: "
             f"real={_hex(real_data_ptr)} synthetic={_hex(synthetic_data_ptr)}"
         )
+        lines.append(
+            "  ixRawFileImage.data_ptr matches own Text payload hash: "
+            f"real={real_data_ptr in real_hashes} synthetic={synthetic_data_ptr in synthetic_hashes}"
+        )
         if real_data_ptr in real_hashes and synthetic_data_ptr not in synthetic_hashes:
             lines.append(
                 "  SUSPECT: real RawFileImage data_ptr equals the Text payload hash, "
@@ -593,6 +785,19 @@ def _high_signal_findings(real: FileOwnershipAnalysis, synthetic: FileOwnershipA
     else:
         lines.append("  ixRawFileImage canonical candidate missing on one side")
 
+    if real.text_resources and synthetic.text_resources:
+        real_resource = real.text_resources[0]
+        synthetic_resource = synthetic.text_resources[0]
+        real_type_ptr = _safe_u32(real.data, real_resource.type_length_offset - 4)
+        synthetic_type_ptr = _safe_u32(synthetic.data, synthetic_resource.type_length_offset - 4)
+        lines.append(
+            "  Text type header layout: "
+            f"real ptr={_hex(real_type_ptr)} len={real_resource.type_length} "
+            f"payload_hash={_hex(real_resource.payload_hash)} | "
+            f"synthetic ptr={_hex(synthetic_type_ptr)} len={synthetic_resource.type_length} "
+            f"payload_hash={_hex(synthetic_resource.payload_hash)}"
+        )
+
     real_asset_pkg = _canonical_asset_package(real)
     synthetic_asset_pkg = _canonical_asset_package(synthetic)
     if real_asset_pkg and synthetic_asset_pkg:
@@ -607,20 +812,6 @@ def _high_signal_findings(real: FileOwnershipAnalysis, synthetic: FileOwnershipA
             lines.append("  SUSPECT: synthetic asset vector has non-zero size with NULL pointer.")
     else:
         lines.append("  ixAssetPackage canonical candidate missing on one side")
-
-    real_char = real.records_by_kind.get("ixVector<char>", ())
-    synthetic_char = synthetic.records_by_kind.get("ixVector<char>", ())
-    if real_char and synthetic_char:
-        lines.append(
-            "  ixVector<char> preview pattern: "
-            f"real first preview@+8={real_char[0].preview_at_8!r}; "
-            f"synthetic first preview@+8={synthetic_char[0].preview_at_8!r}"
-        )
-        if "\\0" in synthetic_char[0].preview_at_8 and "\\0" not in real_char[0].preview_at_8[:16]:
-            lines.append(
-                "  SUSPECT: synthetic char vector carries runtime-style size/allocator words "
-                "before inline text, while the real file-layout candidate starts with text bytes sooner."
-            )
     return lines
 
 
@@ -723,7 +914,13 @@ def _synthetic_inputs_from_args(args: argparse.Namespace) -> list[tuple[str, Pat
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--real-lyric", type=Path, required=True, help="Known-working *_Lyric.X360 file.")
+    parser.add_argument("--real-lyric", type=Path, help="Known-working *_Lyric.X360 file.")
+    parser.add_argument(
+        "--corpus-root",
+        type=Path,
+        action="append",
+        help="Root containing local *_Lyric.X360 samples for corpus frequency reporting.",
+    )
     parser.add_argument(
         "--synthetic-lyric",
         type=Path,
@@ -740,8 +937,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     synthetic_inputs = _synthetic_inputs_from_args(args)
+    if args.corpus_root:
+        print(format_ownership_corpus_report(args.corpus_root), end="")
+        if synthetic_inputs:
+            print("\n" + "=" * 80 + "\n")
+    if synthetic_inputs and not args.real_lyric:
+        parser.error("--real-lyric is required when comparing synthetic lyrics")
     if not synthetic_inputs:
-        parser.error("provide --synthetic-lyric or --synthetic-root")
+        if args.corpus_root:
+            return 0
+        parser.error("provide --synthetic-lyric, --synthetic-root, or --corpus-root")
 
     real = analyze_ownership_fields(args.real_lyric)
     for index, (label, path) in enumerate(synthetic_inputs):
