@@ -315,3 +315,10 @@ sequence's `ixVector<ixSeqCode *>`.
 
 See `docs/chart_root_minimal_report.md` for the corpus counts, the compact vs
 extended `lpsChart` layout split, and the exact synthetic field choices.
+
+After Xbox testing, `chart-root-minimal` still hard-crashed, but at
+`0x82AB33A0` instead of `0x82AB3284`. See
+`docs/chart_root_minimal_crash_analysis.md` for the comparison. The short
+version: both addresses are in the same optimized copy/move helper, but the new
+variant reaches a different unaligned copy path, which suggests the added chart
+root changed traversal while still producing a null/invalid copy destination.
