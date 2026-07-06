@@ -21,8 +21,11 @@ try:
         COMPRESSED_MAGICS,
         _u32be,
         describe_magic,
+        find_fileio_header_candidates,
         iter_melody_markers_object_walker,
         parse_ixb_document,
+        probe_object_record_headers,
+        validate_ixb_write_order,
     )
     from tools.patch_lyrics_mapping import iter_lyric_markers_structural
 except ModuleNotFoundError:
@@ -30,8 +33,11 @@ except ModuleNotFoundError:
         COMPRESSED_MAGICS,
         _u32be,
         describe_magic,
+        find_fileio_header_candidates,
         iter_melody_markers_object_walker,
         parse_ixb_document,
+        probe_object_record_headers,
+        validate_ixb_write_order,
     )
     from patch_lyrics_mapping import iter_lyric_markers_structural
 
@@ -446,9 +452,22 @@ def analyze_lyric_file(lyric_path: Path, chart_path: Path | None = None) -> list
         return lines
 
     document = parse_ixb_document(data)
+    write_order_warnings = validate_ixb_write_order(document)
     lines.extend(
         [
+            (
+                "  IXB header: "
+                f"IsBigEndian={document.is_big_endian} IsText={document.is_text} "
+                f"Platform={document.platform} NumOfElements={document.num_elements}"
+            ),
             f"  objects_range: {document.objects_start}..{document.objects_end}",
+            f"  UriList entries: {len(document.uri_entries)}",
+            (
+                "  write_order_warnings: "
+                + ("; ".join(write_order_warnings) if write_order_warnings else "none")
+            ),
+            f"  object_record_candidates: {len(probe_object_record_headers(data, document))}",
+            f"  FileIO_header_candidates: {len(find_fileio_header_candidates(data))}",
             f"  IXB classes present: {len(document.classes)}",
         ]
     )

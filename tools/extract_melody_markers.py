@@ -69,10 +69,45 @@ class IxbClass:
 
 
 @dataclass(frozen=True)
+class IxbUriEntry:
+    key: int
+    uri: str
+    offset: int
+
+
+@dataclass(frozen=True)
 class IxbDocument:
     classes: dict[int, IxbClass]
+    is_big_endian: bool | None
+    is_text: bool | None
+    platform: str | None
+    num_elements: int | None
+    classes_start: int | None
+    classes_end: int | None
+    urilist_start: int | None
+    urilist_end: int | None
     objects_start: int | None
     objects_end: int | None
+    uri_entries: tuple[IxbUriEntry, ...]
+
+
+@dataclass(frozen=True)
+class IxbObjectRecordCandidate:
+    offset: int
+    zero: int
+    value: int
+    payload_size: int
+    payload_start: int
+    payload_end: int
+
+
+@dataclass(frozen=True)
+class FileIoHeaderCandidate:
+    offset: int
+    tag: bytes
+    name: bytes
+    version: int
+    secondary: int
 
 
 @dataclass
@@ -94,6 +129,10 @@ class DebugInfo:
 
 def _u32be(data: bytes, offset: int) -> int:
     return struct.unpack_from(">I", data, offset)[0]
+
+
+def _u16be(data: bytes, offset: int) -> int:
+    return struct.unpack_from(">H", data, offset)[0]
 
 
 def _i32be(data: bytes, offset: int) -> int:
@@ -147,18 +186,210 @@ def parse_ixb_classes(data: bytes) -> dict[int, IxbClass]:
     return classes
 
 
-def parse_ixb_document(data: bytes) -> IxbDocument:
-    objects_tag = b"<Objects>"
-    objects_end_tag = b"</Objects>"
-    objects_start = data.find(objects_tag)
-    objects_end = data.find(objects_end_tag)
-    if objects_start >= 0:
-        objects_start += len(objects_tag)
+def _parse_bool_attr(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    return None
+
+
+def _parse_int_attr(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value, 10)
+    except ValueError:
+        return None
+
+
+def _opening_ixb_attrs(data: bytes) -> dict[str, str]:
+    end = data.find(b">")
+    if end < 0 or not data.startswith(PLAIN_IXB_MAGIC):
+        return {}
+    fragment = data[: end + 1].decode("utf-8", errors="strict")
+    try:
+        node = ET.fromstring(fragment + "</ixb>")
+    except ET.ParseError:
+        return {}
+    return dict(node.attrib)
+
+
+def _range_after_tag(data: bytes, start_tag: bytes, end_tag: bytes) -> tuple[int | None, int | None]:
+    start = data.find(start_tag)
+    end = data.find(end_tag)
+    if start < 0:
+        range_start = None
     else:
-        objects_start = None
-    if objects_end < 0:
-        objects_end = None
-    return IxbDocument(classes=parse_ixb_classes(data), objects_start=objects_start, objects_end=objects_end)
+        range_start = start + len(start_tag)
+    if end < 0:
+        range_end = None
+    else:
+        range_end = end
+    return range_start, range_end
+
+
+def parse_ixb_uri_list(data: bytes) -> tuple[IxbUriEntry, ...]:
+    start = data.find(b"<UriList>")
+    end = data.find(b"</UriList>")
+    if start < 0 or end < 0:
+        return ()
+    fragment = data[start : end + len(b"</UriList>")].decode("utf-8", errors="strict")
+    root = ET.fromstring(fragment)
+    entries: list[IxbUriEntry] = []
+    search_from = start
+    for node in root.findall("Uri"):
+        key = _parse_int_attr(node.attrib.get("Key"))
+        uri = node.attrib.get("Uri")
+        if key is None or uri is None:
+            continue
+        needle = f'<Uri Key="{key}"'.encode("utf-8")
+        offset = data.find(needle, search_from, end)
+        if offset < 0:
+            offset = start
+        else:
+            search_from = offset + 1
+        entries.append(IxbUriEntry(key=key, uri=uri, offset=offset))
+    return tuple(entries)
+
+
+def parse_ixb_document(data: bytes) -> IxbDocument:
+    attrs = _opening_ixb_attrs(data)
+    classes_start, classes_end = _range_after_tag(data, b"<Classes>", b"</Classes>")
+    urilist_start, urilist_end = _range_after_tag(data, b"<UriList>", b"</UriList>")
+    objects_start, objects_end = _range_after_tag(data, b"<Objects>", b"</Objects>")
+    return IxbDocument(
+        classes=parse_ixb_classes(data),
+        is_big_endian=_parse_bool_attr(attrs.get("IsBigEndian")),
+        is_text=_parse_bool_attr(attrs.get("IsText")),
+        platform=attrs.get("Platform"),
+        num_elements=_parse_int_attr(attrs.get("NumOfElements")),
+        classes_start=classes_start,
+        classes_end=classes_end,
+        urilist_start=urilist_start,
+        urilist_end=urilist_end,
+        objects_start=objects_start,
+        objects_end=objects_end,
+        uri_entries=parse_ixb_uri_list(data),
+    )
+
+
+def validate_ixb_write_order(document: IxbDocument) -> list[str]:
+    """Return writer-order diagnostics inspired by Ghidra observations, not a spec.
+
+    XEXLoaderWV analysis shows the game's generic writer emitting header
+    attributes, Classes, UriList, then Objects. Existing samples/tools may omit
+    UriList, so diagnostics stay non-fatal.
+    """
+    warnings: list[str] = []
+    if document.classes_start is None or document.classes_end is None:
+        warnings.append("missing Classes section")
+    elif document.classes_start > document.classes_end:
+        warnings.append("Classes section has invalid bounds")
+
+    if document.objects_start is None or document.objects_end is None:
+        warnings.append("missing Objects section")
+    elif document.objects_start > document.objects_end:
+        warnings.append("Objects section has invalid bounds")
+
+    if (
+        document.classes_end is not None
+        and document.objects_start is not None
+        and document.classes_end > document.objects_start
+    ):
+        warnings.append("Classes section appears after Objects start")
+
+    has_urilist = document.urilist_start is not None or document.urilist_end is not None
+    if has_urilist:
+        if document.urilist_start is None or document.urilist_end is None:
+            warnings.append("incomplete UriList section")
+        elif document.urilist_start > document.urilist_end:
+            warnings.append("UriList section has invalid bounds")
+        else:
+            if document.classes_end is not None and document.classes_end > document.urilist_start:
+                warnings.append("UriList appears before Classes close")
+            if document.objects_start is not None and document.urilist_end > document.objects_start:
+                warnings.append("UriList appears after Objects start")
+    return warnings
+
+
+def probe_object_record_headers(
+    data: bytes,
+    document: IxbDocument,
+    *,
+    max_payload_size: int = 0x400000,
+) -> tuple[IxbObjectRecordCandidate, ...]:
+    """Find possible object/payload records without changing parser behavior.
+
+    XEXLoaderWV Ghidra notes show a writer helper emitting three 4-byte fields
+    followed by payload bytes. The meaning of the middle field is still a
+    hypothesis, so this remains diagnostic only.
+    """
+    if document.objects_start is None or document.objects_end is None:
+        return ()
+    candidates: list[IxbObjectRecordCandidate] = []
+    start = document.objects_start
+    end = document.objects_end
+    for offset in range(start, max(start, end - 11)):
+        zero = _u32be(data, offset)
+        if zero != 0:
+            continue
+        value = _u32be(data, offset + 4)
+        payload_size = _u32be(data, offset + 8)
+        payload_start = offset + 12
+        payload_end = payload_start + payload_size
+        if payload_size <= 0 or payload_size > max_payload_size:
+            continue
+        if payload_end > end:
+            continue
+        candidates.append(
+            IxbObjectRecordCandidate(
+                offset=offset,
+                zero=zero,
+                value=value,
+                payload_size=payload_size,
+                payload_start=payload_start,
+                payload_end=payload_end,
+            )
+        )
+    return tuple(candidates)
+
+
+def _is_header_ascii(value: bytes) -> bool:
+    return all(0x20 <= byte <= 0x7E for byte in value)
+
+
+def find_fileio_header_candidates(data: bytes) -> tuple[FileIoHeaderCandidate, ...]:
+    """Find possible FileIO header objects from Ghidra-observed field offsets.
+
+    The game validates a 4-byte tag at +0x10, 4-byte name at +0x14, a 16-bit
+    version at +0x18, and another 16-bit field at +0x1a. This does not prove
+    the structure is the outer .X360 header, so callers should present results
+    as candidates only.
+    """
+    candidates: list[FileIoHeaderCandidate] = []
+    for offset in range(0, max(0, len(data) - 0x1b)):
+        tag = data[offset + 0x10 : offset + 0x14]
+        name = data[offset + 0x14 : offset + 0x18]
+        if not (_is_header_ascii(tag) and _is_header_ascii(name)):
+            continue
+        version = _u16be(data, offset + 0x18)
+        secondary = _u16be(data, offset + 0x1A)
+        if version > 0x1000 or secondary > 0x1000:
+            continue
+        candidates.append(
+            FileIoHeaderCandidate(
+                offset=offset,
+                tag=tag,
+                name=name,
+                version=version,
+                secondary=secondary,
+            )
+        )
+    return tuple(candidates)
 
 
 def _inherited_members(classes: dict[int, IxbClass], cls: IxbClass) -> dict[str, int]:

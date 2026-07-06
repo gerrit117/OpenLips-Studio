@@ -8,7 +8,6 @@ counts, text coverage, and likely object graph gaps. It is not a raw byte diff.
 from __future__ import annotations
 
 import argparse
-import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,8 +20,11 @@ try:
         MelodyMarker,
         _schema_file_class_codes,
         describe_magic,
+        find_fileio_header_candidates,
         iter_melody_markers,
         parse_ixb_document,
+        probe_object_record_headers,
+        validate_ixb_write_order,
     )
     from tools.patch_lyrics_mapping import LyricMarker, iter_lyric_markers_structural
 except ModuleNotFoundError:
@@ -32,8 +34,11 @@ except ModuleNotFoundError:
         MelodyMarker,
         _schema_file_class_codes,
         describe_magic,
+        find_fileio_header_candidates,
         iter_melody_markers,
         parse_ixb_document,
+        probe_object_record_headers,
+        validate_ixb_write_order,
     )
     from patch_lyrics_mapping import LyricMarker, iter_lyric_markers_structural
 
@@ -94,6 +99,13 @@ class IxbStructureSummary:
     size: int
     magic_kind: str
     num_elements: int | None
+    is_big_endian: bool | None
+    is_text: bool | None
+    platform: str | None
+    uri_count: int
+    write_order_warnings: tuple[str, ...]
+    object_record_candidate_count: int
+    fileio_header_candidate_count: int
     objects_start: int | None
     objects_end: int | None
     classes_by_name: dict[str, IxbClass]
@@ -104,11 +116,6 @@ class IxbStructureSummary:
     duplicate_melody_times: int
     duplicate_lyric_times: int
     text_selection: TextSelectionSummary | None
-
-
-def _num_elements(data: bytes) -> int | None:
-    match = re.search(rb'<ixb\b[^>]*\bNumOfElements="(\d+)"', data[:4096])
-    return int(match.group(1)) if match else None
 
 
 def _classes_by_name(classes: Iterable[IxbClass]) -> dict[str, IxbClass]:
@@ -164,7 +171,14 @@ def summarize_ixb_file(
         role=role,
         size=len(data),
         magic_kind=magic_kind,
-        num_elements=_num_elements(data),
+        num_elements=document.num_elements,
+        is_big_endian=document.is_big_endian,
+        is_text=document.is_text,
+        platform=document.platform,
+        uri_count=len(document.uri_entries),
+        write_order_warnings=tuple(validate_ixb_write_order(document)),
+        object_record_candidate_count=len(probe_object_record_headers(data, document)),
+        fileio_header_candidate_count=len(find_fileio_header_candidates(data)),
         objects_start=document.objects_start,
         objects_end=document.objects_end,
         classes_by_name=classes_by_name,
@@ -250,6 +264,12 @@ def format_pair_comparison(
         f"- Real chart markers: {real_chart.melody_count} MelodyMarkers, {real_chart.lyric_count} LyricMarkers.",
         f"- Synthetic chart markers: {synthetic_chart.melody_count} MelodyMarkers, {synthetic_chart.lyric_count} LyricMarkers.",
         "",
+        "## Writer-Oriented Metadata",
+        _format_writer_metadata(real_chart),
+        _format_writer_metadata(real_lyric),
+        _format_writer_metadata(synthetic_chart),
+        _format_writer_metadata(synthetic_lyric),
+        "",
         "## Missing Classes By Role",
         "Chart:",
     ]
@@ -304,6 +324,17 @@ def format_pair_comparison(
         ]
     )
     return "\n".join(lines)
+
+
+def _format_writer_metadata(summary: IxbStructureSummary) -> str:
+    warnings = "; ".join(summary.write_order_warnings) if summary.write_order_warnings else "none"
+    return (
+        f"- {summary.label}: IsBigEndian={summary.is_big_endian}, IsText={summary.is_text}, "
+        f"Platform={summary.platform}, UriList entries={summary.uri_count}, "
+        f"object-record candidates={summary.object_record_candidate_count}, "
+        f"FileIO header candidates={summary.fileio_header_candidate_count}, "
+        f"write-order warnings={warnings}"
+    )
 
 
 def _format_text_selection(label: str, selection: TextSelectionSummary | None) -> str:
