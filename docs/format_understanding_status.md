@@ -28,6 +28,12 @@ near-term strategy is template-preserving editing: keep the real package,
 classes, object graph, header attributes, and most payload layout intact; rewrite
 only fields we can validate by corpus comparison and roundtrip tests.
 
+Runtime validation now confirms two levels of that strategy. A same-length
+`4 -> 4` ASCII edit and a complete visible lyric-content replacement were both
+accepted and visibly rendered on real console hardware. The full replacement
+preserved decoded character positions, chart ranges, payload capacity, padding,
+and the reported hash-like, length, and pointer fields.
+
 ## 1. What Is Securely Understood
 
 ### IXB/X360 Structure
@@ -206,14 +212,26 @@ Facts:
 - Current tools report melody counts, lyric marker counts, text-resource
   candidates, payload lengths, payload hashes, pointer-like references, and
   coverage.
+- A real-console test accepted and displayed a same-length four-byte ASCII
+  replacement in the selected visible lyric payload.
+- The test preserved the matching chart, IXB structure, file size, payload
+  length, hash-like field, pointer fields, marker counts, and 100% worddata
+  coverage.
+- A second successful real-console test replaced the complete visible lyric
+  content with synthetic same-position text. The game displayed the new words
+  correctly without chart or container changes.
 
 Strong indications:
 
 - The lyric file can be edited only in coordination with chart lyric markers if
   text lengths/offsets change.
-- Replacing visible text while preserving resource layout is feasible for narrow
-  cases; changing structure or adding/removing words requires chart marker
-  updates.
+- Replacing all visible lyric content while preserving resource layout and
+  chart-compatible character positions is feasible on the tested Lips-1 path.
+- Arbitrary word lengths and line layouts require chart `LyricWordData` offset
+  and length updates even when the total resource capacity stays fixed.
+- A larger replacement can avoid chart edits only when decoded character
+  positions and per-marker ranges remain stable. Equal-byte ASCII substitution
+  with preserved whitespace and line layout is the current controlled method.
 
 ## 2. What Is Realistically Possible Now
 
@@ -264,6 +282,8 @@ Realistic now:
   resource names, package/asset layout, and most offsets.
 - Patch constrained payload fields such as melody timing/pitch or existing lyric
   text ranges when lengths/padding allow.
+- Replace the complete visible lyric text in a Lips-1 template when decoded
+  character positions and existing chart ranges are preserved.
 - Emit modified files that keep the original IXB structure rather than
   rebuilding from scratch.
 
@@ -278,6 +298,8 @@ Risks:
   length fields, hashes, object sizes, and possibly `NumOfElements`.
 - Any edit that changes object count or class inventory moves from
   template-preserving into partial-rebuild territory.
+- Changing logical lyric layout without updating chart `LyricWordData` produces
+  incorrect syllable segmentation even if the lyric container still loads.
 
 ### Minimal Song/Chart Edits
 
@@ -285,15 +307,16 @@ Realistic now:
 
 - Patch existing marker fields where schema offsets are known and the file is
   plain IXB.
-- Replace lyric text in place when the new payload fits the existing range and
-  known length/hash fields are handled.
+- Replace all visible lyric text in place when each existing chart range remains
+  position-compatible and the fixed payload capacity is preserved.
 - Generate diagnostic reports before/after to confirm marker counts, text
   coverage, and IXB metadata remain stable.
 
 Risk:
 
-- In-place text edits can still break hashes or pointer/length references if not
-  all related fields are updated.
+- Different-length text still requires chart-range updates. Exceeding the fixed
+  payload capacity can additionally require container length, offset, pointer,
+  padding, and possibly hash updates.
 
 ### New Songs From Templates
 
@@ -374,18 +397,23 @@ Facts:
 - Lyric text resources have payload-hash-like fields that current analyzers
   report.
 - Ghidra did not yet identify a clear song/package checksum or SHA path.
+- One real-console Lips-1 test accepted a same-length four-byte payload edit
+  while the reported hash-like field stayed byte-identical.
+- A second real-console Lips-1 test accepted a complete visible content
+  replacement while the same hash-like field stayed byte-identical.
 
 Unknown:
 
 - Exact hash algorithm and scope for lyric text payload hashes.
-- Whether the game validates hashes strictly at load time or uses them for
-  caching/resource identity.
+- Whether validation differs when payload capacity/file size changes, or for
+  other templates and game/file families.
 - Whether STFS/package-level checks are relevant for our local workflow.
 
 Risk:
 
-- Text edits may appear structurally correct but fail at runtime if hashes are
-  stale.
+- The successful full-content edit strongly reduces hash risk for fixed-capacity
+  Lips-1 lyric replacements. It does not establish behavior for resized
+  resources, other families, or package-level validation.
 
 ### Quick Actions, Gestures, Noisemakers
 
@@ -482,13 +510,25 @@ Goal:
 
 ### Targeted Ghidra Analysis
 
-Use Ghidra only for concrete questions:
+The next fixed-capacity Chart+Lyric test has no broad Ghidra prerequisite. The
+existing parser, corpus coverage, and runtime result are sufficient to plan it.
 
-- What exactly is the lyric writer/load path around `%s_Lyric`?
-- What does the object-record field at position 1/2/3 mean in the caller?
-- Which function computes or validates text payload hashes?
-- Where are decompressed bytes handed to `ixSerializerReader::Load`?
-- Which code path consumes `lpsTimedGestureMarker` or quick-action-like data?
+Ghidra remains relevant only for concrete boundaries:
+
+- Find the consumer of `LyricWordData.text_offset` / `text_length` if corpus
+  tests cannot determine whether offsets count UTF-8 bytes, decoded characters,
+  or another code-unit form.
+- Find the `ixRawFileImage` length/hash writer or validator before attempting to
+  resize a payload beyond its template capacity.
+- Trace vector/object fixups for `lpsLyricMarker` before adding or removing
+  marker records.
+- Trace audio URI resolution and stream creation only when audio replacement
+  becomes the active milestone.
+- Keep decompression handoff analysis separate for later/DLC and LS2 files.
+
+The generic object-record field meanings, quick actions, and broad serializer
+reconstruction are not blockers for the next fixed-count, fixed-capacity lyric
+step.
 
 Goal:
 
@@ -532,26 +572,31 @@ Goal:
 
 ### Next Three Small Steps
 
-1. Add a local-only MusicDB joiner/report runner.
-   It should map first-game `ChartUri`/`LyricUri` to private files and run
-   existing analyzers, outputting only sanitized summaries under
-   `private/outputs/`.
+1. Specify a chart-aware variable-layout lyric edit using the successful
+   Lips-1 template. Keep the new text within the existing payload capacity and
+   preserve total payload length/file size with the observed padding.
 
-2. Add a strict IXB section-boundary report.
-   For each plain-IXB sample, record exact offsets for opening header,
-   `<Classes>`, `</Classes>`, optional `UriList`, `<Objects>`, `</Objects>`,
-   and `</ixb>`. This directly tests the Ghidra-derived writer order.
+2. Map every existing lyric marker to the intended new text segment and plan
+   updates only to its existing `LyricWordData.text_offset` and `text_length`
+   fields. Preserve marker count, timing, classes, object graph, pointers,
+   `NumOfElements`, and the resource hash/length fields.
 
-3. Add one byte-preserving roundtrip test for metadata parsing.
-   Start with a small lyric file: parse header/classes/objects boundaries and
-   assert that a no-op roundtrip preserves bytes exactly before allowing any
-   writer edits.
+3. Define strict preflight and before/after invariants for that combined
+   Chart+Lyric runtime test: all ranges in bounds, complete intended-text
+   coverage, unchanged object/section layout, unchanged file sizes, and an exact
+   byte whitelist for chart and lyric modifications.
 
 ### Medium-Term Steps
 
-- Implement a template-preserving lyric text editor with full before/after
-  analyzer comparison.
-- Implement a template-preserving chart marker editor for known fields only.
+- After the plan is reviewed, implement a template-preserving lyric-layout
+  editor with full before/after analyzer comparison.
+- Validate fixed-count melody timing and pitch edits independently; these are
+  scalar chart fields and do not require lyric payload resizing.
+- Test marker insertion/removal only after vector/object reference semantics are
+  understood.
+- Investigate audio-reference replacement after Chart+Lyric authoring works;
+  audio introduces URI, codec, stream, and possibly package concerns that do not
+  help resolve lyric layout first.
 - Map object-record fields by correlating Ghidra writer call sites with real
   object boundaries from corpus files.
 - Identify and implement text payload hash calculation, if runtime tests prove
@@ -576,16 +621,17 @@ Goal:
 
 ## Final Assessment
 
-The project is in a solid analyzer/template-editing phase, not yet in a
-from-scratch authoring phase.
+The project is now in a runtime-proven fixed-layout lyric-authoring phase, not
+yet in a variable-layout or from-scratch authoring phase.
 
 The most reliable path is:
 
-1. Keep reading more real samples with the existing tools.
-2. Preserve real structure wherever possible.
-3. Make small, measurable edits.
-4. Prove every writer assumption with corpus comparison, roundtrip tests, and
-   targeted Ghidra checks.
+1. Preserve the proven Lips-1 template structure and fixed payload capacity.
+2. Make the chart-to-text mapping editable by updating existing WordData ranges.
+3. Validate combined Chart+Lyric changes with exact byte whitelists and runtime
+   tests.
+4. Expand payload size, marker count, audio, and other file families only after
+   their specific contracts are understood.
 
 That path should get us to usable custom songs much faster than trying to invent
 a clean-room IXB writer before the object graph, padding, hashes, and compression
