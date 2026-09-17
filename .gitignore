@@ -12,3 +12,6 @@ private/Lips/
 *.PIRS
 *.CON
 *.zip
+__pycache__/
+*.py[cod]
+.pytest_cache/
