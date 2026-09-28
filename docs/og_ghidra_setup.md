@@ -100,3 +100,39 @@ entry; the audit's `null` function labels do not mean null pointer values.
 
 Do not transplant runtime vector layouts into the file writer or add synthetic
 chart structures based on this initial import alone.
+
+## Ghidra 12.1.3 supplied-plugin comparison
+
+On the same date, the user supplied Ghidra 12.1.3 and a prebuilt XEXLoaderWV
+extension with version=12.1.3 in extension.properties. It was installed without
+modifying the supplied files, into the new installation's Ghidra/Extensions.
+The previous LipsOG2008 database was preserved. The comparison uses a fresh
+LipsOG2008_1213 project, the same input XEX, Java, 300-second analysis limit,
+four-CPU limit and unchanged LipsInitialAudit.java export script.
+
+Supplied XEXLoaderWV.jar SHA-256:
+9363f04e6c600c4704660ee70a5924dadbd5db6ed0fe8c2ebdab4cc6a69bfa61.
+
+All 20 Java source files in its bundled XEXLoaderWV-src.zip match the previously
+built loader source byte-for-byte. This is source equivalence, not proof of
+binary equivalence. The previous extension was built specifically for 12.1.4;
+it was not this 12.1.3 prebuilt extension installed into the wrong version.
+
+Both imports report the same 43,179 initial .pdata functions, 361 import thunks,
+376 import references, LZX end-of-input warning, three invalid PNG candidates
+and observed unresolved-instruction warnings. The supplied source retains the
+same compressed-length * 100 decompression request. Version compatibility alone
+does not eliminate these warnings.
+
+Private comparison outputs: og-ghidra-1213-import.log and
+og-ghidra-1213-audit.txt in xenia-research.
+
+Both runs reached the 300-second automatic-analysis limit and saved their
+projects successfully. Both audit exports are byte-identical, SHA-256:
+1326ad3635b536148d39a9047ddec2008709a5cbddbc0feaa64991d24cc1b89f.
+This includes 42,694 reported functions, block ranges, queried string/xref
+results, the sampled vtable entries and five selected decompiled functions.
+No improvement was observed in this bounded audit. This does not establish
+equivalence of every function, full analysis completion, or import integrity.
+Future work can use the supplied 12.1.3 combination; the next substantive task
+is still import-byte validation and targeted reader/function-boundary analysis.
