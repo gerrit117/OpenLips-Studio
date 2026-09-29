@@ -15,6 +15,8 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- The synthetic builder now writes complete big-endian record headers, schema-index tags and framed raw buffers. All 22 controlled outputs pass the strict reader; runtime acceptance is not yet verified. See [serialization correction](docs/synthetic_record_framing.md).
+
 - A separate strict sequential reader (`tools/walk_ixb_graph.py`) consumes 117/117 local plain IXB samples with exact boundaries and object counts, resolves chart/sequence references, and traces ownership by serialized object key. See [OG IXB reader findings](docs/og_ixb_reader.md) for live ABC validation and the record-framing defect in the current synthetic builder.
 
 - Plain IXB `.X360` files are parsed with header attributes, class/member inventories, URI list state, object section bounds, and writer-order diagnostics.

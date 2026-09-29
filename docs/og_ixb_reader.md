@@ -5,6 +5,10 @@ tag bytes and schema inventories establish a valid synthetic object graph.
 No sample files, game bytes, decompiled game code, or raw memory are included.
 The writer and synthetic builder were not changed in this investigation.
 
+Follow-up: the builder's record framing has now been corrected separately;
+see [synthetic_record_framing.md](synthetic_record_framing.md) for the changes,
+22/22 offline-valid outputs and remaining runtime limitations.
+
 ## Executable and analysis repair
 
 Original Lips 2008, title 4D530888, version 0.0.0.20, XEX SHA-256:
