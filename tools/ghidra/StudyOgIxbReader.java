@@ -82,16 +82,31 @@ public class StudyOgIxbReader extends GhidraScript {
             }
             DecompInterface decompiler = new DecompInterface();
             try {
-                for (long start : targets) {
+                for (long requested : targets) {
+                    Long containing = starts.floor(requested);
+                    if (containing == null) {
+                        throw new IOException("No .pdata entry for " + Long.toHexString(requested));
+                    }
+                    long start = containing;
                     Long end = starts.higher(start);
-                    if (!starts.contains(start) || end == null || end - start > 0x10000) {
+                    Function existing = getFunctionContaining(toAddr(requested));
+                    if (existing != null && !starts.contains(requested)) {
+                        start = existing.getEntryPoint().getOffset();
+                        end = existing.getBody().getMaxAddress().getOffset() + 1;
+                    }
+                    if (end == null || end <= start || end - start > 0x10000) {
                         throw new IOException("No bounded .pdata range for " + Long.toHexString(start));
                     }
                     FunctionIterator after = currentProgram.getFunctionManager().getFunctions(toAddr(start + 1), true);
                     Function following = after.hasNext() ? after.next() : null;
-                    if (following != null && following.getEntryPoint().getOffset() < end) {
+                    if (following != null && following.getEntryPoint().getOffset() > requested
+                            && following.getEntryPoint().getOffset() < end) {
                         end = following.getEntryPoint().getOffset();
                     }
+                    if (requested >= end || (requested & 3) != 0) {
+                        throw new IOException("Address outside bounded function " + Long.toHexString(requested));
+                    }
+                    out.println("REQUEST " + Long.toHexString(requested) + " containing=" + Long.toHexString(start));
                     for (long address = start; address < end; address += 4) {
                         monitor.checkCancelled();
                         Instruction instruction = getInstructionAt(toAddr(address));

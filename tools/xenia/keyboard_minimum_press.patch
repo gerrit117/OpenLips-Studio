@@ -1,0 +1,66 @@
+diff --git a/src/xenia/hid/keyboard/keyboard_input_driver.cc b/src/xenia/hid/keyboard/keyboard_input_driver.cc
+index 0277b0c..1528737 100644
+--- a/src/xenia/hid/keyboard/keyboard_input_driver.cc
++++ b/src/xenia/hid/keyboard/keyboard_input_driver.cc
+@@ -36,6 +36,11 @@ DEFINE_int32(
+     "selected slot. Passthrough does not require assigning slot.",
+     "HID");
+ 
++DEFINE_int32(keyboard_minimum_press_ms, 0,
++             "Optional minimum controller button duration for short keyboard "
++             "events (0 disables; bounded to 1000 milliseconds).",
++             "HID");
++
+ namespace xe {
+ namespace hid {
+ namespace keyboard {
+@@ -283,8 +288,10 @@ X_RESULT KeyboardInputDriver::GetState(uint32_t user_index,
+   int16_t thumb_ry = 0;
+ 
+   if (window()->HasFocus()) {
++    auto input_lock = global_critical_region_.Acquire();
++    const auto now = std::chrono::steady_clock::now();
+     for (const KeyBinding& b : key_bindings_) {
+-      if (b.is_pressed) {
++      if (b.is_pressed || now < b.minimum_release_time) {
+         switch (b.output_key) {
+           case ui::VirtualKey::kXInputPadA:
+             buttons |= X_INPUT_GAMEPAD_A;
+@@ -526,6 +533,17 @@ void KeyboardInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
+       continue;
+     }
+ 
++    if (is_down && cvars::keyboard_minimum_press_ms > 0 &&
++        ((!key_binding.uppercase && !key_binding.lowercase) ||
++         (key_binding.uppercase && uppercase) ||
++         (key_binding.lowercase && !uppercase))) {
++      const int duration = cvars::keyboard_minimum_press_ms < 1000
++                               ? cvars::keyboard_minimum_press_ms
++                               : 1000;
++      key_binding.minimum_release_time = std::chrono::steady_clock::now() +
++                                         std::chrono::milliseconds(duration);
++    }
++
+     if (key_binding.uppercase && uppercase) {
+       key_binding.is_pressed = is_down;
+       break;
+diff --git a/src/xenia/hid/keyboard/keyboard_input_driver.h b/src/xenia/hid/keyboard/keyboard_input_driver.h
+index 9cd375b..4bf7ce4 100644
+--- a/src/xenia/hid/keyboard/keyboard_input_driver.h
++++ b/src/xenia/hid/keyboard/keyboard_input_driver.h
+@@ -10,6 +10,7 @@
+ #ifndef XENIA_HID_KEYBOARD_KEYBOARD_INPUT_DRIVER_H_
+ #define XENIA_HID_KEYBOARD_KEYBOARD_INPUT_DRIVER_H_
+ 
++#include <chrono>
+ #include <queue>
+ 
+ #include "xenia/base/mutex.h"
+@@ -77,6 +78,7 @@ class KeyboardInputDriver final : public InputDriver {
+     bool uppercase = false;
+     bool lowercase = false;
+     bool is_pressed = false;
++    std::chrono::steady_clock::time_point minimum_release_time{};
+   };
+ 
+   void ParseKeyBinding(ui::VirtualKey virtual_key,
