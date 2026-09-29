@@ -1,5 +1,11 @@
 # OpenLips Structures Documentation
 
+The historical layouts below are executable-specific observations. See
+[og_ixb_reader.md](og_ixb_reader.md) for verified 12-byte serialized record
+headers, object-key relocation, schema-index tags and complete chart ownership.
+The existing `raw_pitch` alias at marker +16 is named `m_iTrackIndex` by the
+schema; its meaning must be checked for the concrete derived marker class.
+
 This document collects the current reverse engineering findings for the Xbox 360 game *Lips*.
 
 The information here is based on analysis of `.X360` chart files, `_Lyric.X360` files, RAM dumps, and runtime object inspection.

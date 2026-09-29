@@ -1,5 +1,11 @@
 # X360 Synthetic Chart Crash Analysis
 
+2026-09-29 correction: [og_ixb_reader.md](og_ixb_reader.md) demonstrates invalid
+record framing in every current synthetic variant and shows that index/music
+objects are not serialized in the tested corpus. The observations below remain
+useful, but missing-root/ownership explanations are hypotheses, not confirmed
+causes of the copy-helper crash.
+
 Crash context from the `full-current` synthetic pair test:
 
 - exception code: `0xC0000005`

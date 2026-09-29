@@ -1,5 +1,12 @@
 # IXB Ownership Field Diff Notes
 
+2026-09-29 follow-up: [og_ixb_reader.md](og_ixb_reader.md) validates real
+record framing and live vector ownership, and finds that every current
+synthetic level fails at its first record. Field comparisons below cannot
+establish runtime validity of an incorrectly framed output. Nonzero allocator
+patterns also occur in the running game; they are not independently a proven
+crash cause.
+
 This note is a focused, read-only comparison of the ownership/container fields
 that are most likely to cause the current synthetic lyric IXB hard crash.
 

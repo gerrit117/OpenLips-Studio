@@ -15,6 +15,8 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- A separate strict sequential reader (`tools/walk_ixb_graph.py`) consumes 117/117 local plain IXB samples with exact boundaries and object counts, resolves chart/sequence references, and traces ownership by serialized object key. See [OG IXB reader findings](docs/og_ixb_reader.md) for live ABC validation and the record-framing defect in the current synthetic builder.
+
 - Plain IXB `.X360` files are parsed with header attributes, class/member inventories, URI list state, object section bounds, and writer-order diagnostics.
 - Lips-1 chart files can be analyzed for melody markers, lyric markers, marker counts, timing, and text mapping coverage.
 - Lips-1 lyric files can be analyzed for text resources, payload lengths, hash-like fields, pointer-like references, and chart-word coverage.

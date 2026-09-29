@@ -1,5 +1,9 @@
 # OG loader validation and analysis repair
 
+Follow-up: [og_ixb_reader.md](og_ixb_reader.md) records the verified save-helper
+callfixups, actual reader, sequential corpus validation and live chart ownership.
+The incomplete helper-return analysis below is retained as the earlier stage.
+
 2026-09-28; input and tooling identity: [og_ghidra_setup.md](og_ghidra_setup.md).
 This investigation uses the supplied Ghidra 12.1.3 XEXLoaderWV extension.
 The game XEX and saved Ghidra database were not changed. All subsequent Ghidra

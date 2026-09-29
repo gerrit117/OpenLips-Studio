@@ -1,5 +1,10 @@
 # Original Lips: disc-to-runtime observations
 
+Follow-up: [og_ixb_reader.md](og_ixb_reader.md) adds a strict sequential reader
+and a complete live chart-to-sequence-to-marker trace for ABC. It also corrects
+the apparent WordData file/runtime offset discrepancy below: the legacy file
+resolver anchors at the header's key word, not at the payload start.
+
 ## Scope and evidence
 
 Research session: 2026-09-22. Original Lips 2008, title 4D530888,

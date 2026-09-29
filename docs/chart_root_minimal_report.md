@@ -1,5 +1,11 @@
 # Chart Root Minimal Variant Report
 
+2026-09-29 correction: see [og_ixb_reader.md](og_ixb_reader.md). Schema presence
+does not establish required serialized instances: lpsMusicInfo/lpsMusicIndex
+have zero instances in all 58 plain charts. All current synthetic levels fail
+strict record framing at their first object. This report describes the earlier
+experiment, not a validated file layout or required-object specification.
+
 This report records the corpus evidence behind the synthetic
 `chart-root-minimal` variant in `tools/build_minimal_ixb_pair.py`.
 

@@ -1,5 +1,11 @@
 # Chart Root Minimal Crash Analysis
 
+2026-09-29 correction: [og_ixb_reader.md](og_ixb_reader.md) establishes a record
+framing failure before valid object traversal in every current synthetic level.
+Different addresses within the copy helper do not demonstrate loader progress
+through a valid chart root. Preserve the observed crashes, but treat the graph
+traversal explanation below as unconfirmed.
+
 This report compares the original `full-current` hard crash with the new
 `chart-root-minimal` crash.
 
