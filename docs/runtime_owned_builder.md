@@ -5,6 +5,12 @@ renders custom note bars and words in Amazing's existing catalog slot. Chart
 time does not advance with the media, so playable synchronization is not yet
 verified. No new catalog entry or media conversion is complete.
 
+**End goal:** Import an UltraStar song and build a standalone Lips song from
+scratch, with its own chart, lyrics, media and catalog registration. It must
+not require or reuse any existing song's IXB heap, assets or catalog slot.
+The Amazing slot and original audio/video used below are diagnostic controls
+only; loading there is not completion of the builder.
+
 ## Isolated test environment
 
 The extracted original Lips 2008 installation was copied into an ignored
@@ -140,6 +146,7 @@ displayed the exact four custom note bars and words over Amazing's video.
 | v3 | OG first-word class tokens on chart/sequence/code objects | Same |
 | v4 | One Conductor section-pattern code | Same |
 | v5 | First tempo time equals Amazing MusicStartOffset, BPM 118 | Same |
+| v6 | Copy Amazing's root `ixAsset.m_aHash` into the fresh chart | Inconclusive: Xenia stalled at the pre-menu "Saving content" screen, before song selection |
 
 Screenshots separated by 10-16 seconds show identical bar positions and lyric
 state while the video advances. A fleeting white syllable immediately after
@@ -156,7 +163,8 @@ The chart's sequence vectors and asset fields also use zero allocators where
 many real OG files use `0xcdcdcdcd`; whether that matters at runtime is unknown.
 
 The test copy was restored to the re-extracted original Amazing chart and lyric
-after testing. Original ISO, extraction and sample directories were untouched.
+after testing, including the inconclusive v6 run. Original ISO, extraction and
+sample directories were untouched.
 
 ## Media findings
 
