@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.build_owned_chart import TRACKS, OG_CLASS_TOKENS, build_owned_pair, validate_owned_chart
+from tools.build_owned_chart import TRACKS, OG_CLASS_TOKENS, build_owned_pair, validate_owned_chart, offset_notes
 from tools.build_lyric_resource import TEXT
 from tools.walk_ixb_graph import Graph, GraphError
 from tools.write_template_chart import Note, SongChart, load_json_chart
@@ -13,6 +13,39 @@ from tools.write_template_chart import Note, SongChart, load_json_chart
 def model():
     return SongChart([Note(8, 1, 65, "World", line_break_after=True),
                       Note(5, 0.5, 60, "Hello")])
+
+
+def test_note_offset_delays_linked_notes_not_media_or_durations():
+    source = model()
+    shifted = offset_notes(source, 1.5)
+    assert source.notes[0].time == 8
+    assert shifted.notes[0].time == 9.5
+    assert shifted.notes[0].length == source.notes[0].length
+    assert shifted.notes[0].pitch == source.notes[0].pitch
+    before, lyrics_before = build_owned_pair(source, "Demo", "Audio/Demo",
+                                            movie_name="Assets/InGame/Demo", song_duration=30)
+    after, lyrics_after = build_owned_pair(shifted, "Demo", "Audio/Demo",
+                                          movie_name="Assets/InGame/Demo", song_duration=30)
+    assert lyrics_before == lyrics_after
+    for name in ('lpsPhraseMarker', 'lpsLyricMarker'):
+        a, b = Graph(before), Graph(after)
+        ra = [r for r in a.records if a.is_a(r, name)]
+        rb = [r for r in b.records if b.is_a(r, name)]
+        for old, new in zip(ra, rb, strict=True):
+            assert struct.unpack_from('>f', after, new.payload+8)[0] == pytest.approx(
+                struct.unpack_from('>f', before, old.payload+8)[0]+1.5)
+            assert after[new.payload+12:new.payload+16] == before[old.payload+12:old.payload+16]
+    for name in ('ixAudioMarker', 'ixMovieMarker', 'ixSeqTempoCode'):
+        a, b = Graph(before), Graph(after)
+        old = next(r for r in a.records if a.is_a(r, name))
+        new = next(r for r in b.records if b.is_a(r, name))
+        assert before[old.payload:old.payload+old.size] == after[new.payload:new.payload+new.size]
+
+
+@pytest.mark.parametrize('seconds', [math.nan, math.inf, -10])
+def test_bad_note_offset_refused(seconds):
+    with pytest.raises(ValueError):
+        offset_notes(model(), seconds)
 
 
 def test_fresh_pair_owns_derived_notes_and_named_sorted_sequences():

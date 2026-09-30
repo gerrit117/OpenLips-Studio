@@ -15,6 +15,8 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- A new song now appears under its own title/artist and loads from independent paths with a fresh offline profile. Existing profiles do not reimport the edited disc catalog, so DLC discovery is the intended installation route, not profile resets. See [registration and timing](docs/custom_song_registration.md). A constant `--note-offset` is available for controlled synchronization tests; durations remain source-exact.
+
 - A fresh 770-note UltraStar chart and newly encoded VC-1/WMA Pro video now play in the isolated OG test slot and reach results. A one-byte ASF bitmap-header correction reproduces acceptance; audio was user-confirmed. Synchronization and independent catalog registration remain unfinished. See [controlled media tests](docs/custom_media_runtime_tests.md).
 
 - A fully generated OG chart/lyric pair now has measured native clock progression, and a fresh six-note chart switches lyric/note pages without instrumentation. The earlier frozen-clock diagnosis was incorrect for this tested pair. Independent media/catalog registration remains unfinished; see [native clock comparison](docs/og_chart_clock_probe.md).
@@ -33,7 +35,13 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Recommended Direction
 
-The safe path is template-preserving editing:
+The fresh OG writer is now runtime-tested for the custom song above. Next work
+is DLC discovery on existing profiles, followed by synchronization and media
+preview/cover packaging. Preserve the accepted chart/media checkpoint while
+testing each installation change separately. LS2/DLC runtime layout support
+must not be inferred from OG acceptance.
+
+For editing existing songs, retain the template-preserving path:
 
 1. Keep real header attributes, class/member order, URI list, object graph shape, and unknown bytes intact.
 2. Make one minimal same-size payload edit at a time.
@@ -41,7 +49,9 @@ The safe path is template-preserving editing:
 4. Run a controlled runtime test.
 5. Only then expand the supported edit surface.
 
-Avoid a from-scratch writer until object-record semantics, padding, payload hashes, and compressed `.X360` handling are understood.
+Do not extend the from-scratch writer to other format families without their
+own structural and runtime validation; compressed `.X360` authoring remains
+outside the accepted plain OG path.
 
 ## Repository Structure
 

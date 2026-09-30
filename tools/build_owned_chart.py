@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import math
 import struct
+from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -29,6 +30,20 @@ except ModuleNotFoundError:
 
 TRACKS = ("Time", "Conductor", "Audio", "Lyric", "Melody", "Group", "Section",
           "CallAndResponse", "Movie", "AudioEffect", "Led")
+
+
+def offset_notes(chart: SongChart, seconds: float) -> SongChart:
+    """Shift imported notes and their generated lyric/page timings, not media.
+
+    Positive values delay visible notes relative to video/audio. This is a
+    constant alignment adjustment, never a tempo or duration rescaling.
+    """
+    if not math.isfinite(seconds):
+        raise ValueError("note offset must be finite")
+    notes = [replace(note, time=note.time + seconds) for note in chart.notes]
+    if any(not math.isfinite(note.time) or note.time < 0 for note in notes):
+        raise ValueError("note offset produces invalid/negative timing")
+    return replace(chart, notes=notes)
 
 # Stable first-word file-layout tokens in plain OG charts where present.
 OG_CLASS_TOKENS = {
@@ -326,10 +341,15 @@ def main():
     parser.add_argument("--tempo-start", type=float, default=0)
     parser.add_argument("--time-start", type=float)
     parser.add_argument("--time-stop", type=float)
+    parser.add_argument("--note-offset", type=float, default=0.0,
+                        help="seconds added to notes/linked lyrics/pages only; positive delays them")
     args = parser.parse_args()
+    if args.note_offset and args.song_duration is None:
+        parser.error("--note-offset requires --song-duration so media/end timing stays fixed")
     if Path(args.name).name != args.name or any(c in args.name for c in '/\\:'):
         parser.error("name must be a basename")
-    chart, lyric = build_owned_pair(load_json_chart(args.input_json), args.name,
+    model = offset_notes(load_json_chart(args.input_json), args.note_offset)
+    chart, lyric = build_owned_pair(model, args.name,
                                     args.audio_name, bpm=args.bpm,
                                     movie_name=args.movie_name,
                                     song_duration=args.song_duration,
@@ -344,6 +364,11 @@ def main():
     graph = Graph(chart)
     print(f"chart_bytes={len(chart)} lyric_bytes={len(lyric)} NumOfElements={len(graph.records)}")
     print(f"tracks={','.join(TRACKS)} notes={graph.summary()['melodies']}")
+    lengths = sorted(note.length for note in model.notes)
+    print(f"note_offset_seconds={args.note_offset:+.6f} media_timing_unchanged=True")
+    print(f"note_lengths_seconds: min={lengths[0]:.6f} "
+          f"median={lengths[len(lengths)//2]:.6f} max={lengths[-1]:.6f}; "
+          "imported durations preserved, no automatic stretching")
     print("fresh ownership graph; no template heap; this output still requires runtime validation")
     return 0
 
