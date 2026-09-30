@@ -1,0 +1,124 @@
+diff --git a/src/xenia/cpu/ppc/ppc_frontend.cc b/src/xenia/cpu/ppc/ppc_frontend.cc
+index 666bd7b..c55463a 100644
+--- a/src/xenia/cpu/ppc/ppc_frontend.cc
++++ b/src/xenia/cpu/ppc/ppc_frontend.cc
+@@ -9,7 +9,14 @@
+ 
+ #include "xenia/cpu/ppc/ppc_frontend.h"
+ 
++#include <chrono>
++#include <fstream>
++#include <map>
++#include <mutex>
++
+ #include "xenia/base/atomic.h"
++#include "xenia/base/byte_order.h"
++#include "xenia/base/cvar.h"
+ #include "xenia/base/logging.h"
+ #include "xenia/base/mutex.h"
+ #include "xenia/cpu/ppc/ppc_context.h"
+@@ -18,6 +25,8 @@
+ #include "xenia/cpu/ppc/ppc_translator.h"
+ #include "xenia/cpu/processor.h"
+ 
++DEFINE_path(lips_clock_trace_path, "", "Read-only bounded OG Lips chart clock trace (exact OG executable only).", "CPU");
++
+ namespace xe {
+ namespace cpu {
+ namespace ppc {
+@@ -91,6 +100,41 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
+   }
+ }
+ 
++// Research-only probes for OG Lips 0.0.0.20. No guest calls or guest writes.
++void LipsClockTrace(PPCContext* ctx, void* arg0, void* arg1) {
++  if (cvars::lips_clock_trace_path.empty()) return;
++  auto memory = static_cast<Memory*>(arg0);
++  auto phase = reinterpret_cast<uintptr_t>(arg1);
++  uint32_t object = uint32_t(ctx->r[phase == 1 ? 31 : 3]);
++  auto readable = [memory](uint32_t p, uint32_t bytes) {
++    if (p < 0x10000 || p > UINT32_MAX - bytes) return false;
++    auto heap = memory->LookupHeap(p);
++    return heap && (uint32_t(heap->QueryRangeAccess(p, p + bytes - 1)) & 1);
++  };
++  if (!readable(object, 0x338)) return;
++  static std::mutex mutex;
++  std::lock_guard<std::mutex> lock(mutex);
++  static std::ofstream output(cvars::lips_clock_trace_path);
++  static auto epoch = std::chrono::steady_clock::now();
++  struct Samples { double last = -1; unsigned count = 0; };
++  static std::map<uint32_t, Samples> samples;
++  double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - epoch).count();
++  auto& sample = samples[object];
++  if (phase == 2 && (sample.count >= 180 || (sample.last >= 0 && now - sample.last < 0.5))) return;
++  if (phase == 2) { sample.last = now; ++sample.count; }
++  auto u = [memory](uint32_t p) { return xe::load_and_swap<uint32_t>(memory->TranslateVirtual(p)); };
++  auto f = [memory](uint32_t p) { return xe::load_and_swap<float>(memory->TranslateVirtual(p)); };
++  uint32_t audio = u(object + 0x22c), movie = u(object + 0x230);
++  output << fmt::format("host={:.6f} phase={} object={:08X} lr={:08X} f1={:.9f} started={} state16c={} clock={:.9f} previous={:.9f} frame={:.9f} elapsed_base={:.9f} audio={:08X} audio_state={} movie={:08X} movie_state={} audio_started={} movie_started={} music_delay={:.9f} media_base={:.9f} movie_delay={:.9f} conductor={:08X} tempo={:08X} index={:08X} sequences={:08X}/{}\n",
++      now, phase, object, uint32_t(ctx->lr), ctx->f[1], u(object + 0x168), u(object + 0x16c),
++      f(object + 0x278), f(object + 0x27c), f(object + 0x334), f(object + 0x25c),
++      audio, readable(audio, 12) ? int64_t(u(audio + 8)) : -1,
++      movie, readable(movie, 12) ? int64_t(u(movie + 8)) : -1,
++      u(object + 0x264), u(object + 0x268), f(object + 0x26c), f(object + 0x270), f(object + 0x274),
++      u(object + 0x18c), u(object + 0x190), u(object + 0x164), u(object + 0x64), u(object + 0x6c));
++  output.flush();
++}
++
+ bool PPCFrontend::Initialize() {
+   void* arg0 = reinterpret_cast<void*>(&xe::global_critical_region::mutex());
+   void* arg1 = reinterpret_cast<void*>(&builtins_.global_lock_count);
+@@ -102,6 +146,9 @@ bool PPCFrontend::Initialize() {
+       processor_->DefineBuiltin("LeaveGlobalLock", LeaveGlobalLock, arg0, arg1);
+   builtins_.syscall_handler = processor_->DefineBuiltin(
+       "SyscallHandler", SyscallHandler, nullptr, nullptr);
++  builtins_.lips_clock_start = processor_->DefineBuiltin("LipsClockStart", LipsClockTrace, memory(), nullptr);
++  builtins_.lips_clock_started = processor_->DefineBuiltin("LipsClockStarted", LipsClockTrace, memory(), reinterpret_cast<void*>(1));
++  builtins_.lips_clock_update = processor_->DefineBuiltin("LipsClockUpdate", LipsClockTrace, memory(), reinterpret_cast<void*>(2));
+   return true;
+ }
+ 
+diff --git a/src/xenia/cpu/ppc/ppc_frontend.h b/src/xenia/cpu/ppc/ppc_frontend.h
+index 27cc562..39cabaf 100644
+--- a/src/xenia/cpu/ppc/ppc_frontend.h
++++ b/src/xenia/cpu/ppc/ppc_frontend.h
+@@ -34,6 +34,9 @@ struct PPCBuiltins {
+   Function* enter_global_lock;
+   Function* leave_global_lock;
+   Function* syscall_handler;
++  Function* lips_clock_start;
++  Function* lips_clock_started;
++  Function* lips_clock_update;
+ };
+ 
+ class PPCFrontend {
+diff --git a/src/xenia/cpu/ppc/ppc_hir_builder.cc b/src/xenia/cpu/ppc/ppc_hir_builder.cc
+index 42d996c..6a1d8dc 100644
+--- a/src/xenia/cpu/ppc/ppc_hir_builder.cc
++++ b/src/xenia/cpu/ppc/ppc_hir_builder.cc
+@@ -33,6 +33,7 @@ DEFINE_bool(
+     "Break to the host debugger (or crash if no debugger attached) if an "
+     "unimplemented PowerPC instruction is encountered.",
+     "CPU");
++DECLARE_path(lips_clock_trace_path);
+ 
+ namespace xe {
+ namespace cpu {
+@@ -174,6 +175,17 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
+ 
+     MaybeBreakOnInstruction(address);
+ 
++    if (!cvars::lips_clock_trace_path.empty()) {
++      Function* probe = nullptr;
++      if (address == 0x82D62AD0) probe = builtins()->lips_clock_start;
++      if (address == 0x82D62FC8) probe = builtins()->lips_clock_started;
++      if (address == 0x82D64C90) probe = builtins()->lips_clock_update;
++      if (probe) {
++        ContextBarrier();
++        Call(probe);
++      }
++    }
++
+     InstrData i;
+     i.address = address;
+     i.code = code;
