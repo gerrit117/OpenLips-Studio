@@ -29,6 +29,11 @@ executes startup code from the packed asset rather than the loose readable
 source. Native load-path confirmation is still pending, so this remains a
 strong indication rather than a proven fact.
 
+Update, 2026-09-30: an isolated Xenia `NtCreateFile` trace observed
+`game:\lps\Assets\PackedScript.X360` and no loose `.lua` opens among 532
+file-open attempts through the OG title screen. The packed startup load is
+now directly observed for that path; see `lua_runtime_capabilities.md`.
+
 ## Validation
 
 - Original source encoding retained byte-for-byte outside the inserted block.
