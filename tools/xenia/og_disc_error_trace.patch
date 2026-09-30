@@ -1,0 +1,30 @@
+diff --git a/src/xenia/kernel/xam/xam_ui.cc b/src/xenia/kernel/xam/xam_ui.cc
+index e92d441..79bb61f 100644
+--- a/src/xenia/kernel/xam/xam_ui.cc
++++ b/src/xenia/kernel/xam/xam_ui.cc
+@@ -596,7 +596,24 @@ dword_result_t XamShowDeviceSelectorUI_entry(
+ }
+ DECLARE_XAM_EXPORT1(XamShowDeviceSelectorUI, kUI, kImplemented);
+ 
+-void XamShowDirtyDiscErrorUI_entry(dword_t user_index) {
++void XamShowDirtyDiscErrorUI_entry(dword_t user_index,
++                                 const ppc_context_t& ctx) {
++  XELOGE("Dirty-disc guest failure: user={} lr={:08X} sp={:08X}",
++         uint32_t(user_index), uint32_t(ctx->lr), uint32_t(ctx->r[1]));
++  auto memory = ctx->kernel_state->memory();
++  uint32_t frame = uint32_t(ctx->r[1]);
++  for (unsigned i = 0; i < 12 && frame >= 0x10000 &&
++       frame <= UINT32_MAX - 12; ++i) {
++    auto heap = memory->LookupHeap(frame);
++    if (!heap || !(uint32_t(heap->QueryRangeAccess(frame, frame + 11)) & 1)) break;
++    auto p = memory->TranslateVirtual(frame);
++    uint32_t previous = xe::load_and_swap<uint32_t>(p);
++    uint32_t saved_lr = xe::load_and_swap<uint32_t>(p + 8);
++    XELOGE("Dirty-disc stack[{}]: frame={:08X} previous={:08X} saved_lr={:08X}",
++           i, frame, previous, saved_lr);
++    if (previous <= frame) break;
++    frame = previous;
++  }
+   if (cvars::headless) {
+     assert_always();
+     exit(1);

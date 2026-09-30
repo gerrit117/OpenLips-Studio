@@ -232,9 +232,16 @@ def build_owned_pair(chart: SongChart, name: str, audio_name: str, *, bpm=120.0,
         append("Movie", "ixMovieMarker", body)
     ordered = sorted(enumerate(chart.notes), key=lambda item: (item[1].time, item[0]))
     page_starts = [max(0.0, ordered[0][1].time - 0.8)]
+    phrase_end = ordered[0][1].time + ordered[0][1].length
     for (_, prev), (_, following) in zip(ordered, ordered[1:]):
         if prev.line_break_after:
-            page_starts.append(max(0.0, following.time - 0.8))
+            # Dense UltraStar phrases may have less than the normal preroll gap.
+            # Never place that preroll inside the completed phrase's notes.
+            page_starts.append(max(0.0, following.time - 0.8,
+                                   min(phrase_end, following.time)))
+            phrase_end = following.time + following.length
+        else:
+            phrase_end = max(phrase_end, following.time + following.length)
     for time in sorted(set(page_starts + [end - 1.0])):
         append("Section", "lpsPageBreakMarker", e.code(24, time, 0.08))
     append("Section", "ixSeqSuspend", e.code(20, end, 0.08))

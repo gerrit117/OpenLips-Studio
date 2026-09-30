@@ -103,3 +103,14 @@ def test_synthetic_clock_fixture_has_time_driven_page_boundaries():
     assert graph.summary()["melodies"] == 6
     root = next(r for r in graph.records if graph.is_a(r, "lpsChart"))
     assert data[root.payload + 32:root.payload + 48] == bytes(16)
+
+
+def test_dense_phrase_preroll_does_not_cut_previous_notes():
+    chart = SongChart([Note(10, 1, 60, "One"),
+                       Note(10.5, 0.1, 62, "two", line_break_after=True),
+                       Note(11.1, 0.2, 64, "Next")])
+    data, _ = build_owned_pair(chart, "Dense", "Audio/Dense")
+    graph = Graph(data)
+    pages = [r for r in graph.records if graph.is_a(r, "lpsPageBreakMarker")]
+    times = [struct.unpack_from(">f", data, r.payload + 8)[0] for r in pages]
+    assert times[1] == pytest.approx(11.0)

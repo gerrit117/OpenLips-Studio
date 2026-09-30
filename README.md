@@ -15,6 +15,8 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- A complete 770-note UltraStar import loads and advances through pages over original OG media. Custom-media tests are still rejected at song start; matching VC-1/WMA Pro codec names alone is insufficient. See [controlled media tests](docs/custom_media_runtime_tests.md) for corpus header distributions and next probes.
+
 - A fully generated OG chart/lyric pair now has measured native clock progression, and a fresh six-note chart switches lyric/note pages without instrumentation. The earlier frozen-clock diagnosis was incorrect for this tested pair. Independent media/catalog registration remains unfinished; see [native clock comparison](docs/og_chart_clock_probe.md).
 
 - The synthetic builder now writes complete big-endian record headers, schema-index tags and framed raw buffers. All 22 controlled outputs pass the strict reader; runtime acceptance is not yet verified. See [serialization correction](docs/synthetic_record_framing.md).
