@@ -53,7 +53,18 @@ Do not extend the from-scratch writer to other format families without their
 own structural and runtime validation; compressed `.X360` authoring remains
 outside the accepted plain OG path.
 
-## Repository Structure
+## Experimental DLC Packaging
+
+`tools/build_dlc.py` now creates unsigned LIVE/STFS containers from the fresh
+UltraStar/OG writer or prepared chart/lyric files, with independent hash-tree
+verification and byte-identical extraction checks. `tools/upload_dlc.py` adds
+optional verified FTP installation to the OG title's content directory.
+Neither uploads nor overwrites happen by default. See [DLC builder](docs/dlc_builder.md)
+for backend build instructions, commands and limitations. Actual in-game DLC
+discovery on existing profiles remains unverified; these are not retail-signed
+packages. The accepted disc-based chart/media pipeline is unchanged.
+
+## Repository Layout
 
 ```text
 docs/       Sanitized technical findings, format notes, plans, and runtime-test summaries
