@@ -2,7 +2,7 @@ import struct
 
 import pytest
 
-from tools.analyze_asf import AUDIO, FILE, HEADER, STREAM, inspect
+from tools.analyze_asf import AUDIO, FILE, HEADER, STREAM, VIDEO, inspect
 
 
 def object_bytes(guid, payload):
@@ -46,3 +46,22 @@ def test_rejects_object_length_outside_header(tmp_path):
     path.write_bytes(data)
     with pytest.raises(ValueError, match='outside header'):
         inspect(path)
+
+
+@pytest.mark.parametrize('bits', [0, 24])
+def test_reports_video_bitmap_bits_and_exact_format_offset(tmp_path, bits):
+    fmt = bytearray(51)
+    struct.pack_into('<II', fmt, 0, 768, 432)
+    struct.pack_into('<I', fmt, 11, 40)
+    struct.pack_into('<H', fmt, 25, bits)
+    fmt[27:31] = b'WVC1'
+    stream = VIDEO + bytes(16) + struct.pack('<QIIHI', 0, len(fmt), 0, 2, 0) + fmt
+    child = object_bytes(STREAM, stream)
+    data = HEADER + struct.pack('<QI', len(child) + 30, 1) + b'\x01\x02' + child
+    path = tmp_path / 'video.wmv'
+    path.write_bytes(data)
+    result = inspect(path)['streams'][0]
+    assert result['bitmap_bit_count'] == bits
+    assert result['bitmap_header_size'] == 40
+    assert data[result['format_offset']:result['format_offset'] + len(fmt)] == fmt
+    assert path.read_bytes() == data

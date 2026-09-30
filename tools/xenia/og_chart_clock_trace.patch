@@ -1,5 +1,5 @@
 diff --git a/src/xenia/cpu/ppc/ppc_frontend.cc b/src/xenia/cpu/ppc/ppc_frontend.cc
-index 666bd7b..c55463a 100644
+index 666bd7b..1bf9bf0 100644
 --- a/src/xenia/cpu/ppc/ppc_frontend.cc
 +++ b/src/xenia/cpu/ppc/ppc_frontend.cc
 @@ -9,7 +9,14 @@
@@ -26,7 +26,7 @@ index 666bd7b..c55463a 100644
  namespace xe {
  namespace cpu {
  namespace ppc {
-@@ -91,6 +100,41 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
+@@ -91,6 +100,66 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
    }
  }
  
@@ -65,35 +65,62 @@ index 666bd7b..c55463a 100644
 +  output.flush();
 +}
 +
++// Exact OG failure-queue site. The caller holds the failed path in r28.
++void LipsMediaFailureTrace(PPCContext* ctx, void* arg0, void* arg1) {
++  auto memory = static_cast<Memory*>(arg0);
++  auto readable = [memory](uint32_t p, uint32_t bytes) {
++    if (p < 0x10000 || p > UINT32_MAX - bytes) return false;
++    auto heap = memory->LookupHeap(p);
++    return heap && (uint32_t(heap->QueryRangeAccess(p, p + bytes - 1)) & 1);
++  };
++  uint32_t path_address = uint32_t(ctx->r[28]);
++  std::string path;
++  for (uint32_t i = 0; i < 512 && readable(path_address + i, 1); ++i) {
++    auto ch = *memory->TranslateVirtual(path_address + i);
++    if (!ch) break;
++    path += ch >= 32 && ch < 127 ? char(ch) : '?';
++  }
++  uint32_t owner = uint32_t(ctx->r[31]);
++  auto field = [&](uint32_t offset) {
++    return readable(owner + offset, 4)
++        ? xe::load_and_swap<uint32_t>(memory->TranslateVirtual(owner + offset))
++        : UINT32_MAX;
++  };
++  XELOGE("OG failed resource: path={} owner={:08X} request={:08X} override={:08X} lr={:08X}",
++         path, owner, field(0xc), field(0x10), uint32_t(ctx->lr));
++}
++
  bool PPCFrontend::Initialize() {
    void* arg0 = reinterpret_cast<void*>(&xe::global_critical_region::mutex());
    void* arg1 = reinterpret_cast<void*>(&builtins_.global_lock_count);
-@@ -102,6 +146,9 @@ bool PPCFrontend::Initialize() {
+@@ -102,6 +171,10 @@ bool PPCFrontend::Initialize() {
        processor_->DefineBuiltin("LeaveGlobalLock", LeaveGlobalLock, arg0, arg1);
    builtins_.syscall_handler = processor_->DefineBuiltin(
        "SyscallHandler", SyscallHandler, nullptr, nullptr);
 +  builtins_.lips_clock_start = processor_->DefineBuiltin("LipsClockStart", LipsClockTrace, memory(), nullptr);
 +  builtins_.lips_clock_started = processor_->DefineBuiltin("LipsClockStarted", LipsClockTrace, memory(), reinterpret_cast<void*>(1));
 +  builtins_.lips_clock_update = processor_->DefineBuiltin("LipsClockUpdate", LipsClockTrace, memory(), reinterpret_cast<void*>(2));
++  builtins_.lips_media_failure = processor_->DefineBuiltin("LipsMediaFailure", LipsMediaFailureTrace, memory(), nullptr);
    return true;
  }
  
 diff --git a/src/xenia/cpu/ppc/ppc_frontend.h b/src/xenia/cpu/ppc/ppc_frontend.h
-index 27cc562..39cabaf 100644
+index 27cc562..691fa7e 100644
 --- a/src/xenia/cpu/ppc/ppc_frontend.h
 +++ b/src/xenia/cpu/ppc/ppc_frontend.h
-@@ -34,6 +34,9 @@ struct PPCBuiltins {
+@@ -34,6 +34,10 @@ struct PPCBuiltins {
    Function* enter_global_lock;
    Function* leave_global_lock;
    Function* syscall_handler;
 +  Function* lips_clock_start;
 +  Function* lips_clock_started;
 +  Function* lips_clock_update;
++  Function* lips_media_failure;
  };
  
  class PPCFrontend {
 diff --git a/src/xenia/cpu/ppc/ppc_hir_builder.cc b/src/xenia/cpu/ppc/ppc_hir_builder.cc
-index 42d996c..8815870 100644
+index 42d996c..a46ed2d 100644
 --- a/src/xenia/cpu/ppc/ppc_hir_builder.cc
 +++ b/src/xenia/cpu/ppc/ppc_hir_builder.cc
 @@ -33,6 +33,7 @@ DEFINE_bool(
@@ -104,7 +131,7 @@ index 42d996c..8815870 100644
  
  namespace xe {
  namespace cpu {
-@@ -174,6 +175,17 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
+@@ -174,6 +175,19 @@ bool PPCHIRBuilder::Emit(GuestFunction* function, uint32_t flags) {
  
      MaybeBreakOnInstruction(address);
  
@@ -113,6 +140,8 @@ index 42d996c..8815870 100644
 +      if (address == 0x82D62AD0) probe = builtins()->lips_clock_start;
 +      if (address == 0x82D62FC8) probe = builtins()->lips_clock_started;
 +      if (address == 0x82D64C90) probe = builtins()->lips_clock_update;
++      if (address == 0x82D10C30 && code == 0x38C00000)
++        probe = builtins()->lips_media_failure;
 +      if (probe) {
 +        ContextBarrier();
 +        CallExtern(probe);

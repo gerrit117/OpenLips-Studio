@@ -1,8 +1,16 @@
 diff --git a/src/xenia/kernel/xam/xam_ui.cc b/src/xenia/kernel/xam/xam_ui.cc
-index e92d441..79bb61f 100644
+index e92d441..4211dbe 100644
 --- a/src/xenia/kernel/xam/xam_ui.cc
 +++ b/src/xenia/kernel/xam/xam_ui.cc
-@@ -596,7 +596,24 @@ dword_result_t XamShowDeviceSelectorUI_entry(
+@@ -13,6 +13,7 @@
+ #include "xenia/base/system.h"
+ #include "xenia/hid/input_system.h"
+ #include "xenia/kernel/kernel_state.h"
++#include "xenia/kernel/xthread.h"
+ #include "xenia/kernel/util/shim_utils.h"
+ #include "xenia/kernel/xam/xam_content_device.h"
+ #include "xenia/kernel/xam/xam_private.h"
+@@ -596,7 +597,29 @@ dword_result_t XamShowDeviceSelectorUI_entry(
  }
  DECLARE_XAM_EXPORT1(XamShowDeviceSelectorUI, kUI, kImplemented);
  
@@ -11,6 +19,11 @@ index e92d441..79bb61f 100644
 +                                 const ppc_context_t& ctx) {
 +  XELOGE("Dirty-disc guest failure: user={} lr={:08X} sp={:08X}",
 +         uint32_t(user_index), uint32_t(ctx->lr), uint32_t(ctx->r[1]));
++  auto failure_thread = XThread::GetCurrentThread();
++  if (failure_thread) {
++    XELOGE("Dirty-disc origin: thread_start={:08X}",
++           failure_thread->start_address());
++  }
 +  auto memory = ctx->kernel_state->memory();
 +  uint32_t frame = uint32_t(ctx->r[1]);
 +  for (unsigned i = 0; i < 12 && frame >= 0x10000 &&

@@ -15,7 +15,7 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
-- A complete 770-note UltraStar import loads and advances through pages over original OG media. Custom-media tests are still rejected at song start; matching VC-1/WMA Pro codec names alone is insufficient. See [controlled media tests](docs/custom_media_runtime_tests.md) for corpus header distributions and next probes.
+- A fresh 770-note UltraStar chart and newly encoded VC-1/WMA Pro video now play in the isolated OG test slot and reach results. A one-byte ASF bitmap-header correction reproduces acceptance; audio was user-confirmed. Synchronization and independent catalog registration remain unfinished. See [controlled media tests](docs/custom_media_runtime_tests.md).
 
 - A fully generated OG chart/lyric pair now has measured native clock progression, and a fresh six-note chart switches lyric/note pages without instrumentation. The earlier frozen-clock diagnosis was incorrect for this tested pair. Independent media/catalog registration remains unfinished; see [native clock comparison](docs/og_chart_clock_probe.md).
 

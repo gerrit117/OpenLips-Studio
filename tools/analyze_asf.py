@@ -51,7 +51,8 @@ def inspect(path):
                 raise ValueError('stream format outside object')
             fmt = payload[54:54 + length]
             stream = dict(number=flags & 0x7f, encrypted=bool(flags & 0x8000),
-                          type=str(UUID(bytes_le=payload[:16])), format_hex=fmt.hex())
+                          type=str(UUID(bytes_le=payload[:16])), format_hex=fmt.hex(),
+                          format_offset=pos + 24 + 54)
             if payload[:16] == AUDIO:
                 if len(fmt) < 16:
                     raise ValueError('truncated WAVEFORMAT')
@@ -63,6 +64,8 @@ def inspect(path):
                     raise ValueError('truncated video format')
                 stream.update(kind='video', width=struct.unpack_from('<I', fmt)[0],
                               height=struct.unpack_from('<I', fmt, 4)[0],
+                              bitmap_header_size=struct.unpack_from('<I', fmt, 11)[0],
+                              bitmap_bit_count=struct.unpack_from('<H', fmt, 25)[0],
                               fourcc=fmt[27:31].decode('ascii', errors='replace'))
             result['streams'].append(stream)
         pos += size
@@ -85,7 +88,8 @@ def main():
             failures.append(dict(filename=str(path), error=str(error)))
     if args.summary:
         patterns = Counter((r.get('min_packet'), r.get('max_packet'), r.get('preroll_ms'),
-                            tuple((s.get('kind'), s.get('codec_tag'), s.get('bits'), s.get('fourcc'))
+                            tuple((s.get('kind'), s.get('codec_tag'), s.get('bits'),
+                                   s.get('fourcc'), s.get('bitmap_bit_count'))
                                   for s in r['streams'])) for r in rows)
         print(json.dumps(dict(analyzed=len(rows), failures=failures,
                          files=[r['filename'] for r in rows],
