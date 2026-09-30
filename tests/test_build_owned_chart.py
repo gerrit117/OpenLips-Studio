@@ -1,12 +1,13 @@
 import math
 import struct
+from pathlib import Path
 
 import pytest
 
 from tools.build_owned_chart import TRACKS, OG_CLASS_TOKENS, build_owned_pair, validate_owned_chart
 from tools.build_lyric_resource import TEXT
 from tools.walk_ixb_graph import Graph, GraphError
-from tools.write_template_chart import Note, SongChart
+from tools.write_template_chart import Note, SongChart, load_json_chart
 
 
 def model():
@@ -89,3 +90,16 @@ def test_movie_audio_and_full_duration_are_structurally_owned():
     assert struct.unpack_from(">f", chart, movie.payload + 8)[0] == pytest.approx(0.575034)
     assert struct.unpack_from(">f", chart, audio.payload + 12)[0] == pytest.approx(190.8 - 0.575034)
     assert graph.summary()["graph_errors"] == []
+
+
+def test_synthetic_clock_fixture_has_time_driven_page_boundaries():
+    fixture = Path(__file__).resolve().parents[1] / "examples/synthetic/chart_clock_pages.json"
+    model = load_json_chart(fixture)
+    data, _ = build_owned_pair(model, "ClockTest", "Audio/ClockTest", song_duration=190.8)
+    graph = Graph(data)
+    pages = [r for r in graph.records if graph.is_a(r, "lpsPageBreakMarker")]
+    times = [struct.unpack_from(">f", data, r.payload + 8)[0] for r in pages]
+    assert times == pytest.approx([3.75, 13.75, 23.75, 189.8])
+    assert graph.summary()["melodies"] == 6
+    root = next(r for r in graph.records if graph.is_a(r, "lpsChart"))
+    assert data[root.payload + 32:root.payload + 48] == bytes(16)

@@ -93,7 +93,7 @@ index 27cc562..39cabaf 100644
  
  class PPCFrontend {
 diff --git a/src/xenia/cpu/ppc/ppc_hir_builder.cc b/src/xenia/cpu/ppc/ppc_hir_builder.cc
-index 42d996c..6a1d8dc 100644
+index 42d996c..8815870 100644
 --- a/src/xenia/cpu/ppc/ppc_hir_builder.cc
 +++ b/src/xenia/cpu/ppc/ppc_hir_builder.cc
 @@ -33,6 +33,7 @@ DEFINE_bool(
@@ -115,7 +115,7 @@ index 42d996c..6a1d8dc 100644
 +      if (address == 0x82D64C90) probe = builtins()->lips_clock_update;
 +      if (probe) {
 +        ContextBarrier();
-+        Call(probe);
++        CallExtern(probe);
 +      }
 +    }
 +

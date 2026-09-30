@@ -1,5 +1,73 @@
 # OG chart clock investigation
 
+## Completed comparison: September 30, 2026
+
+The current fresh chart's clock is NOT stalled. Both measured runs use the
+same native Start/Update addresses, emulator build, full Original Video mode,
+offline test profile, original Amazing media and isolated catalog slot.
+
+| Chart | Start calls/completions | Post-Start samples | Host span | Chart advance |
+|---|---|---|---|---|
+| Original Amazing | 1 / 1 | 115 | 58.184915 s | 58.174700 s |
+| Fresh four-note v6 | 1 / 1 | 170 | 86.185361 s | 86.173701 s |
+
+In both runs, every captured post-Start update has started=1. The audio
+object is null, the movie object transitions from state 1 to 2, movie_started
+is 1, and the media base is 0.575034 seconds. Frame deltas are nonzero.
+Original note/lyric changes were visible. Fresh `New Lips test song` progressed
+from partial red highlighting to all four words red; afterward its completed
+page remained on screen while the clock continued.
+
+The four-note chart has a single lyric line and no subsequent Section page
+break until 189.8 seconds. Page-based bars remain positioned on that page;
+their fixed positions after the last note are not evidence of a frozen clock.
+This explains the apparent stationary display in the current controlled test.
+Historical variants and ABC's audio-only issue have not been re-measured;
+do not generalize this conclusion to those files or all Lips generations.
+
+### Control without probes
+
+Generated a fresh six-note, three-line pair from
+`examples/synthetic/chart_clock_pages.json`. Timings are 4.55/6.0,
+14.55/16.0 and 24.55/26.0 seconds. Section page boundaries are 3.75, 13.75,
+23.75 and 189.8 seconds. No source heap or root hash was copied.
+Launched the same emulator with `lips_clock_trace_path` empty (verified in
+config), so no HIR clock probes were emitted. The first page `First line`
+was observed with an active partial highlight, and later the distinct third
+page `Third line` with advancing/final highlights. This independently verifies
+time-driven page replacement; the second page transition was not captured.
+
+No clock patch or new chart ownership structure was needed. Builder
+serialization remains unchanged in this iteration. Its stale frozen-clock
+description and documentation were corrected. Remaining work includes final
+page/outro presentation, real UltraStar many-page validation, audio-only mode,
+media compatibility and independent catalog registration. These diagnostic
+slot tests are not a complete standalone song pipeline or verified scoring.
+
+### Probe correction and validation
+
+The first instrumented original-control attempt crashed in host code before
+writing a trace. Symbol lookup mapped host RVA 0xF29AB0 to a Function RTTI data
+symbol, not a guest game function. The probe mistakenly used HIR `Call` for a
+host builtin. Replacing it with `CallExtern` fixed that instrumentation bug;
+the corrected build completed and both controls ran. The committed patch
+contains the corrected call. Do not count this host crash as a game/chart
+failure or evidence against renamed intro files.
+
+All 138 tests and 11 subtests pass, including synthetic trace classification
+and six-note page-boundary validation. Xenia is closed. Original Amazing chart
+and lyric were restored from the re-extracted backup and SHA-256-verified.
+The three `.wmv.bak` intro renames remain, matching the user's preference;
+all three completed tests booted without a visible missing-intro error.
+Trace files, generated IXBs, game assets and decompilation stay private.
+
+Confidence is high for these controlled OG runtime results. Scope is one
+original Amazing pair and two synthetic pairs, not an all-corpus invariant.
+Corpus-wide serialization findings remain in the existing separate reports.
+
+The checkpoint below records the earlier pause and is retained as history;
+its pending tests have now been completed as described above.
+
 ## Checkpoint: September 30, 2026
 
 Paused at the user's request before launching either comparison run. No

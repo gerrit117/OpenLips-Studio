@@ -1,0 +1,10 @@
+{
+  "notes": [
+    {"time": 4.55, "length": 1.2, "pitch": 60, "text": "First", "end_word": true},
+    {"time": 6.0, "length": 1.2, "pitch": 67, "text": "line", "end_word": true, "line_break_after": true},
+    {"time": 14.55, "length": 1.2, "pitch": 64, "text": "Second", "end_word": true},
+    {"time": 16.0, "length": 1.2, "pitch": 71, "text": "line", "end_word": true, "line_break_after": true},
+    {"time": 24.55, "length": 1.2, "pitch": 62, "text": "Third", "end_word": true},
+    {"time": 26.0, "length": 1.2, "pitch": 69, "text": "line", "end_word": true, "line_break_after": true}
+  ]
+}

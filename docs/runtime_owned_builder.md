@@ -1,9 +1,11 @@
 # Runtime-owned builder investigation
 
-Work in progress, 2026-09-29. A fully generated OG chart/lyric pair loads and
-renders custom note bars and words in Amazing's existing catalog slot. Chart
-time does not advance with the media, so playable synchronization is not yet
-verified. No new catalog entry or media conversion is complete.
+Work in progress, updated 2026-09-30. A fully generated OG chart/lyric pair
+loads and renders custom notes in Amazing's existing catalog slot. Native
+Start/Update traces now verify clock progression, and an uninstrumented fresh
+six-note chart switches pages and highlights syllables. The earlier frozen-clock
+diagnosis was incorrect for this pair. No new catalog entry or media conversion
+is complete. See [measured comparison](og_chart_clock_probe.md).
 
 **End goal:** Import an UltraStar song and build a standalone Lips song from
 scratch, with its own chart, lyrics, media and catalog registration. It must
@@ -162,6 +164,10 @@ causes it.
 
 ## Fresh Amazing chart runtime tests
 
+The screenshot-only interpretation below is historical and superseded by the
+native measurements on September 30. Identical bar positions after the four
+notes finish do not imply a stopped clock: this demo has only one lyric page.
+
 The test used a four-note SongChart at 4.55-6.55 seconds, text `New Lips test
 song`, a fresh chart and fresh lyric IXB, and Amazing's original catalog,
 audio and video in the isolated game copy. The chart has one owned root, 11
@@ -188,12 +194,13 @@ profile directory was not modified.
 Screenshots separated by 10-16 seconds show identical bar positions and lyric
 state while the video advances. A fleeting white syllable immediately after
 loading is not proof of note progress. Original Amazing reportedly advances
-normally; the fresh chart's clock/sequence activation remains the blocker.
+normally. At that point a clock/activation problem was suspected, not measured.
 
 In 58/58 readable chart samples, the Conductor has at least one
 `ixSeqSongSectionPatternCode`. The current builder now emits one, matching its
 observed size (32), OG first-word token, and first type/group/pattern values.
-That was necessary for corpus fidelity but did not fix the runtime clock.
+That improved corpus fidelity; screenshot-only tests did not establish its
+effect on the runtime clock.
 All 58/58 lpsChart roots have a nonzero 16-byte `ixAsset.m_aHash` field; the
 fresh chart currently zeros it. Its derivation and semantic role remain open.
 The chart's sequence vectors and asset fields also use zero allocators where
@@ -222,9 +229,10 @@ this song's full video/audio resources.
 
 ## Next discrimination
 
-Compare runtime effects of a nonzero root `m_aHash` and real sequence/vector
-file-layout sentinels, one field family at a time. If neither activates the
-clock, instrument the OG loader/sequence scheduler in Xenia and compare the
-first update against a running original Amazing chart. Only after time advances
-should the 770-note Shape of You import and media/catalog registration be used
-for an end-to-end song test.
+Clock activation is now measured rather than inferred. The current builder's
+single-page test keeps its completed page until a late Section page-break.
+The six-note, three-page fixture demonstrates time-driven page replacement
+without clock probes or a copied root hash. Next validate a real UltraStar
+import with many pages, then media compatibility and independent catalog
+registration. ABC's separate audio-only timing issue is not resolved by the
+Amazing video-mode measurements.

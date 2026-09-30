@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Experimental OG chart graph, generated without a template heap.
 
-The game loads and renders a four-note pair, but its chart clock stalls.
-Audio/catalog registration remain external; test only in an isolated slot.
+Native OG traces verify clock progression for the four-note pair. A fresh
+multi-page pair also switches pages without probes. Audio/catalog registration
+remain external; test only in an isolated slot. See docs/og_chart_clock_probe.md.
 """
 from __future__ import annotations
 
@@ -336,7 +337,7 @@ def main():
     graph = Graph(chart)
     print(f"chart_bytes={len(chart)} lyric_bytes={len(lyric)} NumOfElements={len(graph.records)}")
     print(f"tracks={','.join(TRACKS)} notes={graph.summary()['melodies']}")
-    print("fresh ownership graph; no template heap; runtime time progression NOT VERIFIED")
+    print("fresh ownership graph; no template heap; this output still requires runtime validation")
     return 0
 
 
