@@ -11,6 +11,35 @@ not require or reuse any existing song's IXB heap, assets or catalog slot.
 The Amazing slot and original audio/video used below are diagnostic controls
 only; loading there is not completion of the builder.
 
+## Optional game-patch path (not a replacement)
+
+Investigate an owner-applied patch for the user's own OG Lips XEX as a separate
+compatibility route. A small version-checked PowerPC patch might redirect a
+catalog lookup or file-loader call; native UltraStar TXT parsing inside the game
+would require a much larger injected routine/plugin and knowledge of allocation,
+object construction, sequence registration, lyric encoding, and media loading.
+Ghidra/XEXLoaderWV disassembly plus Xenia runtime traces are sufficient to start
+locating hooks; a complete decompilation or recompilation is not a prerequisite.
+First prove a harmless hook on the exact tested XEX hash, then evaluate whether
+conversion at load time provides value beyond the standalone writer. Distribute
+only original patch code/data and a version-verifying patcher, never a patched
+game executable or bundled copyrighted game assets. Legal distribution details
+must be checked separately before any public release.
+
+The OG disc also contains readable Lua scripts. `lps/Script/Main.lua` calls
+`LoadInGamePackages()`, then `CreateChart()`; `LpsUtilities.lua` obtains a chart
+player via `GameFramework:GetChartPlayerFromMusicIndex`, loads media and calls
+`_ChartPlayer:Start(0.0)`. `Main.lua` also clears/restores the music-time tempo
+map around TitleCall. `SequenceTrackConfig.lua` exposes
+`InitDefaultChartSequences(chart)` with `chart:CreateSequence(...)` calls, and
+`MusicDatabase.lua` contains a SQL table/insert helper. These are real scripting
+surfaces, but the loaded chart graph and playback engine still appear native.
+It is unverified whether the retail Lua environment permits filesystem reads,
+runtime marker construction, or new catalog entries. A low-risk next probe is
+to alter only the isolated game's Lua with a unique `Report(...)` message and
+confirm in Xenia logs that the modified script runs; then instrument chart
+creation and clock state before considering a Lua-based UltraStar bridge.
+
 ## Isolated test environment
 
 The extracted original Lips 2008 installation was copied into an ignored
@@ -147,6 +176,10 @@ displayed the exact four custom note bars and words over Amazing's video.
 | v4 | One Conductor section-pattern code | Same |
 | v5 | First tempo time equals Amazing MusicStartOffset, BPM 118 | Same |
 | v6 | Copy Amazing's root `ixAsset.m_aHash` into the fresh chart | Inconclusive: Xenia stalled at the pre-menu "Saving content" screen, before song selection |
+
+A retry of v6 on September 30 booted through the profile screen and reached
+Amazing's song action menu. It was stopped before gameplay to investigate the
+separate Lua-patch question, so v6's chart-clock outcome is still unknown.
 
 Screenshots separated by 10-16 seconds show identical bar positions and lyric
 state while the video advances. A fleeting white syllable immediately after
