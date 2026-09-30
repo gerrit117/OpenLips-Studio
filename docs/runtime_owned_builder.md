@@ -175,11 +175,15 @@ displayed the exact four custom note bars and words over Amazing's video.
 | v3 | OG first-word class tokens on chart/sequence/code objects | Same |
 | v4 | One Conductor section-pattern code | Same |
 | v5 | First tempo time equals Amazing MusicStartOffset, BPM 118 | Same |
-| v6 | Copy Amazing's root `ixAsset.m_aHash` into the fresh chart | Inconclusive: Xenia stalled at the pre-menu "Saving content" screen, before song selection |
+| v6 | Copy Amazing's root `ixAsset.m_aHash` into the fresh chart | Loads and renders; chart stays still |
 
-A retry of v6 on September 30 booted through the profile screen and reached
-Amazing's song action menu. It was stopped before gameplay to investigate the
-separate Lua-patch question, so v6's chart-clock outcome is still unknown.
+A later v6 run on September 30 used an isolated copy of the working offline
+profile, reached full Amazing gameplay, and displayed the four custom bars and
+`New Lips test song`. Screenshots 15 seconds apart showed the same bar/text
+positions while the video changed. This rejects the root-hash-only fix for the
+stationary chart. The isolated chart and lyric files were restored from the
+re-extracted OG backup afterward and verified SHA-256-identical. The original
+profile directory was not modified.
 
 Screenshots separated by 10-16 seconds show identical bar positions and lyric
 state while the video advances. A fleeting white syllable immediately after
@@ -196,7 +200,7 @@ The chart's sequence vectors and asset fields also use zero allocators where
 many real OG files use `0xcdcdcdcd`; whether that matters at runtime is unknown.
 
 The test copy was restored to the re-extracted original Amazing chart and lyric
-after testing, including the inconclusive v6 run. Original ISO, extraction and
+after testing, including the completed v6 run. Original ISO, extraction and
 sample directories were untouched.
 
 ## Media findings

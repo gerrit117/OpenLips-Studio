@@ -28,6 +28,25 @@ verify its runtime value. A safe path is to trace the packed script load and
 test one reversible log/display hook in the isolated Xenia copy before
 enabling any controller debug commands.
 
+Setting `LPS_LUA_RELEASE` to zero has **not** been tested. The conditional in
+`Settings.lua` only controls debug defaults after the script is running. It
+does not select a source file or prove that loose Lua will be loaded. A
+read-only Ghidra audit of the verified OG XEX found `PackedScript/` and
+`require( "Script/Main" )` in the executable's script-related string area,
+along with the `LPS_LUA_RELEASE` name. Automatic xrefs are incomplete there,
+so their precise native call order remains unresolved. The startup file-open
+trace is stronger evidence: the packed resource was opened, and no loose
+`.lua` was opened in the observed boot.
+
+`PackedScript.X360` likely supplies executable script content, but its internal
+representation and coverage have not been decoded or proven. A debug flag
+cannot be assumed to swap that content automatically. Editing loose source,
+editing the packed resource, or hooking the native Lua loader are distinct
+experiments; only the first was tried, with no visible effect.
+
+The audit is reproducible with `tools/ghidra/StudyOgLuaLoad.java` against the
+OG project, read-only. Its private output is not included in this repo.
+
 ## Useful existing hooks for custom-song tests
 
 | Area | Script evidence | Use and limit |
