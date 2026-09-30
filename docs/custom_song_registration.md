@@ -49,8 +49,9 @@ build adds `--note-offset 1.5`, delaying notes, their linked lyric markers and
 generated page breaks together. It does not shift media/tempo start or stretch
 notes; CLI requires an explicit song duration to keep media/end timing fixed.
 This candidate loads from the independent entry; Computer Use verified active
-notes, lyric pages and video, and native clock progression. Audible alignment
-is not yet user-confirmed. Preserve the zero-offset
+notes, lyric pages and video, and native clock progression. The user reports
+that +1.5 s is too late. It is a rejected alignment candidate, not a new
+default and not evidence of an IXB format failure. Preserve the zero-offset
 working pair for comparison.
 
 Imported note lengths: minimum 0.078125 s, median 0.117188 s, maximum 0.742188 s.
@@ -92,6 +93,15 @@ Xenia staging directory is not an Xbox-installable signed STFS package.
 Hardware packaging/acceptance and independently encoded DLC audio/previews
 remain unverified. In particular, the tested OG movie audio path must not be
 assumed equivalent to a DLC xWMA path without a controlled test.
+
+The compact-family reference chart in `you lost` contains an ixAudioMarker
+whose resource name is an original disc-style `Levels/Intl/..._GV` name,
+whereas its manifest names a package-local xWMA. Therefore a DLC chart's
+embedded audio URI must not be guessed solely by concatenating the package
+filename. This is one-file evidence (low confidence); inspect all available
+charts and the runtime music-index override before choosing the synthetic
+DLC resource binding. No rewrite of the accepted chart or lyric ownership
+graph is warranted by this observation.
 
 ## Reproduction commands
 
