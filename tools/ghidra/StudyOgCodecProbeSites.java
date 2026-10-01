@@ -8,7 +8,7 @@ import java.util.TreeSet;
 /** Export private bounded instruction sites for read-only OG codec tracing. */
 public class StudyOgCodecProbeSites extends GhidraScript {
     public void run() throws Exception {
-        if (getScriptArgs().length != 1)
+        if (getScriptArgs().length < 1)
             throw new IllegalArgumentException("private output path required");
         if (!currentProgram.getExecutableSHA256().equalsIgnoreCase(
             "95f32d3de1f80a85dd2faedc4e88f4bf7e218606051c1b2971d17c35a0b7e4d9"))
@@ -21,10 +21,16 @@ public class StudyOgCodecProbeSites extends GhidraScript {
             starts.add(start);
         }
         try (PrintWriter out = new PrintWriter(getScriptArgs()[0], "UTF-8")) {
-            for (long start : new long[] {0x82420768L, 0x824aa740L, 0x824aa268L,
+            long[] requested;
+            if (getScriptArgs().length > 1) {
+                requested = new long[getScriptArgs().length - 1];
+                for (int i = 1; i < getScriptArgs().length; i++)
+                    requested[i - 1] = Long.parseUnsignedLong(getScriptArgs()[i], 16);
+            } else requested = new long[] {0x82420768L, 0x824aa740L, 0x824aa268L,
                     0x824b1e90L, 0x824fbe28L, 0x824fbad8L, 0x82508b58L,
                     0x8252d3c8L, 0x824b2d80L, 0x824bcc48L, 0x824bd1a0L,
-                    0x82508df0L, 0x824fb388L, 0x82507e00L}) {
+                    0x82508df0L, 0x824fb388L, 0x82507e00L};
+            for (long start : requested) {
                 Long end = starts.higher(start);
                 if (end == null || end <= start || end - start > 0x10000) {
                     out.println("UNBOUNDED " + toAddr(start));
@@ -35,7 +41,7 @@ public class StudyOgCodecProbeSites extends GhidraScript {
                     Address at = toAddr(p);
                     disassemble(at);
                     var instruction = getInstructionAt(at);
-                    if (instruction != null && (start == 0x824b1e90L ||
+                    if (instruction != null && (getScriptArgs().length > 1 || start == 0x824b1e90L ||
                             start == 0x824bcc48L || start == 0x824bd1a0L ||
                             start == 0x824fbad8L || start == 0x82508b58L ||
                             start == 0x8252d3c8L || start == 0x82508df0L ||

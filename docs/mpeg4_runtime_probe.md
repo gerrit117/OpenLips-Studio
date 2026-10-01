@@ -172,9 +172,83 @@ observations without pretending that preparation alone validates playback.
 
 ## Remaining gates
 
-The next controlled comparison should trace compressed-payload dispatch,
-per-frame decode results and presentation timestamps for original versus remux.
-The current snapshots cover initialization, not that delivery loop. Isolate
+### Delivery-loop follow-up (2026-10-01)
+
+Read-only probes now cover the video delivery loop, not only initialization.
+The original full video delivered frames beyond timestamp 65,648 ms before
+the reference run was closed. A dense corrected-ID WVC1 remux control delivered
+exactly 512 successful frames, each 497,664 bytes (768 x 432 YUV420), with EOF
+unset. Its timestamps advanced from 0 to 21,938 ms. There were 475 distinct
+32-word frame sample hashes; these are variation checks, not full-frame hashes.
+The next delivery entry was reached, but it never completed. The chart clock
+continued. An independent follow-up reproduced the same 512-frame boundary.
+
+That follow-up reached the buffer-get return at `0x824B1B44` and prefix-size
+return at `0x824B1B5C` for delivery 513. It then reached the pre-pump call at
+`0x824B1C74`, without returning at `0x824B1C78`. This localizes the wait inside
+`0x824BDBA8` / its demux pump, rather than the initial frame buffer acquisition
+or the subsequent decoded-frame copy. It does not yet distinguish source IO,
+packet assembly, decoder dispatch or a wait in a worker.
+
+An earlier 33 ms versus 41 ms timing comparison accidentally compared the
+original menu preview with the remux full video. This hypothesis is rejected:
+the actual original and remux full-video initial timestamp progression agrees.
+Separate delivery objects by owner AND demux instance; do not merge previews.
+`tools/analyze_video_delivery_trace.py` does this and excludes unreadable
+timestamps without inventing consecutive deltas across gaps.
+
+`tools/analyze_asf_packets.py` inventories fixed-size ASF packets read-only.
+It validates fragment offsets and sizes for replicated-data payloads of at
+least eight bytes; compressed/other payload forms are explicitly counted as
+unvalidated. Object-start index is not decoded-frame index.
+
+Corpus: all 127 video-containing files used in the earlier header inventory,
+under the OG backup and Songdateien, were analyzed without parser failures or
+detected fragment discontinuities. Copies are included; this is not 127 unique
+songs. The private inventory records every analyzed path.
+
+| Video replicated-data length | Occurrence | Confidence |
+|---|---:|---|
+| 10 bytes (8 base + 2 extension) | 121/127 files | High, observed corpus pattern |
+| 24 bytes (8 base + 16 extension) | 6/127 files | High occurrence, meaning unresolved |
+| 8 bytes only | 0/127 originals; present in remux | High difference, low causal confidence |
+
+Amazing original: 2,672 ASF packets, 7,210 video fragments, 4,574 video object
+starts. Remux: 2,738 packets, 7,025 fragments, the same 4,574 starts. Both have
+560 audio object starts and no detected fragment continuity failures. Original
+video extension values include `2900`, `2a00`, `0100`; the remux has none.
+The [ASF extension documentation](https://learn.microsoft.com/en-us/windows/win32/medfound/asf-payload-extension-guids)
+defines a sample-duration extension in milliseconds. Its absence is a suspect,
+not proof: both files also use wrapping object numbers, so a 512-frame stop
+alone does not establish an object-number rollover bug.
+
+Private captures: `original-delivery-*`, `remux-delivery-*`,
+`remux-delivery-dense-*`, `remux-delivery-wait-*` and
+`asf-payload-corpus-20261001.json`. No media or guest-code exports are committed.
+Focused source-read/decoder-dispatch probes are the next isolation step. The
+working Windows Studio encoder remains unchanged; no alternative codec is
+promoted to supported.
+
+The subsequent `remux-pump-*` run reaches source-reader return `0x824B9AC0`
+with status zero, then complete-payload timing return `0x824B9BA0` with status
+zero, for pump 528 (delivery 513). It reaches dispatcher call `0x824B9EC4`
+into `0x824C6010`, but not its return `0x824B9EC8`. Static inspection shows
+that dispatcher selects a registered callback; the exact blocked callback and
+its inner wait are not captured yet. This excludes a wait in the preceding
+source-reader call for that frame, not all possible asynchronous IO problems.
+
+At the user's request, codec research is **paused**, not resolved. A Xenia
+compatibility defect remains possible; original playback success does not
+prove every remux/container path is correctly emulated. Distinguishing this
+requires a native-console control or deeper callback/worker capture. Xenia was
+closed, the original Amazing full video restored and its SHA-256 verified as
+`34cd7e26776df62a627858ecd24e10462ef1b1d772c26d4eea7912a21b911430`.
+Latest checkpoint: 289 tests passed, 3 skipped, 11 subtests passed; the focused
+probe build succeeded and its cumulative patch passed reverse-apply checking.
+
+If research resumes, follow the dispatcher callback/worker wait for delivery
+513 and compare its state with the original. Delivery-loop snapshots above
+now supplement the earlier initialization probes. Independently isolate
 the MP4S setup/input-parser rejection separately. MP42 with corrected IDs has
 not yet had a runtime test. No codec is promoted on partial initialization.
 Audio and video do not need to be the same codec; preserving container

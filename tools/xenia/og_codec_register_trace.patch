@@ -1,5 +1,5 @@
 diff --git a/src/xenia/cpu/ppc/ppc_frontend.cc b/src/xenia/cpu/ppc/ppc_frontend.cc
-index 666bd7b..f5924b4 100644
+index 666bd7b..3b3eaaa 100644
 --- a/src/xenia/cpu/ppc/ppc_frontend.cc
 +++ b/src/xenia/cpu/ppc/ppc_frontend.cc
 @@ -9,7 +9,14 @@
@@ -27,7 +27,7 @@ index 666bd7b..f5924b4 100644
  namespace xe {
  namespace cpu {
  namespace ppc {
-@@ -91,6 +101,98 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
+@@ -91,6 +101,156 @@ void SyscallHandler(PPCContext* ppc_context, void* arg0, void* arg1) {
    }
  }
  
@@ -97,10 +97,20 @@ index 666bd7b..f5924b4 100644
 +  static std::mutex mutex;
 +  std::lock_guard<std::mutex> lock(mutex);
 +  static std::ofstream out(cvars::lips_codec_trace_path);
-+  static std::map<uint32_t, unsigned> counts;
-+  if (++counts[site] > 120) return;
++  bool delivery = site == 0x824B1B08 || site == 0x824B1BA8 ||
++      site == 0x824B1C78 || site == 0x824B1CD8 || site == 0x824B1DC8 ||
++      site == 0x824B1B44 || site == 0x824B1B5C || site == 0x824B1C74;
++  bool pump = site == 0x824B9ABC || site == 0x824B9AC0 ||
++      site == 0x824B9B9C || site == 0x824B9BA0 ||
++      site == 0x824B9EC4 || site == 0x824B9EC8;
++  uint32_t owner = delivery ? uint32_t(ctx->r[site == 0x824B1B08 ? 3 : 30]) : 0;
++  if (pump) owner = uint32_t(ctx->r[28]);
++  static std::map<uint64_t, unsigned> counts;
++  auto key = (uint64_t(site) << 32) | owner;
++  unsigned hit = ++counts[key];
++  if ((delivery || pump) ? (hit > 1200 && (hit > 12000 || hit % 120 != 0)) : hit > 120) return;
 +  out << fmt::format("site={:08X} hit={} lr={:08X} sp={:08X}",
-+                     site, counts[site], uint32_t(ctx->lr), uint32_t(ctx->r[1]));
++                     site, hit, uint32_t(ctx->lr), uint32_t(ctx->r[1]));
 +  for (unsigned reg = 3; reg <= 8; ++reg)
 +    out << fmt::format(" r{}={:08X}", reg, uint32_t(ctx->r[reg]));
 +  if (site == 0x824B209C || site == 0x824BD2DC || site == 0x824BD2FC)
@@ -112,6 +122,54 @@ index 666bd7b..f5924b4 100644
 +    *result = xe::load_and_swap<uint32_t>(memory->TranslateVirtual(p));
 +    return true;
 +  };
++  auto field = [&read](const char* label, uint32_t p) {
++    uint32_t value;
++    if (read(p, &value)) out << fmt::format(" {}={:08X}", label, value);
++    else out << fmt::format(" {}=unreadable", label);
++  };
++  if (pump && owner <= UINT32_MAX - 0x27C) {
++    out << fmt::format(" pump_owner={:08X} ctr={:08X}", owner, uint32_t(ctx->ctr));
++    field("source", owner);
++    field("active", owner + 0x218);
++    field("queue", owner + 0x238);
++    field("decoders", owner + 0x23C);
++    field("dispatcher", owner + 0x260);
++    field("stream_record", uint32_t(ctx->r[1]) + 0x54);
++    field("size_out", uint32_t(ctx->r[16]));
++  }
++  if (delivery) {
++    out << fmt::format(" owner={:08X}", owner);
++    if (owner <= UINT32_MAX - 0x224) {
++      field("stream", owner + 0x1FC);
++      field("demux", owner + 0x208);
++      field("remaining", owner + 0x21C);
++      field("eof", owner + 0x220);
++      field("time_hi", owner + 0x80);
++      field("time_lo", owner + 0x84);
++    }
++    if (site != 0x824B1B08) {
++      field("written", uint32_t(ctx->r[26]));
++      field("pump_stream", uint32_t(ctx->r[31]) + 0x60);
++      field("read_bytes", uint32_t(ctx->r[31]) + 0x50);
++      field("read_time_hi", uint32_t(ctx->r[31]) + 0x68);
++      field("read_time_lo", uint32_t(ctx->r[31]) + 0x6C);
++    }
++    if (site == 0x824B1DC8) {
++      out << fmt::format(" delivery_status={:08X}", uint32_t(ctx->r[28]));
++      uint32_t bytes = 0;
++      if (read(uint32_t(ctx->r[26]), &bytes) && bytes >= 4 && bytes <= 0x1000000) {
++        uint32_t hash = 2166136261u;
++        uint32_t base = uint32_t(ctx->r[23]) + 8;
++        bool valid = base <= UINT32_MAX - bytes;
++        for (unsigned i = 0; valid && i < 32; ++i) {
++          uint32_t value;
++          valid = read(base + uint32_t(uint64_t(bytes - 4) * i / 31), &value);
++          if (valid) hash = (hash ^ value) * 16777619u;
++        }
++        if (valid) out << fmt::format(" frame_sample_hash={:08X}", hash);
++      }
++    }
++  }
 +  if (site == 0x824FBE28) {
 +    uint32_t stream = 0, format = 0, tag = 0;
 +    uint32_t p = uint32_t(ctx->r[3]);
@@ -126,7 +184,7 @@ index 666bd7b..f5924b4 100644
  bool PPCFrontend::Initialize() {
    void* arg0 = reinterpret_cast<void*>(&xe::global_critical_region::mutex());
    void* arg1 = reinterpret_cast<void*>(&builtins_.global_lock_count);
-@@ -102,6 +204,23 @@ bool PPCFrontend::Initialize() {
+@@ -102,6 +262,28 @@ bool PPCFrontend::Initialize() {
        processor_->DefineBuiltin("LeaveGlobalLock", LeaveGlobalLock, arg0, arg1);
    builtins_.syscall_handler = processor_->DefineBuiltin(
        "SyscallHandler", SyscallHandler, nullptr, nullptr);
@@ -141,7 +199,12 @@ index 666bd7b..f5924b4 100644
 +                         0x82508B58u, 0x82508D50u, 0x8252D3C8u,
 +                         0x824B2D80u, 0x824B307Cu, 0x824B1F20u, 0x824B1F50u,
 +                         0x824B1F84u, 0x824B1FD4u, 0x824BD1A0u,
-+                         0x824B209Cu, 0x824BD2DCu, 0x824BD2FCu}) {
++                         0x824B209Cu, 0x824BD2DCu, 0x824BD2FCu,
++                         0x824B1B08u, 0x824B1BA8u, 0x824B1C78u,
++                         0x824B1CD8u, 0x824B1DC8u,
++                         0x824B1B44u, 0x824B1B5Cu, 0x824B1C74u,
++                         0x824B9ABCu, 0x824B9AC0u, 0x824B9B9Cu,
++                         0x824B9BA0u, 0x824B9EC4u, 0x824B9EC8u}) {
 +      builtins_.lips_codec_probes[site] = processor_->DefineBuiltin(
 +          fmt::format("LipsCodec_{:08X}", site), LipsCodecTrace, memory(),
 +          reinterpret_cast<void*>(static_cast<uintptr_t>(site)));
