@@ -1,10 +1,7 @@
 [English](README.md) | [Deutsch](README.de.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/concept-01/openlips-logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/branding/concept-01/openlips-logo-light.png">
-  <img src="assets/branding/concept-01/openlips-logo-light.png" alt="OpenLips" width="800">
-</picture>
+![OpenLips](assets/branding/concept-01/openlips-logo-light.png#gh-light-mode-only)
+![OpenLips](assets/branding/concept-01/openlips-logo-dark.png#gh-dark-mode-only)
 
 # OpenLips
 
@@ -22,9 +19,9 @@ I'm Gerrit. I played Lips with friends when I was younger, and for years I've wa
 
 Many hours, days and months went into understanding the files, testing ideas, getting things wrong and trying again. The breakthrough was reaching a point where our own chart and lyric files could be created from scratch, then loaded and played by the original Lips (2008) in testing. For the first time in this project, we have both a working result and documentation explaining how we got there.
 
-My background is in IT, servers and systems. Programming is the part I never properly learned, and my full-time job leaves little room to start from the ground up. AI-assisted development has made it possible for me to turn an idea that kept sitting on the shelf into a project I can actually work on.
+I originally completed vocational training in information electronics, an IT-related field. I later changed careers and now work as a train driver. My enthusiasm for computers, servers and systems has stayed with me, along with plenty of practical experience. Programming is the part I never properly learned, and my full-time job leaves little room to start from the ground up. AI-assisted development has made it possible for me to turn an idea that kept sitting on the shelf into a project I can actually work on.
 
-I understand why some developers have reservations about that, including concerns about quality and what these tools mean for their profession. I don't see their knowledge as replaceable. This project depends on it. Nor is this a one-prompt “make no mistakes” project: there is a lot of research, hands-on testing, debugging and documentation behind it, and mistakes still need to be found and fixed.
+As a train driver, I worry about automation too. The thought of being replaced by a computer someday, or just sitting there watching the train drive itself, makes me uneasy. So developers' concerns about what AI might mean for their profession aren't some abstract issue to me. I also understand their concerns about software quality. I don't see their knowledge as replaceable. This project depends on it. Nor is this a one-prompt “make no mistakes” project: there is a lot of research, hands-on testing, debugging and documentation behind it, and mistakes still need to be found and fixed.
 
 That's also why I want to open it up now. I'd love for OpenLips to become more than my personal experiment. If you care about Lips, karaoke, reverse engineering or making useful tools, you're welcome here.
 
@@ -60,11 +57,8 @@ Some foundations are already in place:
 
 ## What Studio can do today
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/concept-01/logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/branding/concept-01/logo-light.png">
-  <img src="assets/branding/concept-01/logo-light.png" alt="OpenLips Studio" width="600">
-</picture>
+![OpenLips Studio](assets/branding/concept-01/logo-light.png#gh-light-mode-only)
+![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Import or create.** Bring in UltraStar TXT files, choose a melody track from a MIDI file, or add notes yourself. UltraStar timing and syllables are preserved on import.
 - **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
@@ -77,7 +71,7 @@ Some foundations are already in place:
 
 *The editor with a small original demo chart.*
 
-<img src="assets/screenshots/studio-note-details.png" alt="Editing a note's timing, pitch, syllable and phrase boundary" width="300">
+![Editing a note's timing, pitch, syllable and phrase boundary](assets/screenshots/studio-note-details.png)
 
 *Each note has editable timing, pitch and lyric settings.*
 

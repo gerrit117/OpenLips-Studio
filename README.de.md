@@ -1,10 +1,7 @@
 [English](README.md) | [Deutsch](README.de.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/concept-01/openlips-logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/branding/concept-01/openlips-logo-light.png">
-  <img src="assets/branding/concept-01/openlips-logo-light.png" alt="OpenLips" width="800">
-</picture>
+![OpenLips](assets/branding/concept-01/openlips-logo-light.png#gh-light-mode-only)
+![OpenLips](assets/branding/concept-01/openlips-logo-dark.png#gh-dark-mode-only)
 
 # OpenLips
 
@@ -22,9 +19,9 @@ Ich bin Gerrit. Als ich jünger war, habe ich Lips oft mit Freunden gespielt. Se
 
 Inzwischen sind viele Stunden, Tage und Monate in das Verstehen der Dateien, in Tests, Irrwege und neue Versuche geflossen. Der entscheidende Schritt war, eigene Chart- und Lyric-Dateien von Grund auf zu erzeugen, die das originale Lips von 2008 im Test laden und abspielen konnte. Zum ersten Mal in diesem Projekt gibt es damit nicht nur ein funktionierendes Ergebnis, sondern auch eine Dokumentation, die den Weg dorthin nachvollziehbar macht.
 
-Ich komme aus der IT und bringe viel praktische Erfahrung mit Computern, Servern und Systemen mit. Programmieren habe ich dagegen nie grundlegend gelernt. Neben meinem Hauptberuf fehlt mir die Zeit, damit ganz von vorn anzufangen. KI-gestützte Entwicklung hat mir die Möglichkeit gegeben, aus einer Idee, die immer liegen geblieben ist, ein echtes Projekt zu machen.
+Ursprünglich habe ich eine Ausbildung zum Informationselektroniker gemacht, also in einem IT-nahen Bereich. Später habe ich den Beruf gewechselt und arbeite heute als Lokführer. Die Begeisterung für Computer, Server und Systeme ist geblieben, ebenso wie viel praktische Erfahrung damit. Programmieren habe ich dagegen nie grundlegend gelernt. Neben meinem Hauptberuf fehlt mir die Zeit, damit ganz von vorn anzufangen. KI-gestützte Entwicklung hat mir die Möglichkeit gegeben, aus einer Idee, die immer liegen geblieben ist, ein echtes Projekt zu machen.
 
-Ich kann verstehen, dass manche Entwickler das kritisch sehen, auch wegen der Qualität solcher Software und möglicher Auswirkungen auf ihren Beruf. Ihre Erfahrung wird dadurch für mich nicht überflüssig. Dieses Projekt baut darauf auf. Und es geht hier auch nicht darum, einmal „mach alles, aber bitte ohne Fehler“ in einen Chat zu schreiben: Dahinter stecken viel Recherche, praktische Tests, Fehlersuche und Dokumentation. Fehler müssen trotzdem gefunden und behoben werden.
+Als Lokführer kenne ich die Sorge vor Automatisierung selbst. Ich habe durchaus Bammel davor, irgendwann durch einen Computer ersetzt zu werden oder nur noch daneben zu sitzen, während der Zug von allein fährt. Die Sorgen von Entwicklern darüber, was KI für ihren Beruf bedeuten könnte, sind für mich deshalb keine abstrakte Diskussion. Auch ihre Bedenken zur Qualität solcher Software kann ich nachvollziehen. Ihre Erfahrung wird dadurch für mich nicht überflüssig. Dieses Projekt baut darauf auf. Und es geht hier auch nicht darum, einmal „mach alles, aber bitte ohne Fehler“ in einen Chat zu schreiben: Dahinter stecken viel Recherche, praktische Tests, Fehlersuche und Dokumentation. Fehler müssen trotzdem gefunden und behoben werden.
 
 Genau deshalb möchte ich das Projekt jetzt öffnen. Aus OpenLips soll mehr werden als mein persönliches Experiment. Wenn du dich für Lips, Karaoke, Reverse Engineering oder nützliche Werkzeuge begeisterst, bist du herzlich eingeladen, mitzumachen.
 
@@ -60,11 +57,8 @@ Einige Grundlagen sind bereits vorhanden:
 
 ## Was Studio heute schon kann
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/branding/concept-01/logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/branding/concept-01/logo-light.png">
-  <img src="assets/branding/concept-01/logo-light.png" alt="OpenLips Studio" width="600">
-</picture>
+![OpenLips Studio](assets/branding/concept-01/logo-light.png#gh-light-mode-only)
+![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Importieren oder selbst erstellen.** UltraStar-TXT-Dateien einlesen, eine Melodiespur aus einer MIDI-Datei auswählen oder eigene Noten hinzufügen. Beim UltraStar-Import bleiben das Timing und die Silben erhalten.
 - **Den Chart bearbeiten.** Noten erstellen, löschen, verschieben oder in ihrer Länge ändern, die Tonhöhe anpassen, Textfragmente zuordnen sowie Wortenden, Phrasen und Seitenwechsel festlegen. Änderungen lassen sich rückgängig machen und wiederholen.
@@ -77,7 +71,7 @@ Einige Grundlagen sind bereits vorhanden:
 
 *Der Editor mit einem kleinen, selbst erstellten Demo-Chart.*
 
-<img src="assets/screenshots/studio-note-details.png" alt="Startzeit, Länge, Tonhöhe, Silbe und Phrasengrenze einer Note bearbeiten" width="300">
+![Startzeit, Länge, Tonhöhe, Silbe und Phrasengrenze einer Note bearbeiten](assets/screenshots/studio-note-details.png)
 
 *Für jede Note lassen sich Timing, Tonhöhe und Textzuordnung bearbeiten.*
 
