@@ -9,6 +9,11 @@ Haupt-README eingebaut. Keine Spieldateien oder vorhandenen Markenlogos kopiert.
 | logo-dark.png | Wortmarke auf dunklem Hintergrund | 2172 x 724 |
 | icon-light.png | Symbol auf hellem Hintergrund | 1254 x 1254 |
 | icon-dark.png | Symbol auf dunklem Hintergrund | 1254 x 1254 |
+| openlips-logo-light.png | Projekt-/Webseitenmarke ohne Studio, hell | 1942 x 809 |
+| openlips-logo-dark.png | Projekt-/Webseitenmarke ohne Studio, dunkel | 1942 x 809 |
+
+Markenaufteilung: **OpenLips** ist das Projekt und die Webseite;
+**OpenLips Studio** ist die Software. Beide verwenden dasselbe Notenbalken-Symbol.
 
 Drei versetzte Karaoke-Notenbalken bilden das gemeinsame Zeichen. Graphit,
 Weiss und ein gedeckter Teal-Akzent; keine 3-D-Elemente oder verspielte Schrift.

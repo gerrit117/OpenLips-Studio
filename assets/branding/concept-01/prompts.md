@@ -64,3 +64,25 @@ added elements. Matching icon for the same brand, not a new design.
 The tool did not obey exact dimension/color/flatness instructions perfectly.
 Actual selected PNG dimensions are documented in README.md; these are design
 drafts, not a claim of deterministic two-color vector output.
+
+## Parent project wordmark: dark
+
+Precise brand wordmark edit of the generated OpenLips Studio dark logo. Create
+the project/website logo reading exactly "OpenLips" WITHOUT "Studio". Remove
+only the trailing word; preserve the OpenLips lettering, typography, weight,
+case and three ascending teal karaoke bars. Recenter the shorter lockup with
+balanced modest margins, approximately 2.4:1 canvas and vertical breathing room.
+Solid charcoal #20262C background, off-white #F3F5F7 text, muted teal #319F98 bars.
+Same flat minimalist identity. No new elements, tagline, lowercase redesign,
+symbol changes, texture, gradients, shadows, depth, perspective, glow or bevels.
+Only visible text: "OpenLips". Studio remains the software sub-brand.
+
+## Parent project wordmark: light
+
+Create the LIGHT MODE companion of the generated parent-project dark logo.
+Preserve the lettering "OpenLips", humanist typography, weight, three ascending
+horizontal karaoke bars, proportions, spacing, positions, composition and aspect
+ratio. Change only colors: solid white #FFFFFF background, graphite #20262C
+lettering and muted teal #319F98 bars. Never add Studio or a tagline. Flat
+minimalist graphic, no mockup, shadow, gradients, glow, grain, texture, bevel,
+depth or perspective. Match geometry and framing of the dark companion.
