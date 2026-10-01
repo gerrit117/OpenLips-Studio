@@ -279,3 +279,18 @@ def test_mac_app_worker_uses_intact_resources_directory(tmp_path, monkeypatch):
     worker.parent.mkdir(parents=True)
     worker.touch()
     assert worker_command('request', 'output')[0] == str(worker)
+
+
+def test_frozen_worker_environment_is_isolated(monkeypatch):
+    from studio.plugin_dialog import plugin_process_environment
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    monkeypatch.setenv('DYLD_LIBRARY_PATH', '/gui/libraries')
+    monkeypatch.setenv('PYTHONHOME', '/gui/python')
+    monkeypatch.setenv('LD_LIBRARY_PATH', '/gui/libraries:/system')
+    monkeypatch.setenv('LD_LIBRARY_PATH_ORIG', '/system')
+    environment = plugin_process_environment()
+    assert environment.value('PYINSTALLER_RESET_ENVIRONMENT') == '1'
+    assert not environment.contains('DYLD_LIBRARY_PATH')
+    assert not environment.contains('PYTHONHOME')
+    assert environment.value('LD_LIBRARY_PATH') == '/system'

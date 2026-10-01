@@ -7,7 +7,7 @@ import shutil
 import sys
 import tempfile
 
-from PySide6.QtCore import QProcess, QSettings, QThread, QStandardPaths, Signal, Qt
+from PySide6.QtCore import QProcess, QProcessEnvironment, QSettings, QThread, QStandardPaths, Signal, Qt
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QWidget,
     QListWidget, QCheckBox, QLabel, QPushButton, QLineEdit, QFileDialog, QMessageBox,
     QDoubleSpinBox, QSpinBox, QComboBox, QPlainTextEdit, QProgressBar, QTabWidget,
@@ -16,6 +16,22 @@ import qtawesome as qta
 
 from studio.model import StudioProject, pitch_name
 from studio.plugins import available_plugins, discover_plugins
+
+
+def plugin_process_environment():
+    environment = QProcessEnvironment.systemEnvironment()
+    environment.insert('PYINSTALLER_RESET_ENVIRONMENT', '1')
+    if getattr(sys, 'frozen', False):
+        # The separately frozen worker must not load the GUI's Python/Qt libraries.
+        for key in ('DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH', 'PYTHONHOME', 'PYTHONPATH'):
+            environment.remove(key)
+        if sys.platform.startswith('linux'):
+            original = environment.value('LD_LIBRARY_PATH_ORIG')
+            if original:
+                environment.insert('LD_LIBRARY_PATH', original)
+            else:
+                environment.remove('LD_LIBRARY_PATH')
+    return environment
 
 
 class ImportWorker(QThread):
@@ -348,6 +364,7 @@ class PluginDialog(QDialog):
                 if not command or not all(isinstance(part, str) for part in command):
                     raise ValueError('Plugin command must be an argument list')
                 self.process = QProcess(self)
+                self.process.setProcessEnvironment(plugin_process_environment())
                 self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
                 self.process.readyReadStandardOutput.connect(self.read_output)
                 self.process.finished.connect(self.process_finished)
@@ -396,6 +413,7 @@ class PluginDialog(QDialog):
             self.fail('Analyse abgebrochen. Das Projekt wurde nicht geändert.')
             return
         if exit_code != 0 or exit_status != QProcess.ExitStatus.NormalExit:
+            self.log.appendPlainText(f'Worker exit_code={exit_code}, exit_status={exit_status.name}, error={self.process.errorString()}')
             self.fail('Analyse fehlgeschlagen. Details stehen im Protokoll.')
             return
         try:
