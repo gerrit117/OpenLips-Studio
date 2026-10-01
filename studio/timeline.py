@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt, QRectF, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget, QLineEdit
 
+from studio.i18n import tr
 from studio.model import EditorNote, pitch_name, snap_time
 from tools.build_owned_chart import phrase_page_starts
 
@@ -34,7 +35,7 @@ class LyricField(QLineEdit):
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
         menu.addSeparator()
-        parameters = menu.addAction('Notenparameter')
+        parameters = menu.addAction(tr('Notenparameter'))
         parameters.triggered.connect(lambda: self.timeline.selected.emit(self.note_id))
         menu.exec(event.globalPos())
 

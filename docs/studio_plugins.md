@@ -1,5 +1,23 @@
 # Plugin developer guide
 
+Development extension (not yet a released native USDB package): process plugins
+can additionally declare `result_type: "song-import"`, `input_required: false`
+and `interactive: true`. Such workers return `result.json` with
+`format: "openlips-plugin-song"`, `schema_version: 1`, mandatory relative
+`chart` TXT path and optional relative `audio`, `video`, `cover` paths inside
+the job folder. Studio validates the declared files and copies them into its
+persistent import library only after explicit acceptance. Declared chart plus
+assets are limited to 8 GiB; TXT to 16 MiB; the descriptor to 64 KiB. Existing
+`note-draft` plugins are unchanged.
+
+Requests also include a per-plugin `state_dir` for persistent settings and
+`project` as before. Interactive workers must poll `cancel.request` in the job
+directory and shut down their own child processes before exiting. Studio keeps
+the job alive until worker cleanup finishes. The host language menu controls
+Studio's own labels, not arbitrary upstream/plugin windows. See the
+[USDB bridge guide](../plugins/usdb_downloader/README.md) and
+[development checkpoint](studio_next_development.md) for remaining release work.
+
 Studio 0.2.1 supports independent **API-2 process plugins**. A plugin ships its own
 executable, libraries and optional models in a platform-specific **`.opl`** ZIP.
 It can be written in Python, Rust, C++, or another language: Studio communicates

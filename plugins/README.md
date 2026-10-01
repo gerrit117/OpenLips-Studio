@@ -7,6 +7,7 @@ Studio does not install Python packages into itself or import their runtime code
 | Plugin | What it does | Requirements |
 | --- | --- | --- |
 | [Basic Pitch](basic_pitch/README.md) | Local audio-to-MIDI and editable melody draft, using Spotify's model | Matching platform `.opl`; isolated vocal audio recommended; no account or API key |
+| [USDB Downloader (development)](usdb_downloader/README.md) | Original USDB Syncer interface with yt-dlp; sends a selected song and media to Studio | USDB account and download permission; native `.opl` packaging still pending |
 | [Example lyric mapping](example_lyrics/README.md) | Developer example assigning words from a text file to existing notes | Build its standalone executable on the target platform; not an AI model |
 
 Install the matching package using **Werkzeuge > Plugins > .opl installieren**,

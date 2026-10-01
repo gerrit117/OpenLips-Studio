@@ -6,6 +6,8 @@ from pathlib import Path
 
 media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
 media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
+import imageio_ffmpeg
+ffmpeg_binary = imageio_ffmpeg.get_ffmpeg_exe()
 notices = Path('build/studio-licenses')
 notice_data = [(str(notices), 'licenses')] if notices.is_dir() else []
 icon = 'studio/assets/app-icon.ico' if sys.platform == 'win32' else None
@@ -17,8 +19,9 @@ a = Analysis(['studio/launcher.py'], pathex=['.'],
                    [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.')] + asset_data + notice_data,
              binaries=media_binaries,
              hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins', 'studio.plugin_dialog', 'studio.plugin_smoke'],
-             excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore', 'imageio_ffmpeg'],
+             excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore'],
              noarchive=False)
+a.binaries.append(('media/' + ('ffmpeg.exe' if sys.platform == 'win32' else 'ffmpeg'), ffmpeg_binary, 'BINARY'))
 # Qt 6.11 imports Windows' unversioned ICU shim. The developer PATH may
 # contain an unrelated Poppler ICU with suffixed exports; never bundle it.
 if sys.platform == 'win32':

@@ -15,6 +15,9 @@ The desktop application uses these separately licensed dependencies:
 | Python | PSF license; [license](https://docs.python.org/3/license.html) |
 | Basic Pitch / model | Apache-2.0; Copyright 2022 Spotify AB; [repository, authors and license](https://github.com/spotify/basic-pitch) |
 | ONNX Runtime | MIT; [repository](https://github.com/microsoft/onnxruntime) |
+| imageio-ffmpeg | BSD-2-Clause wrapper; bundled FFmpeg binary has its own license/build configuration; [repository](https://github.com/imageio/imageio-ffmpeg) |
+| USDB Syncer (development plugin) | GPL-3.0-only; Markus Böhning and contributors; [repository](https://github.com/bohning/usdb_syncer) |
+| yt-dlp (USDB plugin) | Upstream source Unlicense; packaged dependency notices must also be preserved; [repository](https://github.com/yt-dlp/yt-dlp) |
 
 The isolated Basic Pitch worker also uses NumPy, SciPy, Librosa, Pretty MIDI,
 Mir Eval, Resampy, scikit-learn, Numba/LLVM, SoundFile/libsndfile, SoXR and their
@@ -32,3 +35,10 @@ artifact. No Xbox SDK components or game executables are distributed.
 Before distributing binaries publicly, inventory the exact bundled dependency
 versions and preserve their complete notices/font licenses and source-offer
 requirements as applicable. This summary is not a substitute for those files.
+
+The developing USDB plugin uses the upstream GUI and downloader in an isolated
+process. Its dependency runtime and authenticated download flow are not yet
+released/validated. Before publishing a native plugin, preserve upstream source,
+licenses and notices, as well as the FFmpeg build's complete notices and source
+requirements. Adding a Python package's license inventory alone is not enough
+for the third-party FFmpeg executable contained in its wheel.

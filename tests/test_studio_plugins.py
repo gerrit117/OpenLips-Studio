@@ -146,7 +146,8 @@ def test_process_cancellation_and_close_guard(tmp_path):
     wait_until(app, lambda: not dialog.busy())
     assert dialog.result is None
     assert not dialog.apply_button.isEnabled()
-    assert 'abgebrochen' in dialog.status.text()
+    from studio.i18n import tr
+    assert dialog.status.text() == tr('Analyse abgebrochen. Das Projekt wurde nicht geändert.')
     dialog.close()
 
 

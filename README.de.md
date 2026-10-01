@@ -117,6 +117,8 @@ Danke auch an alle, die einen Build testen, Fehler melden, Erkenntnisse teilen o
 
 Ein besonderes Dankeschön geht an **Spotifys Audio Intelligence Lab und die Entwickler von [Basic Pitch](https://github.com/spotify/basic-pitch)**, die ihr Transkriptionsmodell und den Quellcode als Open Source bereitstellen. Das erste integrierte Studio-Plugin nutzt ihre Arbeit über [ONNX Runtime](https://github.com/microsoft/onnxruntime). Die Einbindung ist unabhängig und weder ein Spotify-Dienst noch eine offizielle Unterstützung durch Spotify.
 
+Danke auch an **Markus Böhning und die Mitwirkenden von [USDB Syncer](https://github.com/bohning/usdb_syncer)** sowie an das [yt-dlp](https://github.com/yt-dlp/yt-dlp)-Team. Ein eigenständiges USDB-Downloader-Plugin ist in Entwicklung und nutzt die bestehende Such- und Downloadoberfläche. Native Plugin-Pakete und Tests mit angemeldeten Downloads stehen noch aus.
+
 ## Unabhängigkeit, Rechte und Verantwortung
 
 **OpenLips und OpenLips Studio sind unabhängige, inoffizielle Projekte. Sie stehen in keiner Verbindung zu Microsoft, Xbox, iNiS, den Entwicklern oder Herausgebern von Lips oder anderen Rechteinhabern und werden von diesen weder unterstützt noch gesponsert.** Produkt- und Firmennamen dienen lediglich dazu, die betreffenden Spiele und Werkzeuge zu benennen. Die jeweiligen Rechte verbleiben bei ihren Inhabern.

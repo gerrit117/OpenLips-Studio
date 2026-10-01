@@ -40,6 +40,9 @@ class ImportPlugin:
     create_command: Callable | None = None
     process_plugin: bool = False
     permissions: tuple[str, ...] = ()
+    result_type: str = 'note-draft'
+    input_required: bool = True
+    interactive: bool = False
 
     def validate(self):
         if self.api_version != API_VERSION:

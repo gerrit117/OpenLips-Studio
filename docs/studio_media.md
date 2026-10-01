@@ -10,8 +10,8 @@ Existing originals and the known-working game installation are never changed.
   video clears a previously selected reference audio track; choosing separate
   audio afterwards is still possible for editor comparison.
 - Audio mode uses the selected audio, producing an audio-only ASF `.wma`.
-- Cover-video mode uses the audio plus a static cover. An explicitly selected
-  FFmpeg executable creates an H.264/AAC intermediate; the native encoder then
+- Cover-video mode uses the audio plus a static cover. Bundled FFmpeg
+  creates an H.264/AAC intermediate; the native encoder then
   creates the final VC-1/WMA Pro ASF. Both exported audio and video use the same
   intermediate soundtrack. This intermediate involves an extra lossy audio pass.
 - Each preparation creates `song.wma`, optional `song.wmv`, `cover.jpg` and a
@@ -36,10 +36,14 @@ It writes WVC1/VC-1 Advanced video at **768 x 432**, 24000/1001 fps, approximate
 The previously validated bounded ASF header normalization remains mandatory.
 
 FFmpeg is used only for the optional cover-video intermediate, not to substitute
-WMV2/WMA2 for the accepted codecs. It is not bundled automatically; choose a
-trusted executable or install one on PATH. The native final encoder currently
+WMV2/WMA2 for the accepted codecs. The next desktop build bundles FFmpeg through
+imageio-ffmpeg; source runs use its wheel or an existing PATH installation.
+The GUI no longer asks for encoder paths. The native final encoder currently
 requires Windows. macOS/Linux support editing, projects, chart export and covers,
 but refuse final media encoding instead of emitting an incompatible format.
+The conversion dialog now explains this limitation before a job is started.
+See [cross-platform backend research](cross_platform_media_backends.md) for
+investigated alternatives and their unverified codec/platform requirements.
 
 ASF outputs are **not** RIFF/xWMA DLC files. The experimental DLC export still
 requires separately prepared xWMA full audio and preview; it does not automatically

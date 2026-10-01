@@ -27,6 +27,10 @@ def native_encoder():
 
 
 def ffmpeg_encoder():
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    bundled = root / 'media' / ('ffmpeg.exe' if os.name == 'nt' else 'ffmpeg')
+    if bundled.is_file():
+        return str(bundled)
     executable = shutil.which('ffmpeg')
     if executable:
         return executable
@@ -108,14 +112,16 @@ def validate_og_media(path, video):
     return result
 
 
-def prepare_media(project, directory, mode, encoder, ffmpeg='', log=lambda text: None):
+def prepare_media(project, directory, mode, encoder=None, ffmpeg=None, log=lambda text: None):
     """mode is video, audio or cover-video. Video always supplies its own audio."""
     if mode not in ('video', 'audio', 'cover-video'):
         raise ValueError('Unknown media mode')
     if sys.platform != 'win32':
         raise ValueError('The verified VC-1/WMA Pro encoding backend currently requires Windows')
+    encoder = encoder or native_encoder()
+    ffmpeg = ffmpeg or ffmpeg_encoder()
     if not Path(encoder).is_file():
-        raise ValueError('Select the native OpenLips Windows encoder')
+        raise ValueError('The bundled OpenLips encoder is missing. Extract the complete Windows release archive.')
     source = project.video_path if mode == 'video' else project.audio_path
     if not source or not Path(source).is_file():
         raise ValueError('Select a video for video mode, or audio for audio/cover-video mode')
@@ -130,7 +136,7 @@ def prepare_media(project, directory, mode, encoder, ffmpeg='', log=lambda text:
         write_cover(project, ready / 'cover.jpg')
         if mode == 'cover-video':
             if not ffmpeg or not Path(ffmpeg).is_file():
-                raise ValueError('Static cover video needs an explicitly selected FFmpeg executable')
+                raise ValueError('The bundled FFmpeg executable is missing. Extract the complete release archive.')
             intermediate = temp / 'cover.mp4'
             run_encoder([ffmpeg, '-nostdin', '-n', '-loop', '1', '-i', ready / 'cover.jpg',
                          '-i', source, '-map', '0:v:0', '-map', '1:a:0', '-vf',
