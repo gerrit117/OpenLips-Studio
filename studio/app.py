@@ -759,6 +759,8 @@ def main():
     parser.add_argument('--smoke-height', type=int, default=790)
     args = parser.parse_args()
     app = QApplication(sys.argv)
+    from studio.fonts import use_system_font
+    use_system_font(app)
     app.setApplicationName('OpenLips Studio')
     app.setOrganizationName('OpenLips')
     app.setStyle('Fusion')

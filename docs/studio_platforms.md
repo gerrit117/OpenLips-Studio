@@ -11,6 +11,13 @@ artifacts. macOS gets an `.app` bundle plus the portable build directory.
 Artifacts include smoke-test output; success is reported only after the jobs
 actually complete. Apple signing/notarization and installers remain pending.
 Run `36818350412` completed successfully on all four native targets for 0.1.1 Beta.
+From 0.1.3 Beta, successful main-branch builds publish versioned prereleases
+with all four native archives and SHA-256 checksums. Windows/macOS use ZIP;
+Linux uses tar.gz to preserve executable permissions. All matrix jobs must pass
+before publishing. An existing version tag from another commit is not overwritten:
+code changes require an app version bump. Same-commit retries may replace assets.
+Downloads live under [GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases).
+The repository remains private; this workflow does not change its visibility.
 
 Linux initially uses an Ubuntu 22.04/glibc build baseline to avoid unnecessarily
 requiring a newer glibc. The complete portable folder is needed. It is intended

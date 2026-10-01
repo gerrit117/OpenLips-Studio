@@ -110,3 +110,11 @@ def test_shift_updates_note_and_page_times_and_undo(monkeypatch, app):
     assert window.project.notes[0].time == original
     window.dirty = False
     window.close()
+
+
+def test_ui_font_is_not_an_icon_font(app):
+    from PySide6.QtGui import QFontInfo
+    from studio.fonts import use_system_font
+    font = use_system_font(app)
+    resolved = QFontInfo(font).family().lower()
+    assert resolved not in ('codicon', 'font awesome 5 free', 'material design icons')

@@ -1,6 +1,6 @@
 # OpenLips Studio
 
-**0.1.2 Beta**: a native desktop song editor built on OpenLips' Xbox 360
+**0.1.3 Beta**: a native desktop song editor built on OpenLips' Xbox 360
 IXB reverse-engineering tools. Windows, macOS and Linux use the same Python/Qt
 sources. The accepted fresh writer targets original Lips (2008), not all LS2
 or compressed chart variants.

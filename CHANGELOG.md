@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 Beta
+
+- Explicit standard system UI font; offscreen screenshots load host system fonts.
+- Native platform archives published to GitHub Releases after successful CI.
+
 ## 0.1.2 Beta
 
 - Windows OG VC-1/WMA Pro media preparation with the native encoder bundled.
