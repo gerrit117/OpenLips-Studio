@@ -33,9 +33,28 @@ the headless runner, not because of Python format logic. Version 0.1.1 installs
 the required graphics/audio runtime libraries before testing. Native CI output
 is distinct from local interactive audio/video validation.
 
+The corrected 0.1.1 matrix completed successfully on Windows, Apple Silicon,
+Intel macOS and Ubuntu 22.04, including frozen-app startup. The 0.1.3 matrix
+also passed on all four targets. These headless smoke tests do not verify
+physical audio/video devices on macOS/Linux.
+
+Current local suite: 203 passed, 11 subtests passed, one Unix-only archive-mode
+test skipped on Windows. New media preparation passed the synthetic video,
+audio-only and static-cover-video checks; a full local MP3 also encoded.
+See [media validation and remaining gameplay checks](studio_media.md).
+
+The earlier offscreen Windows screenshot unexpectedly rendered text through
+`codicon`: that Qt platform plugin had not enumerated system fonts. Normal
+Windows startup resolved Segoe UI already. Studio now explicitly selects the
+platform UI font, with host Segoe UI loading for offscreen Windows tests. No
+Windows font is copied into a package. The rebuilt frozen application passed
+startup and produced a normal-font screenshot; the native media helper is
+included, while external FFmpeg is deliberately not silently bundled.
+
 68 previously tracked private sample assets were removed from the current Git
 index without deleting existing local files. Older Git history still contains
-them. Public visibility/release remains gated on that history and license audit.
+them. Public visibility/distribution remains gated on that history and license
+audit. Private GitHub prereleases do not change the repository's visibility.
 
 Not yet established: macOS runtime/audio compatibility, Xbox acceptance of
 every newly edited project, exact Lips text-fill animation, custom DLC discovery,
