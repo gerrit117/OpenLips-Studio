@@ -1,4 +1,4 @@
-# OpenLips Studio 0.1.0 Beta
+# OpenLips Studio 0.2.0 Beta
 
 ## Start
 
@@ -90,12 +90,12 @@ backends currently need separate Windows builds; editing/importing are portable.
 `exporters.py` adapts validated tools. `lyrics_search.py` and `dlc_dialog.py`
 use worker threads for network/package operations.
 
-Importer plugins publish the `openlips_studio.importers` entry-point group.
-Each factory returns `studio.plugins.ImportPlugin` with API version 1, a label,
-extensions and an `import_file(Path) -> StudioProject` callable. Merely opening
-Studio does not load plugins. The user must explicitly select a trusted plugin
-in Tools. Plugins execute arbitrary Python; this is an opt-in contract, not a
-sandbox or a plugin marketplace.
+The plugin manager supports opt-in installed entry points and trusted local
+plugin folders, parameters, background jobs, result previews and undoable
+acceptance. Its first built-in plugin is Spotify Basic Pitch, with a separately
+bundled ONNX worker. See the [plugin guide and API](studio_plugins.md) for setup,
+limitations, cancellation, development and credits. Plugin code is trusted
+Python, not sandboxed. Merely opening Studio does not execute third-party plugins.
 
 ## Public-release checklist
 

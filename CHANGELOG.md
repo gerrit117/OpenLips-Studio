@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 Beta
+
+- Usable opt-in plugin manager with per-plugin settings, trusted local plugin folders
+  and backward-compatible installed importer entry points.
+- Portable `.opl` plugin packages with bounded, traversal-safe installation and
+  explicit trust/activation; `.olp` remains the song-project extension.
+- First built-in plugin: Spotify Basic Pitch, running locally in an isolated,
+  bundled ONNX worker without a Spotify account, API key or audio upload.
+- Adjustable detection thresholds, minimum duration and MIDI pitch bounds;
+  optional strongest-note filtering for overlapping predictions.
+- Background analysis, cancellation, bounded logs, note preview, MIDI draft export
+  and explicit undoable note replacement preserving project metadata and lyrics draft.
+- Approved OpenLips Studio wordmark in the editor toolbar, Windows executable icon,
+  macOS app-bundle icon and Linux window/desktop integration artwork.
+- Separate runtime dependency inventories and preserved shipped license notices.
+- Synthetic regression tests and real inference smoke tests in native release builds.
+- English-only release notes generated from this changelog.
+
 ## 0.1.3 Beta
 
 - Explicit standard system UI font; offscreen screenshots load host system fonts.

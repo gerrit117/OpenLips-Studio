@@ -22,11 +22,13 @@ from studio.model import suggest_syllables
 from studio.importers import read_midi, project_from_midi, import_ultrastar
 from studio.exporters import export_debug_json, export_owned_pair
 from studio.timeline import Timeline
+from studio.branding import app_icon, asset
 
 
 class StudioWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(app_icon())
         self.project = demo_project()
         self.path = None
         self.dirty = False
@@ -106,6 +108,16 @@ class StudioWindow(QMainWindow):
         toolbar.addAction(self.action('Referenzvideo laden', 'fa5s.film', self.load_video))
         toolbar.addAction(self.action('Cover laden', 'fa5s.image', self.load_cover))
         toolbar.addAction(self.action('OG-Medien konvertieren', 'fa5s.exchange-alt', self.convert_media))
+        toolbar.addAction(self.action('Plugins', 'fa5s.plug', self.plugins_dialog))
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
+        logo = QLabel()
+        logo.setPixmap(QPixmap(str(asset('studio-logo-dark.png'))).scaled(
+            156, 52, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        logo.setToolTip(f'OpenLips Studio {DISPLAY_VERSION}')
+        logo.setContentsMargins(8, 0, 4, 0)
+        toolbar.addWidget(logo)
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -299,22 +311,24 @@ class StudioWindow(QMainWindow):
             self.lyrics.setPlainText(results[labels.index(label)]['plainLyrics'])
 
     def plugins_dialog(self):
-        from importlib.metadata import entry_points
-        from studio.plugins import discover_plugins, ENTRY_POINT_GROUP
-        names = [ep.name for ep in entry_points(group=ENTRY_POINT_GROUP)]
-        if not names:
-            QMessageBox.information(self, 'Plugins', 'Keine installierten Import-Plugins gefunden.')
-            return
-        name, ok = QInputDialog.getItem(self, 'Vertrauenswuerdiges Plugin', 'Plugin ausfuehren (Python-Code)', names, 0, False)
-        if not ok:
-            return
-        plugins, errors = discover_plugins([name])
-        if errors:
-            self.error('\n'.join(errors))
-        elif plugins and self.confirm_discard():
-            path, _ = QFileDialog.getOpenFileName(self, plugins[0].label)
-            if path:
-                self.attempt(lambda: self.replace_project(plugins[0].import_file(Path(path))))
+        from studio.plugin_dialog import PluginDialog
+        dialog = PluginDialog(self.project, self)
+        dialog.accepted_project.connect(self.apply_plugin_notes)
+        dialog.exec()
+
+    def apply_plugin_notes(self, result):
+        result.validate()
+        self.stop()
+        self.snapshot()
+        self.project.notes = copy.deepcopy(result.notes)
+        self.project.source = result.source
+        self.project.warnings = list(result.warnings)
+        if not self.project.audio_path and not self.project.video_path:
+            self.project.audio_path = result.audio_path
+            self.configure_media()
+        self.timeline.selected_id = ''
+        self.timeline.origin = 0
+        self.changed()
 
     def snapshot(self):
         self.history.append(copy.deepcopy(self.project))
@@ -755,6 +769,7 @@ def main():
     parser = argparse.ArgumentParser(description='OpenLips Studio')
     parser.add_argument('--project', type=Path)
     parser.add_argument('--smoke-test', type=Path, help='Write a synthetic UI screenshot and exit')
+    parser.add_argument('--smoke-plugin', type=Path, help='Test bundled Basic Pitch and GUI acceptance with generated tones')
     parser.add_argument('--smoke-width', type=int, default=1260)
     parser.add_argument('--smoke-height', type=int, default=790)
     args = parser.parse_args()
@@ -763,6 +778,7 @@ def main():
     use_system_font(app)
     app.setApplicationName('OpenLips Studio')
     app.setOrganizationName('OpenLips')
+    app.setWindowIcon(app_icon())
     app.setStyle('Fusion')
     app.setStyleSheet('''
         QWidget { background: #25292e; color: #e6e9ec; font-size: 13px; }
@@ -780,7 +796,10 @@ def main():
     if args.project:
         window.attempt(lambda: window.replace_project(load_project(args.project), args.project))
     window.show()
-    if args.smoke_test:
+    if args.smoke_plugin:
+        from studio.plugin_smoke import run
+        QTimer.singleShot(150, lambda: run(app, window, args.smoke_plugin))
+    elif args.smoke_test:
         window.resize(args.smoke_width, args.smoke_height)
         def capture():
             args.smoke_test.parent.mkdir(parents=True, exist_ok=True)

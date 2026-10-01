@@ -5,6 +5,12 @@ same Python/Qt sources across platforms. A frozen release includes Python,
 Qt, dependencies and dictionaries: end users do not install Python separately.
 Source checkout/development does require Python 3.11+.
 
+From 0.2.0 Beta, each native archive also includes the isolated Basic Pitch / ONNX
+worker and model; no extra user Python installation is required. The worker uses
+its own Python 3.11 runtime independently of the GUI. Both frozen runtimes and
+the GUI-to-worker workflow are tested before release publication. See the
+[plugin guide](studio_plugins.md), including Linux desktop icon setup.
+
 Native builds are required; PyInstaller is not a cross-compiler. The build
 matrix produces Windows x64, macOS Apple Silicon, macOS Intel and Linux x64
 artifacts. macOS gets an `.app` bundle plus the portable build directory.

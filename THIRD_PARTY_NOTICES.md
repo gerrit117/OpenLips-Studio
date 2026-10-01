@@ -13,6 +13,17 @@ The desktop application uses these separately licensed dependencies:
 | QtAwesome | MIT; bundled icon fonts have their own licenses; [repository](https://github.com/spyder-ide/qtawesome) |
 | PyInstaller bootloader | GPL with bootloader exception; [license](https://pyinstaller.org/en/stable/license.html) |
 | Python | PSF license; [license](https://docs.python.org/3/license.html) |
+| Basic Pitch / model | Apache-2.0; Copyright 2022 Spotify AB; [repository, authors and license](https://github.com/spotify/basic-pitch) |
+| ONNX Runtime | MIT; [repository](https://github.com/microsoft/onnxruntime) |
+
+The isolated Basic Pitch worker also uses NumPy, SciPy, Librosa, Pretty MIDI,
+Mir Eval, Resampy, scikit-learn, Numba/LLVM, SoundFile/libsndfile, SoXR and their
+dependencies. Each native build includes a `licenses/inventory.json` containing
+the exact installed versions, plus license/notice files shipped by those packages.
+The worker has its own inventory under `plugin-runtime/OpenLipsBasicPitch/licenses`.
+Basic Pitch is credited to Spotify's Audio Intelligence Lab and its authors;
+the plugin is an independent integration, not a Spotify service or endorsement.
+Its model is distributed with the upstream Python package under its license.
 
 The optional native STFS backend is separate and uses Velocity/Botan; see
 [backend documentation](docs/dlc_builder.md). It is not bundled in the desktop

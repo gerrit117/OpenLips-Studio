@@ -1,4 +1,6 @@
 include LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md
+recursive-include studio/assets *.png *.ico *.icns *.sh *.opl
+include BasicPitchWorker.spec tools/basic_pitch_requirements.txt
 recursive-exclude private *
 recursive-exclude examples *
 exclude tools/input.txt tools/test_chart*.json

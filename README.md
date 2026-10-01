@@ -35,11 +35,12 @@ Ideas, corrections to the documentation, testing on other systems and [pull requ
 
 These are plans, not promises about the next release. The first priorities are:
 
-- [ ] Build out a complete plugin system for import and processing workflows.
+- [x] Add an opt-in plugin manager with `.opl` packages, settings, previews and background import workflows.
 - [ ] Document the song format more deeply, including LS2 and later releases.
 - [ ] Support quick-time events (QTEs) and other song-specific gameplay actions.
 - [ ] Build a community website with accounts and a shared database of user-created charts and lyrics, subject to the necessary rights and moderation.
-- [ ] Develop a first plugin around Spotify's [Basic Pitch](https://github.com/spotify/basic-pitch): turn vocal audio into a MIDI draft that can be reviewed and edited.
+- [x] Integrate Spotify's [Basic Pitch](https://github.com/spotify/basic-pitch): turn vocal audio into a MIDI and note draft that can be reviewed and edited.
+- [ ] Expand the plugin API to additional processing and export workflows.
 - [ ] Finish reliable custom DLC installation and discovery, including use with existing profiles.
 - [ ] Bring media preparation and song export together into a simpler workflow, and expand conversion support across platforms.
 - [ ] Add optional FTP transfer to a compatible Xbox setup.
@@ -61,6 +62,7 @@ Some foundations are already in place:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Import or create.** Bring in UltraStar TXT files, choose a melody track from a MIDI file, or add notes yourself. UltraStar timing and syllables are preserved on import.
+- **Start from a recording.** Enable Basic Pitch in the plugin manager, choose an audio file and adjust detection sensitivity, note duration and pitch limits. Review the locally generated draft, save it as MIDI or take its notes into the editor. The analysis can be cancelled; replacing notes can be undone. Isolated vocals work better than a full mix. This is not automatic vocal separation or lyric transcription.
 - **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
 - **Check the timing.** Play reference audio or video alongside the chart. Adjust playback speed, zoom in and shift notes and page changes together when the chart needs a timing correction.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
@@ -75,6 +77,10 @@ Some foundations are already in place:
 
 *Each note has editable timing, pitch and lyric settings.*
 
+![Basic Pitch parameters and a synthetic note draft](assets/screenshots/studio-plugins.png)
+
+*The first plugin, using an original four-tone test recording rather than a song.*
+
 ### What is not ready yet
 
 The confirmed end-to-end tests use the original Lips (2008) through Xenia. Later releases, all gameplay modes and original song events are not fully supported. A working chart export is not yet a finished “import anything and play” workflow, and it does not make unsigned content installable on an unmodified Xbox 360.
@@ -85,7 +91,7 @@ Media conversion currently targets the tested original-game path on Windows; edi
 
 Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Builds are available for Windows, macOS on Apple Silicon and Intel, and Linux.
 
-Extract the complete archive and keep its files together. Python is included; you don't need to install it separately. For setup details and current platform limitations, see the [editor guide](docs/studio.md) and [platform notes](docs/studio_platforms.md).
+Extract the complete archive and keep its files together. Python and the separate Basic Pitch analysis runtime are included; you don't need to install Python or use a Spotify account or API key. Audio is processed locally, not uploaded. For setup details and current platform limitations, see the [editor guide](docs/studio.md), [plugin guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
 
 ## Documentation
 
@@ -108,6 +114,8 @@ The app and its development tools rely on [Python](https://www.python.org/), [Qt
 The research and testing also benefited from [Xenia](https://github.com/xenia-project/xenia), [Xenia Canary](https://github.com/xenia-canary/xenia-canary), [Ghidra](https://github.com/NationalSecurityAgency/ghidra) and [XEXLoaderWV](https://github.com/zeroKilo/XEXLoaderWV). The experimental packaging backend builds on [Velocity](https://github.com/hetelek/Velocity) and [Botan](https://botan.randombit.net/). Not all of these tools are included in the application download.
 
 Thank you, too, to everyone who tests a build, reports a bug, shares a useful finding or helps someone else get started. Dependency licenses and notices are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+A special thank you to **Spotify's Audio Intelligence Lab and the authors of [Basic Pitch](https://github.com/spotify/basic-pitch)** for making their transcription model and code available as open source. Studio's first built-in plugin uses their work through [ONNX Runtime](https://github.com/microsoft/onnxruntime). It is an independent integration, not a Spotify service or endorsement.
 
 ## Independence, rights and responsibility
 

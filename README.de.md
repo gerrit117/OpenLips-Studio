@@ -35,11 +35,12 @@ Ideen, Korrekturen an der Dokumentation, Tests auf anderen Systemen und [Pull Re
 
 Das sind Vorhaben, keine Zusagen für das nächste Release. Die ersten Schwerpunkte sind:
 
-- [ ] Ein vollständiges Plugin-System für Import- und Verarbeitungsschritte ausbauen.
+- [x] Eine aktivierbare Plugin-Verwaltung mit `.opl`-Paketen, Einstellungen, Vorschau und Import im Hintergrund einbauen.
 - [ ] Das Songformat tiefergehend dokumentieren, einschließlich LS2 und späterer Veröffentlichungen.
 - [ ] Quick-Time-Events (QTEs) und weitere songbezogene Spielaktionen unterstützen.
 - [ ] Eine Community-Webseite mit Benutzerkonten und einer gemeinsamen Datenbank für selbst erstellte Charts und Lyrics aufbauen, mit den nötigen Nutzungsrechten und Moderationsregeln.
-- [ ] Ein erstes Plugin auf Grundlage von Spotifys [Basic Pitch](https://github.com/spotify/basic-pitch) entwickeln: Gesang in einen MIDI-Entwurf umwandeln, der geprüft und bearbeitet werden kann.
+- [x] Spotifys [Basic Pitch](https://github.com/spotify/basic-pitch) einbinden: Gesang in einen MIDI- und Notenentwurf umwandeln, der geprüft und bearbeitet werden kann.
+- [ ] Die Plugin-Schnittstelle um weitere Verarbeitungs- und Exportabläufe erweitern.
 - [ ] Eigene DLCs zuverlässig installieren und vom Spiel erkennen lassen, auch mit bestehenden Profilen.
 - [ ] Medienvorbereitung und Songexport zu einem einfacheren Ablauf zusammenführen und die Konvertierung auf weiteren Plattformen unterstützen.
 - [ ] Einen optionalen FTP-Upload für eine kompatible Xbox-Umgebung ergänzen.
@@ -61,6 +62,7 @@ Einige Grundlagen sind bereits vorhanden:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Importieren oder selbst erstellen.** UltraStar-TXT-Dateien einlesen, eine Melodiespur aus einer MIDI-Datei auswählen oder eigene Noten hinzufügen. Beim UltraStar-Import bleiben das Timing und die Silben erhalten.
+- **Mit einer Aufnahme anfangen.** Basic Pitch in der Plugin-Verwaltung aktivieren, eine Audiodatei auswählen und Erkennungsschwellen, Notendauer sowie Tonumfang einstellen. Den lokal erzeugten Entwurf prüfen, als MIDI speichern oder die Noten in den Editor übernehmen. Die Analyse lässt sich abbrechen; die Notenübernahme lässt sich rückgängig machen. Eine isolierte Gesangsspur eignet sich besser als ein vollständiger Mix. Gesangstrennung und Songtexterkennung übernimmt das Plugin nicht.
 - **Den Chart bearbeiten.** Noten erstellen, löschen, verschieben oder in ihrer Länge ändern, die Tonhöhe anpassen, Textfragmente zuordnen sowie Wortenden, Phrasen und Seitenwechsel festlegen. Änderungen lassen sich rückgängig machen und wiederholen.
 - **Das Timing prüfen.** Referenzaudio oder ein Video zusammen mit dem Chart abspielen. Die Wiedergabegeschwindigkeit ändern, hineinzoomen und bei Bedarf alle Noten samt Seitenwechseln zeitlich verschieben.
 - **Den Zwischenstand speichern.** Mit einem `.olp`-Projekt kannst du einen Song unfertig lassen und später daran weiterarbeiten. Verknüpfte Medien bleiben separate Dateien.
@@ -75,6 +77,10 @@ Einige Grundlagen sind bereits vorhanden:
 
 *Für jede Note lassen sich Timing, Tonhöhe und Textzuordnung bearbeiten.*
 
+![Basic-Pitch-Einstellungen und ein synthetischer Notenentwurf](assets/screenshots/studio-plugins.png)
+
+*Das erste Plugin mit einer selbst erzeugten Aufnahme aus vier Testtönen, nicht mit einem Song.*
+
 ### Was noch nicht fertig ist
 
 Die bestätigten Tests des gesamten Ablaufs wurden mit dem originalen Lips von 2008 in Xenia durchgeführt. Spätere Veröffentlichungen, sämtliche Spielmodi und die Spielaktionen der Originalsongs werden noch nicht vollständig unterstützt. Ein funktionierender Chartexport ist noch kein fertiger „alles importieren und sofort spielen“-Ablauf. Er macht unsignierte Inhalte auch nicht auf einer unveränderten Xbox 360 installierbar.
@@ -85,7 +91,7 @@ Die Medienkonvertierung richtet sich derzeit an den getesteten Wiedergabeweg des
 
 Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Es gibt Builds für Windows, macOS auf Apple Silicon und Intel sowie Linux.
 
-Entpacke das vollständige Archiv und lass die enthaltenen Dateien zusammen. Python ist bereits enthalten und muss nicht separat installiert werden. Hinweise zur Einrichtung und zu den aktuellen Plattformgrenzen stehen in der [Editor-Anleitung](docs/studio.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
+Entpacke das vollständige Archiv und lass die enthaltenen Dateien zusammen. Python und die separate Basic-Pitch-Analyseumgebung sind bereits enthalten. Du brauchst weder eine Python-Installation noch ein Spotify-Konto oder einen API-Schlüssel. Die Audiodatei wird lokal verarbeitet und nicht hochgeladen. Hinweise zur Einrichtung und zu den aktuellen Plattformgrenzen stehen in der [Editor-Anleitung](docs/studio.md), der [Plugin-Anleitung](docs/studio_plugins.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
 
 ## Dokumentation
 
@@ -108,6 +114,8 @@ Die App und ihre Entwicklungswerkzeuge bauen auf [Python](https://www.python.org
 Für Recherche und Tests waren auch [Xenia](https://github.com/xenia-project/xenia), [Xenia Canary](https://github.com/xenia-canary/xenia-canary), [Ghidra](https://github.com/NationalSecurityAgency/ghidra) und [XEXLoaderWV](https://github.com/zeroKilo/XEXLoaderWV) wichtig. Der experimentelle Paket-Builder verwendet [Velocity](https://github.com/hetelek/Velocity) und [Botan](https://botan.randombit.net/). Nicht alle diese Werkzeuge sind im App-Download enthalten.
 
 Danke auch an alle, die einen Build testen, Fehler melden, Erkenntnisse teilen oder anderen beim Einstieg helfen. Die Lizenzen und Hinweise zu Abhängigkeiten stehen in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Ein besonderes Dankeschön geht an **Spotifys Audio Intelligence Lab und die Entwickler von [Basic Pitch](https://github.com/spotify/basic-pitch)**, die ihr Transkriptionsmodell und den Quellcode als Open Source bereitstellen. Das erste integrierte Studio-Plugin nutzt ihre Arbeit über [ONNX Runtime](https://github.com/microsoft/onnxruntime). Die Einbindung ist unabhängig und weder ein Spotify-Dienst noch eine offizielle Unterstützung durch Spotify.
 
 ## Unabhängigkeit, Rechte und Verantwortung
 

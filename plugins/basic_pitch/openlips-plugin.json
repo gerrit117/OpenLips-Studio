@@ -1,0 +1,10 @@
+{
+  "id": "spotify-basic-pitch",
+  "label": "Basic Pitch",
+  "api_version": 1,
+  "module": "plugin.py",
+  "factory": "create_plugin",
+  "author": "Spotify Audio Intelligence Lab; OpenLips integration",
+  "version": "0.4.0",
+  "runtime": "bundled-openlips-basic-pitch"
+}
