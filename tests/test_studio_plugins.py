@@ -259,11 +259,14 @@ def test_opl_ui_install_and_unlink_keep_original_files(tmp_path, monkeypatch):
     package = build_package(source, tmp_path / 'example.opl')
     monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args: (str(package), ''))
     monkeypatch.setattr(QStandardPaths, 'writableLocation', lambda *args: str(tmp_path / 'app-data'))
-    dialog = PluginDialog(StudioProject(), settings=QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    settings = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
+    settings.setValue('plugins/enabled', ['installed-example'])
+    dialog = PluginDialog(StudioProject(), settings=settings)
     dialog.install_opl()
     wait_until(app, lambda: not dialog.busy())
     assert dialog.offers[dialog.list.currentRow()].id == 'installed-example'
     assert not dialog.enable.isChecked()
+    assert 'installed-example' not in dialog.enabled_ids
     installed = Path(dialog.folders[0])
     assert (installed / 'plugin.py').exists()
     dialog.remove_folder()

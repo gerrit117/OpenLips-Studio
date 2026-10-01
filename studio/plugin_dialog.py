@@ -310,6 +310,9 @@ class PluginDialog(QDialog):
             self.fail(str(error))
 
     def package_installed(self, folder, ident):
+        # Trust belongs to the newly installed package, not a remembered identifier.
+        self.enabled_ids = [value for value in self.enabled_ids if value != ident]
+        self.settings.setValue('plugins/enabled', self.enabled_ids)
         self.folders.append(folder)
         self.settings.setValue('plugins/folders', self.folders)
         self.refresh_offers()
