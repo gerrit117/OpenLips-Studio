@@ -40,6 +40,10 @@ AppImage/Flatpak/DEB/RPM packaging is a follow-up, not another editor rewrite.
 The Windows application bundles its native OG media encoder. Native STFS remains
 a separate backend; optional cover-video preparation requires FFmpeg. Final OG
 media encoding is refused on macOS/Linux; see [media scope](studio_media.md).
+On those systems, game export needs already-compatible media: OG uses the
+tested ASF/WVC1/WMA Pro profile, while experimental DLC packaging requires
+RIFF/XWMA full audio and preview. Editor reference playback is not a codec
+conversion. See [exact profiles and preparation](studio_media.md#already-compatible-media-on-macos-and-linux).
 A portable editor is not proof that these backends work on macOS/Linux.
 No unsigned Xbox content or copyrighted media is bundled in app artifacts.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add English/German media requirements to the conversion and experimental DLC
+  dialogs, including the macOS/Linux requirement for pre-encoded game media.
+- Document tested OG ASF/WVC1/WMA Pro settings separately from original DLC
+  RIFF/XWMA profiles, unverified alternatives and the 720p export ceiling.
+- Fix the missing translation import in the experimental DLC dialog.
+
 ## 0.2.1 Beta
 
 - Independent API-2 process plugins with platform-specific executable entrypoints,

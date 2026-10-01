@@ -1,12 +1,15 @@
 """Optional adapter for the existing experimental STFS backend."""
 from pathlib import Path
+import sys
 import tempfile
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QPushButton,
-                               QFileDialog, QDialogButtonBox, QMessageBox)
+                               QFileDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit)
 
 from studio.exporters import export_owned_pair
+from studio.i18n import tr
+from studio.media_requirements import media_requirements, portable_media_notice
 
 
 class PackageWorker(QThread):
@@ -65,6 +68,12 @@ class DlcDialog(QDialog):
         self.worker = None
         self.fields = {}
         layout = QFormLayout(self)
+        self.media_notice = QPlainTextEdit()
+        self.media_notice.setReadOnly(True)
+        self.media_notice.setPlainText(portable_media_notice() if sys.platform != 'win32'
+                                      else media_requirements())
+        self.media_notice.setMaximumHeight(180)
+        layout.addRow(self.media_notice)
         self.id = QLineEdit('0x73000001')
         layout.addRow(tr('Eigene freie Song-ID'), self.id)
         for key, label in [('backend', 'STFS-Backend'), ('audio', 'Audio (xWMA)'),

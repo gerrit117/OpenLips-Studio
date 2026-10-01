@@ -87,6 +87,14 @@ The confirmed end-to-end tests use the original Lips (2008) through Xenia. Later
 
 Media conversion currently targets the tested original-game path on Windows; editing and chart export are available on macOS and Linux too. Automatic DLC audio conversion, dependable DLC discovery and the community website are still work in progress. If a feature fails, please report it rather than assuming you've done something wrong.
 
+### Media on macOS and Linux
+
+**For now, game export requires already-compatible audio and, if used, video.** MP3/MP4 files can be used as editor references, but are not automatically converted to Lips media on these systems.
+
+The tested original-game video profile is **ASF `.wmv`, VC-1 Advanced (WVC1), 768 × 432 at 24000/1001 fps**, with **48 kHz stereo, 16-bit WMA Pro audio at 192 kbit/s**. Separate OG `.wma` audio uses ASF/WMA Pro. Experimental DLC packaging instead requires **RIFF/XWMA full audio and preview**; renaming `.wma` is not conversion. Video is optional. Original files also contain WMV3 video and WMA Standard/xWMA audio, but those observations do not validate every newly encoded file.
+
+See the [exact media requirements and preparation steps](docs/studio_media.md#already-compatible-media-on-macos-and-linux), including header requirements and the distinction between tested settings and the 720p limit.
+
 ## Download
 
 Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Builds are available for Windows, macOS on Apple Silicon and Intel, and Linux.

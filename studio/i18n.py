@@ -5,6 +5,12 @@ _language = None
 
 # Source labels are retained as keys for compatibility with older UI code.
 CATALOG = {
+    'media.portable_limit': (
+        'Final media conversion currently requires Windows. On macOS and Linux, supply already-compatible audio and optional video for game export. MP3, MP4, H.264 and AAC can be reference media, but are not verified game-export formats. Editing, imports and .olp projects remain available.',
+        'Die finale Medienkonvertierung benötigt derzeit Windows. Unter macOS und Linux müssen Audio und optionales Video für den Spieleexport bereits im kompatiblen Format vorliegen. MP3, MP4, H.264 und AAC können als Referenzmedien dienen, sind aber keine bestätigten Spieleexportformate. Bearbeitung, Imports und .olp-Projekte bleiben verfügbar.'),
+    'media.compatible_inputs': (
+        'Tested OG video profile: ASF (.wmv), VC-1 Advanced (WVC1), 768 × 432, 24000/1001 fps (~23.976), ~2 Mbit/s; embedded WMA Pro (0x0162), 48 kHz, stereo, 16-bit, 192 kbit/s. The working ASF video header declares 24-bit bitmap depth. 1280 × 720 is the export ceiling, not a verified playback profile.\nOG separate audio profile: ASF (.wma), WMA Pro with the same audio settings.\nExperimental DLC export: full audio AND preview must be RIFF/XWMA, not ASF .wma. Original samples use WMA Standard (0x0161), 48 kHz, stereo, 16-bit, with fmt/dpds/data chunks. A new portable xWMA encoder path is not yet game-validated. Video is optional; a filename extension alone does not establish compatibility.\nDetails: docs/studio_media.md in the repository.',
+        'Getestetes OG-Videoprofil: ASF (.wmv), VC-1 Advanced (WVC1), 768 × 432, 24000/1001 fps (~23,976), ~2 Mbit/s; eingebettetes WMA Pro (0x0162), 48 kHz, Stereo, 16 Bit, 192 kbit/s. Der funktionierende ASF-Videoheader deklariert 24 Bit Bitmap-Tiefe. 1280 × 720 ist die Exportobergrenze, kein bestätigtes Wiedergabeprofil.\nOG-Profil für separates Audio: ASF (.wma), WMA Pro mit denselben Audioeinstellungen.\nExperimenteller DLC-Export: Vollaudio UND Vorschau müssen RIFF/XWMA sein, nicht ASF .wma. Originaldateien verwenden WMA Standard (0x0161), 48 kHz, Stereo, 16 Bit, mit fmt/dpds/data-Chunks. Ein neuer portabler xWMA-Encodingweg ist noch nicht im Spiel bestätigt. Video ist optional; die Dateiendung allein belegt keine Kompatibilität.\nDetails: docs/studio_media.md im Repository.'),
     'Datei': ('File', 'Datei'),
     'Projekt': ('Project', 'Projekt'),
     'Neu': ('New', 'Neu'),

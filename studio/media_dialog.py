@@ -10,6 +10,7 @@ import qtawesome as qta
 from studio.i18n import tr
 
 from studio.media import prepare_media, native_encoder, ffmpeg_encoder
+from studio.media_requirements import media_requirements, portable_media_notice
 
 
 class MediaWorker(QThread):
@@ -68,13 +69,13 @@ class MediaDialog(QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addRow(self.buttons)
         if sys.platform != 'win32':
-            self.log.setPlainText(tr('Die finale VC-1/WMA-Pro-Konvertierung benötigt derzeit Windows. '
-                                 'Projekte, Imports und Bearbeitung funktionieren auch auf macOS und Linux. '
-                                 'Speichere das Projekt als .olp und konvertiere die Medien unter Windows.'))
+            self.log.setPlainText(portable_media_notice())
             self.buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(False)
         elif not native_encoder():
             self.log.setPlainText(tr('Der gebündelte OpenLips-Encoder fehlt. Bitte das vollständige Windows-Release entpacken.'))
             self.buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(False)
+        else:
+            self.log.setPlainText(media_requirements())
 
     def choose(self, key):
         if key == 'output':

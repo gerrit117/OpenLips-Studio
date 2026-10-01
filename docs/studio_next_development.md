@@ -66,3 +66,14 @@ Local project suite after the new diagnostic tools: **257 passed, 3 skipped,
 11 subtests passed** (`pytest tests`). Bare repository-wide pytest also finds
 the ignored upstream USDB checkout, which requires its separate environment;
 that upstream collection failure is not a Studio test failure.
+
+## Portable media notices
+
+The conversion and DLC dialogs now explain the pre-encoded media requirement
+on macOS/Linux in both UI languages. READMEs and studio_media.md contain exact
+tested OG settings and separately labelled DLC corpus profiles. Codec-patching
+the game remains optional, unimplemented research, not a replacement for the
+standalone builder or the working Windows backend. Existing downloads have not
+been rebuilt for these notices yet. Full suite: 270 passed, three skipped,
+eleven subtests passed. Platform-specific notices were exercised with simulated
+macOS/Linux platform values on Windows, not native macOS/Linux encoding tests.

@@ -87,6 +87,14 @@ Die bestätigten Tests des gesamten Ablaufs wurden mit dem originalen Lips von 2
 
 Die Medienkonvertierung richtet sich derzeit an den getesteten Wiedergabeweg des ersten Spiels unter Windows. Bearbeitung und Chartexport sind auch unter macOS und Linux verfügbar. Automatische DLC-Audiokonvertierung, zuverlässige DLC-Erkennung und die Community-Webseite sind noch in Arbeit. Wenn etwas nicht klappt, melde es bitte, statt davon auszugehen, dass du etwas falsch gemacht hast.
 
+### Medien unter macOS und Linux
+
+**Für den Spieleexport müssen Audio und gegebenenfalls Video vorerst bereits im kompatiblen Format vorliegen.** MP3-/MP4-Dateien lassen sich im Editor als Referenz verwenden, werden auf diesen Systemen aber nicht automatisch in Lips-Medien umgewandelt.
+
+Das getestete Videoprofil für das erste Spiel ist **ASF `.wmv`, VC-1 Advanced (WVC1), 768 × 432 bei 24000/1001 fps**, mit **WMA-Pro-Audio, 48 kHz, Stereo, 16 Bit und 192 kbit/s**. Separates OG-Audio verwendet ASF/WMA Pro in `.wma`. Die experimentelle DLC-Verpackung benötigt dagegen **RIFF/XWMA für Vollaudio und Vorschau**; das Umbenennen einer `.wma` konvertiert sie nicht. Video ist optional. Originaldateien enthalten außerdem WMV3-Video und WMA-Standard-/xWMA-Audio, aber diese Beobachtungen bestätigen nicht jede neu codierte Datei.
+
+Die [genauen Medienanforderungen und Vorbereitungsschritte](docs/studio_media.md#deutsch-medien-vorbereiten) erläutern auch die Header-Vorgaben und den Unterschied zwischen getesteten Einstellungen und der 720p-Obergrenze.
+
 ## Download
 
 Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Es gibt Builds für Windows, macOS auf Apple Silicon und Intel sowie Linux.
