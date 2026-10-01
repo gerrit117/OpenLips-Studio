@@ -19,6 +19,12 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- The [media codec census](media_codec_corpus.md) distinguishes WMA Standard
+  RIFF/xWMA song audio from WMA Pro ASF movie audio, with native OG parser
+  evidence. [Large-library performance research](large_song_library_performance.md)
+  records a possible repeated-list-rebuild bottleneck and a measurement plan;
+  no performance patch or fresh codec gameplay acceptance is claimed.
+
 - A new song now appears under its own title/artist and loads from independent paths with a fresh offline profile. Existing profiles do not reimport the edited disc catalog, so DLC discovery is the intended installation route, not profile resets. See [registration and timing](custom_song_registration.md). A constant `--note-offset` is available for controlled synchronization tests; durations remain source-exact.
 
 - A fresh 770-note UltraStar chart and newly encoded VC-1/WMA Pro video now play in the isolated OG test slot and reach results. A one-byte ASF bitmap-header correction reproduces acceptance; audio was user-confirmed. Synchronization and independent catalog registration remain unfinished. See [controlled media tests](custom_media_runtime_tests.md).

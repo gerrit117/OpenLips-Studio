@@ -2,6 +2,12 @@
 
 Research date: 2026-10-01. No game files or accepted media checkpoints changed.
 
+Follow-up: the [expanded codec census and native parser analysis](media_codec_corpus.md)
+finds WMA Standard in all 76 inspected RIFF/xWMA paths, including full DLC audio.
+The Windows-only limitation below applies to the proven ASF movie backend,
+not a claim that all Lips audio requires WMA Pro. Portable audio-only xWMA is
+now a separate candidate; no untested backend has been enabled.
+
 ## Required output, not just a filename
 
 The accepted OG path currently uses WVC1/VC-1 Advanced video and 16-bit stereo

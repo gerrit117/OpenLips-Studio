@@ -46,3 +46,23 @@ for alternatives on every platform. Findings and a concrete evaluation plan
 are in [cross-platform backend research](cross_platform_media_backends.md).
 MainConcept is a vendor-documented candidate; WMA Pro, Apple Silicon, licensing
 and game compatibility are not yet confirmed. No codec substitution was enabled.
+
+## Offline codec and catalog investigation
+
+The user is away from the PC, so the pending Xenia input/profile handoff is not
+actionable. No codec probe was installed into game files. Instead the expanded
+[591-file census and native RIFF parser study](media_codec_corpus.md) establishes
+WMA Standard in original xWMA full-song assets, distinct from ASF WMA Pro movie
+audio. Portable audio-only xWMA is the next candidate; full seeking/playback
+validation and portable new-video encoding remain unresolved. Do not replace
+the accepted backend based on corpus or parser support alone.
+
+[Large-library performance](large_song_library_performance.md) is separate,
+optional game-side research. The source can rebuild the full active menu on
+each install event; frequency/cost and a 600-song runtime must be measured
+before implementing a coalescing patch. No game optimization was applied.
+
+Local project suite after the new diagnostic tools: **257 passed, 3 skipped,
+11 subtests passed** (`pytest tests`). Bare repository-wide pytest also finds
+the ignored upstream USDB checkout, which requires its separate environment;
+that upstream collection failure is not a Studio test failure.
