@@ -1,5 +1,20 @@
 # Plugin developer guide
 
+## Release policy
+
+New official plugins must be distributed as finished, installable `.opl`
+packages through GitHub Releases, not merely as source folders. Source code
+remains available for contributors. Publish separate packages for supported
+operating systems and architectures, including the worker, required runtimes,
+models and redistributable dependencies. Document external accounts or services;
+never bundle credentials.
+
+Before release, test installation and execution from the packaged artifact in
+Studio, verify cancellation and result import, and include checksums, licenses,
+credits and English release notes. Clearly label unsupported platforms and
+development-only plugins. A working source bridge is not a completed plugin
+release. USDB Downloader packaging follows the current media compatibility tests.
+
 Development extension (not yet a released native USDB package): process plugins
 can additionally declare `result_type: "song-import"`, `input_required: false`
 and `interactive: true`. Such workers return `result.json` with
