@@ -50,6 +50,7 @@ class StudioProject:
     notes: list[EditorNote] = field(default_factory=list)
     audio_path: str = ""
     video_path: str = ""
+    cover_path: str = ""
     reference_offset: float = 0.0
     source: str = ""
     draft_lyrics: str = ""
@@ -60,7 +61,7 @@ class StudioProject:
             raise ValueError("BPM must be in 1..1000")
         if not math.isfinite(self.reference_offset) or abs(self.reference_offset) > 86400:
             raise ValueError('Invalid reference offset')
-        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'source', 'draft_lyrics'):
+        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'cover_path', 'source', 'draft_lyrics'):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"Project {name} must be text")
         if len(self.notes) > 100000:
@@ -109,7 +110,7 @@ class StudioProject:
 def save_project(project, path):
     path = Path(path).resolve()
     data = project.to_payload()
-    for field in ('audio_path', 'video_path'):
+    for field in ('audio_path', 'video_path', 'cover_path'):
         if not getattr(project, field):
             continue
         audio = Path(getattr(project, field)).resolve()
@@ -138,7 +139,7 @@ def load_project(path):
     if path.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("Project exceeds the 64 MiB safety limit")
     project = StudioProject.from_payload(json.loads(path.read_text(encoding='utf-8')))
-    for field in ('audio_path', 'video_path'):
+    for field in ('audio_path', 'video_path', 'cover_path'):
         value = getattr(project, field)
         if value and not Path(value).is_absolute():
             setattr(project, field, str((path.parent / value).resolve()))

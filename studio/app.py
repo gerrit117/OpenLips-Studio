@@ -7,7 +7,7 @@ import sys
 import time
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QSplitter, QLineEdit, QDoubleSpinBox, QSpinBox,
@@ -82,6 +82,8 @@ class StudioWindow(QMainWindow):
                                 ('UltraStar importieren', self.import_txt),
                                 ('Audio laden', self.load_audio),
                                 ('Referenzvideo laden', self.load_video),
+                                ('Cover laden', self.load_cover),
+                                ('OG-Medien konvertieren', self.convert_media),
                                 ('Debug-JSON exportieren', self.export_json),
                                 ('X360-Paar exportieren', self.export_pair),
                                 ('DLC exportieren (experimentell)', self.export_dlc)]:
@@ -89,6 +91,7 @@ class StudioWindow(QMainWindow):
         tools = self.menuBar().addMenu('Werkzeuge')
         tools.addAction('Lyrics suchen', self.search_lyrics)
         tools.addAction('Plugins', self.plugins_dialog)
+        tools.addAction('Alle Noten zeitlich verschieben', self.shift_all_notes)
         edit = self.menuBar().addMenu('Bearbeiten')
         self.undo_action = self.action('Rueckgaengig', 'fa5s.undo', self.undo, QKeySequence.StandardKey.Undo)
         self.redo_action = self.action('Wiederholen', 'fa5s.redo', self.redo, QKeySequence.StandardKey.Redo)
@@ -101,11 +104,16 @@ class StudioWindow(QMainWindow):
         toolbar.addAction(self.action('UltraStar importieren', 'fa5s.file-import', self.import_txt))
         toolbar.addAction(self.action('Audio laden', 'fa5s.headphones', self.load_audio))
         toolbar.addAction(self.action('Referenzvideo laden', 'fa5s.film', self.load_video))
+        toolbar.addAction(self.action('Cover laden', 'fa5s.image', self.load_cover))
+        toolbar.addAction(self.action('OG-Medien konvertieren', 'fa5s.exchange-alt', self.convert_media))
 
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         meta = QHBoxLayout()
+        self.cover_preview = QLabel()
+        self.cover_preview.setFixedSize(48, 48)
+        meta.addWidget(self.cover_preview)
         self.title_edit = QLineEdit()
         self.artist_edit = QLineEdit()
         self.bpm_edit = QDoubleSpinBox()
@@ -324,6 +332,13 @@ class StudioWindow(QMainWindow):
         self.artist_edit.setText(self.project.artist)
         self.bpm_edit.setValue(self.project.bpm)
         self.key_label.setText(f'Tonart: {self.project.key_signature or "-"}')
+        from studio.media import cover_image
+        try:
+            self.cover_preview.setPixmap(QPixmap.fromImage(cover_image(self.project)).scaled(
+                48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        except ValueError:
+            self.cover_preview.clear()
+        self.cover_preview.setToolTip(self.project.cover_path or 'Generiertes Cover')
         self.reference_edit.setValue(self.project.reference_offset)
         names = [Path(p).name for p in (self.project.audio_path, self.project.video_path) if p]
         self.reference_label.setText(' / '.join(names) or 'Keine Referenz')
@@ -545,8 +560,49 @@ class StudioWindow(QMainWindow):
         if path:
             self.snapshot()
             self.project.video_path = path
+            # A newly chosen music video is the master, including its soundtrack.
+            self.project.audio_path = ''
             self.configure_media()
             self.changed()
+
+    def load_cover(self):
+        path, _ = QFileDialog.getOpenFileName(self, 'Cover laden', '', 'Bilder (*.jpg *.jpeg *.png *.webp *.bmp)')
+        if path:
+            from studio.media import cover_image
+            candidate = copy.deepcopy(self.project)
+            candidate.cover_path = path
+            try:
+                cover_image(candidate)
+            except ValueError as exc:
+                self.error(exc)
+                return
+            self.snapshot()
+            self.project.cover_path = path
+            self.changed()
+
+    def convert_media(self):
+        from studio.media_dialog import MediaDialog
+        MediaDialog(self.project, self).exec()
+
+    def shift_all_notes(self):
+        offset, ok = QInputDialog.getDouble(self, 'Chart synchronisieren',
+            'Noten und Seiten verschieben (Sekunden; positiv = spaeter)', 0, -900, 900, 3)
+        if not ok or not offset or not self.project.notes:
+            return
+        shifted = copy.deepcopy(self.project)
+        for note in shifted.notes:
+            note.time += offset
+            if note.page_break_time is not None:
+                note.page_break_time += offset
+        try:
+            shifted.validate()
+        except ValueError as exc:
+            self.error(exc)
+            return
+        self.snapshot()
+        self.project = shifted
+        self.changed()
+        self.statusBar().showMessage(f'{len(shifted.notes)} Noten um {offset:+.3f} s verschoben; Export uebernimmt die Zeiten')
 
     def configure_media(self):
         self.stop()

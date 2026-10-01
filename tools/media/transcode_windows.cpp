@@ -22,10 +22,11 @@ static void check(HRESULT hr, const char* operation) {
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 3) {
-        std::cerr << "usage: transcode_windows input.mp4 new-output.wmv\n";
+    if (argc < 3 || argc > 4 || (argc == 4 && std::wstring(argv[3]) != L"--audio-only")) {
+        std::cerr << "usage: transcode_windows input new-output.wmv [--audio-only]\n";
         return 2;
     }
+    const bool audio_only = argc == 4;
     const auto output = std::filesystem::absolute(argv[2]);
     const auto temporary = output.wstring() + L".partial.wmv";
     if (std::filesystem::exists(output) || std::filesystem::exists(temporary)) {
@@ -75,6 +76,7 @@ int wmain(int argc, wchar_t** argv) {
         }
         if (!selected) throw std::runtime_error("48k stereo 192k 16-bit WMA Pro encoder type unavailable");
         check(profile->SetAudioAttributes(selected.Get()), "audio profile");
+        if (!audio_only) {
         ComPtr<IMFAttributes> video;
         check(MFCreateAttributes(&video, 8), "video attributes");
         check(video->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video), "video major");
@@ -85,6 +87,7 @@ int wmain(int argc, wchar_t** argv) {
         check(video->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive), "interlace");
         check(video->SetUINT32(MF_MT_AVG_BITRATE, 2000000), "video bitrate");
         check(profile->SetVideoAttributes(video.Get()), "video profile");
+        }
         ComPtr<IMFAttributes> container;
         check(MFCreateAttributes(&container, 2), "container attributes");
         check(container->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_ASF), "ASF container");
@@ -124,7 +127,7 @@ int wmain(int argc, wchar_t** argv) {
         // MoveFile refuses an existing destination, including one created meanwhile.
         if (!MoveFileW(temporary.c_str(), output.c_str()))
             check(HRESULT_FROM_WIN32(GetLastError()), "publish output");
-        std::cout << "encoded VC-1 / WMA Pro; Lips runtime acceptance NOT VERIFIED\n";
+        std::cout << (audio_only ? "encoded audio-only WMA Pro ASF\n" : "encoded VC-1 / WMA Pro ASF at 768x432\n");
         result = 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << "\n";

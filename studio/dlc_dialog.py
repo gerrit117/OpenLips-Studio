@@ -21,7 +21,7 @@ class PackageWorker(QThread):
         try:
             from tools.build_dlc import make_manifest, build_package, asset_name
             v = self.values
-            media = {key: Path(v[key]) for key in ('audio', 'preview_audio', 'jacket')}
+            media = {key: Path(v[key]) for key in ('audio', 'preview_audio')}
             if v['video']:
                 media['video'] = Path(v['video'])
             for path in media.values():
@@ -29,6 +29,12 @@ class PackageWorker(QThread):
                     raise ValueError(f'Missing media file: {path}')
                 asset_name(path.name)
             with tempfile.TemporaryDirectory(prefix='openlips-studio-') as temp:
+                import copy
+                from studio.media import write_cover
+                cover_project = copy.deepcopy(self.project)
+                if v['jacket']:
+                    cover_project.cover_path = v['jacket']
+                media['jacket'] = write_cover(cover_project, Path(temp) / 'custom_cover.jpg')
                 name = 'custom'
                 pair = export_owned_pair(self.project, Path(temp) / 'pair', name,
                                           media['audio'].name,
@@ -62,7 +68,7 @@ class DlcDialog(QDialog):
         self.id = QLineEdit('0x73000001')
         layout.addRow('Eigene freie Song-ID', self.id)
         for key, label in [('backend', 'STFS-Backend'), ('audio', 'Audio (xWMA)'),
-                           ('preview_audio', 'Vorschau (xWMA)'), ('jacket', 'Cover (JPEG)'),
+                           ('preview_audio', 'Vorschau (xWMA)'), ('jacket', 'Cover (optional)'),
                            ('video', 'Video (optional)'), ('output', 'Ausgabepaket')]:
             edit = QLineEdit()
             self.fields[key] = edit

@@ -1,6 +1,6 @@
 # OpenLips Studio
 
-**0.1.1 Beta**: a native desktop song editor built on OpenLips' Xbox 360
+**0.1.2 Beta**: a native desktop song editor built on OpenLips' Xbox 360
 IXB reverse-engineering tools. Windows, macOS and Linux use the same Python/Qt
 sources. The accepted fresh writer targets original Lips (2008), not all LS2
 or compressed chart variants.
@@ -15,6 +15,7 @@ or compressed chart variants.
 - Unfinished `.olp` projects: versioned JSON with external media references.
 - Optional lyrics lookup, experimental syllable suggestions and importer plugins.
 - Fresh template-free OG chart/lyric export and experimental DLC packaging.
+- Windows OG media conversion, optional cover video, JPEG covers and chart shift.
 
 ## Run or Build
 
@@ -30,12 +31,13 @@ python -m PyInstaller --noconfirm OpenLipsStudio.spec
 
 Windows output: `dist/OpenLipsStudio/OpenLipsStudio.exe`. Keep its entire folder.
 GitHub Actions builds target-native Windows x64, macOS Apple Silicon/Intel and
-Linux x64 artifacts. Non-Windows availability is pending successful native CI;
-this is not a claim of testing on every Linux distribution.
+Linux x64 artifacts. All four 0.1.1 Beta targets passed native CI and frozen
+startup tests; this is not a claim of testing on every Linux distribution.
 
 ## Documentation
 
 - [Editor guide](docs/studio.md) and [platform builds](docs/studio_platforms.md).
+- [Media conversion, covers and synchronization](docs/studio_media.md).
 - [Page timing, projects and community direction](docs/studio_pages_and_community.md).
 - [Beta validation](docs/studio_validation.md) and [changelog](CHANGELOG.md).
 - [IXB structures](docs/structures.md), [strict graph reader](docs/og_ixb_reader.md).

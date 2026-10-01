@@ -2,12 +2,17 @@
 from PyInstaller.utils.hooks import collect_data_files
 import sys
 from studio import DISPLAY_VERSION
+from pathlib import Path
+
+media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
+media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') +
                    [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.')],
-             hiddenimports=['mido', 'studio.dlc_dialog', 'studio.plugins'],
-             excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore'],
+             binaries=media_binaries,
+             hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins'],
+             excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore', 'imageio_ffmpeg'],
              noarchive=False)
 # Qt 6.11 imports Windows' unversioned ICU shim. The developer PATH may
 # contain an unrelated Poppler ICU with suffixed exports; never bundle it.

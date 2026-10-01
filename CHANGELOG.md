@@ -1,11 +1,19 @@
 # Changelog
 
+## 0.1.2 Beta
+
+- Windows OG VC-1/WMA Pro media preparation with the native encoder bundled.
+- Video soundtrack extraction, audio-only output and optional FFmpeg cover video.
+- 432p output below the 720p ceiling, bounded header normalization and validation.
+- Project cover references, thumbnails and always-present normalized DLC JPEGs.
+- Undoable chart/page time shifts that survive project saving and export.
+- New synthetic media/cover tests; new playback paths still need gameplay checks.
+
 ## 0.1.1 Beta
 
 - Install required Qt graphics/audio libraries on Linux build runners.
 - Avoid duplicate native CI builds when tagging the same main-branch commit.
-- Native Windows and Apple Silicon builds passed tests and frozen startup.
-- Intel macOS/Linux verification follows the corrected build matrix.
+- Windows, Apple Silicon, Intel macOS and Linux builds passed tests/frozen startup.
 
 ## 0.1.0 Beta
 
