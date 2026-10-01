@@ -15,3 +15,12 @@ private/Lips/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+build/
+dist/
+*.egg-info/
+.venv/
+*.olips
+*.olp
+examples/ultrastar/*.txt
+tools/input.txt
+tools/test_chart*.json

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import struct
 import sys
@@ -65,6 +66,7 @@ class Note:
     text: str
     end_word: bool = True
     line_break_after: bool = False
+    page_break_time: float | None = None
 
 
 Syllable = Note
@@ -254,6 +256,7 @@ def load_json_chart(path: Path) -> SongChart:
                 text=str(raw_note["text"]),
                 end_word=bool(raw_note.get("end_word", True)),
                 line_break_after=bool(raw_note.get("line_break_after", False)),
+                page_break_time=(float(raw_note['page_break_time']) if raw_note.get('page_break_time') is not None else None),
             )
         except KeyError as exc:
             raise ValueError(f"note {index} missing required field {exc.args[0]}") from exc
@@ -265,6 +268,8 @@ def load_json_chart(path: Path) -> SongChart:
 
 
 def _validate_note(note: Note, index: int) -> None:
+    if note.page_break_time is not None and (not math.isfinite(note.page_break_time) or note.page_break_time < 0):
+        raise ValueError(f'note {index} has invalid page switch time')
     if note.time < 0 or note.time > 899:
         raise ValueError(f"note {index} time must be between 0 and 899 seconds")
     if note.length <= 0 or note.length > 20:

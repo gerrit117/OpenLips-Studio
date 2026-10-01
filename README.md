@@ -1,86 +1,57 @@
-# OpenLips
+# OpenLips Studio
 
-OpenLips is a reverse-engineering and tooling project for the Xbox 360 karaoke game *Lips*.
+**0.1.0 Beta**: a native desktop song editor built on OpenLips' Xbox 360
+IXB reverse-engineering tools. Windows, macOS and Linux use the same Python/Qt
+sources. The accepted fresh writer targets original Lips (2008), not all LS2
+or compressed chart variants.
 
-The goal is to understand the internal Lips file formats well enough to build safe tooling for custom song creation, chart inspection, lyric editing, and eventually UltraStar-to-Lips conversion.
+## Desktop Editor
 
-## Project Goals
+- MIDI import with track/channel selection and tempo-map conversion.
+- UltraStar import preserving note text, timing, lengths, pitch and phrase times.
+- Horizontal karaoke bars, editable syllables, pitch names and exact page timing.
+- Note creation, dragging/resizing, word/phrase boundaries and undo/redo.
+- Local audio/video reference playback, speed control and preview-only offset.
+- Unfinished `.olp` projects: versioned JSON with external media references.
+- Optional lyrics lookup, experimental syllable suggestions and importer plugins.
+- Fresh template-free OG chart/lyric export and experimental DLC packaging.
 
-- Parse Lips `.X360` / IXB chart and lyric files.
-- Extract melody, pitch, timing, marker, and lyric mapping data.
-- Compare real chart/lyric pairs against synthetic/template output.
-- Build template-preserving writers before attempting any from-scratch writer.
-- Validate edits with byte-identical roundtrip tests and runtime checks.
-- Convert UltraStar songs to Lips-compatible content once the file model is stable.
+## Run or Build
 
-## Current Status
+Bundled applications include Python; end users do not need to install it.
+For source development, install Python 3.11+:
 
-- A new song now appears under its own title/artist and loads from independent paths with a fresh offline profile. Existing profiles do not reimport the edited disc catalog, so DLC discovery is the intended installation route, not profile resets. See [registration and timing](docs/custom_song_registration.md). A constant `--note-offset` is available for controlled synchronization tests; durations remain source-exact.
-
-- A fresh 770-note UltraStar chart and newly encoded VC-1/WMA Pro video now play in the isolated OG test slot and reach results. A one-byte ASF bitmap-header correction reproduces acceptance; audio was user-confirmed. Synchronization and independent catalog registration remain unfinished. See [controlled media tests](docs/custom_media_runtime_tests.md).
-
-- A fully generated OG chart/lyric pair now has measured native clock progression, and a fresh six-note chart switches lyric/note pages without instrumentation. The earlier frozen-clock diagnosis was incorrect for this tested pair. Independent media/catalog registration remains unfinished; see [native clock comparison](docs/og_chart_clock_probe.md).
-
-- The synthetic builder now writes complete big-endian record headers, schema-index tags and framed raw buffers. All 22 controlled outputs pass the strict reader; runtime acceptance is not yet verified. See [serialization correction](docs/synthetic_record_framing.md).
-
-- A separate strict sequential reader (`tools/walk_ixb_graph.py`) consumes 117/117 local plain IXB samples with exact boundaries and object counts, resolves chart/sequence references, and traces ownership by serialized object key. See [OG IXB reader findings](docs/og_ixb_reader.md) for live ABC validation and the record-framing defect in the current synthetic builder.
-
-- Plain IXB `.X360` files are parsed with header attributes, class/member inventories, URI list state, object section bounds, and writer-order diagnostics.
-- Lips-1 chart files can be analyzed for melody markers, lyric markers, marker counts, timing, and text mapping coverage.
-- Lips-1 lyric files can be analyzed for text resources, payload lengths, hash-like fields, pointer-like references, and chart-word coverage.
-- Corpus comparison has been run locally against the private Lips game corpus. Public docs contain only sanitized summaries.
-- Batch no-op roundtrip succeeded for 111/111 plain IXB lyric files and 111/111 plain IXB chart files using section split/rejoin with no object reserialization.
-- A first private runtime-console test package has been prepared locally for a single 4-byte ASCII lyric payload edit, with analyzer before/after reports and rollback instructions.
-- Ghidra findings document the likely IXB writer order and several writer-relevant serializer strings/functions, but unresolved fields are still treated as hypotheses.
-
-## Recommended Direction
-
-The fresh OG writer is now runtime-tested for the custom song above. Next work
-is DLC discovery on existing profiles, followed by synchronization and media
-preview/cover packaging. Preserve the accepted chart/media checkpoint while
-testing each installation change separately. LS2/DLC runtime layout support
-must not be inferred from OG acceptance.
-
-For editing existing songs, retain the template-preserving path:
-
-1. Keep real header attributes, class/member order, URI list, object graph shape, and unknown bytes intact.
-2. Make one minimal same-size payload edit at a time.
-3. Compare analyzer snapshots before/after.
-4. Run a controlled runtime test.
-5. Only then expand the supported edit surface.
-
-Do not extend the from-scratch writer to other format families without their
-own structural and runtime validation; compressed `.X360` authoring remains
-outside the accepted plain OG path.
-
-## Experimental DLC Packaging
-
-`tools/build_dlc.py` now creates unsigned LIVE/STFS containers from the fresh
-UltraStar/OG writer or prepared chart/lyric files, with independent hash-tree
-verification and byte-identical extraction checks. `tools/upload_dlc.py` adds
-optional verified FTP installation to the OG title's content directory.
-Neither uploads nor overwrites happen by default. See [DLC builder](docs/dlc_builder.md)
-for backend build instructions, commands and limitations. Actual in-game DLC
-discovery on existing profiles remains unverified; these are not retail-signed
-packages. The accepted disc-based chart/media pipeline is unchanged.
-
-## Repository Layout
-
-```text
-docs/       Sanitized technical findings, format notes, plans, and runtime-test summaries
-tools/      Parsers, analyzers, patchers, corpus comparison, and runtime-test preparation helpers
-tests/      Unit tests for supported tooling behavior
-private/    Local-only copyrighted/private game corpus and generated private reports; ignored by git
+```sh
+python -m pip install -e ".[dev]"
+python -m studio
+python -m pytest -q
+python -m PyInstaller --noconfirm OpenLipsStudio.spec
 ```
 
-## Important Private Data Boundary
+Windows output: `dist/OpenLipsStudio/OpenLipsStudio.exe`. Keep its entire folder.
+GitHub Actions builds target-native Windows x64, macOS Apple Silicon/Intel and
+Linux x64 artifacts. Non-Windows availability is pending successful native CI;
+this is not a claim of testing on every Linux distribution.
 
-`private/` is intentionally ignored and must stay out of GitHub. It may contain copyrighted game files, local runtime-test copies, private reports with song titles/lyrics/paths, and machine-specific analysis output.
+## Documentation
 
-When moving to another machine, transfer `private/` separately by a private local method, for example an encrypted archive or external drive. Do not commit or push original game files, DLC, lyrics, audio, video, or extracted copyrighted assets.
+- [Editor guide](docs/studio.md) and [platform builds](docs/studio_platforms.md).
+- [Page timing, projects and community direction](docs/studio_pages_and_community.md).
+- [Beta validation](docs/studio_validation.md) and [changelog](CHANGELOG.md).
+- [IXB structures](docs/structures.md), [strict graph reader](docs/og_ixb_reader.md).
+- [Research / CLI reference](docs/research_overview.md).
+- [Experimental DLC builder](docs/dlc_builder.md) and [discovery findings](docs/dlc_import_comparison.md).
 
-## Legal Notice
+## Scope and Rights
 
-This repository does not include copyrighted Lips assets, official Xbox 360 SDK binaries, original DLC files, audio, video, or game content.
+`studio/` is the app, `tools/` retains the existing importers/serializers/analyzers,
+`tests/` contains synthetic fixtures, and `docs/` contains sanitized findings.
+Private samples and generated media stay local and are not distributed.
+Earlier Git history still requires a copyrighted-sample audit before the repo
+is made public. Current cleanup does not rewrite history or delete local samples.
 
-OpenLips is intended for research, preservation, interoperability, and personal modding/tooling purposes only.
+DLC discovery remains unresolved; structural STFS checks do not prove game
+acceptance. Native media/STFS backends are separate and currently Windows-oriented.
+Imported media/lyrics require appropriate rights. No community upload is automatic.
+
+Source: GPL-3.0-or-later. See [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).

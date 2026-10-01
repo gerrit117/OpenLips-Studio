@@ -41,9 +41,40 @@ def offset_notes(chart: SongChart, seconds: float) -> SongChart:
     if not math.isfinite(seconds):
         raise ValueError("note offset must be finite")
     notes = [replace(note, time=note.time + seconds) for note in chart.notes]
+    notes = [replace(note, page_break_time=note.page_break_time + seconds)
+             if note.page_break_time is not None else note for note in notes]
     if any(not math.isfinite(note.time) or note.time < 0 for note in notes):
         raise ValueError("note offset produces invalid/negative timing")
     return replace(chart, notes=notes)
+
+
+def phrase_page_starts(notes):
+    """Return (previous-note index, page time); None denotes the initial page.
+
+    Explicit page times override preroll, but cannot hide the next phrase's
+    initial notes by switching after they have started.
+    """
+    ordered = sorted(enumerate(notes), key=lambda item: (item[1].time, item[0]))
+    if not ordered:
+        return []
+    pages = [(None, max(0.0, ordered[0][1].time - .8))]
+    phrase_end = ordered[0][1].time + ordered[0][1].length
+    for (index, previous), (_, following) in zip(ordered, ordered[1:]):
+        if previous.line_break_after:
+            time = getattr(previous, 'page_break_time', None)
+            if time is None:
+                time = max(0.0, following.time - .8, min(phrase_end, following.time))
+            elif not math.isfinite(time) or not 0 <= time <= following.time:
+                raise ValueError(f'Page switch after note {index + 1} must be between 0 and next note start ({following.time:.3f}s)')
+            if time < pages[-1][1]:
+                raise ValueError('Page switch times must be chronological')
+            pages.append((index, time))
+            phrase_end = following.time + following.length
+        else:
+            phrase_end = max(phrase_end, following.time + following.length)
+    if getattr(ordered[-1][1], 'page_break_time', None) is not None:
+        raise ValueError('Last note cannot define a next-page switch without a following phrase')
+    return pages
 
 # Stable first-word file-layout tokens in plain OG charts where present.
 OG_CLASS_TOKENS = {
@@ -246,17 +277,7 @@ def build_owned_pair(chart: SongChart, name: str, audio_name: str, *, bpm=120.0,
         e.string(body, 20, movie_name)
         append("Movie", "ixMovieMarker", body)
     ordered = sorted(enumerate(chart.notes), key=lambda item: (item[1].time, item[0]))
-    page_starts = [max(0.0, ordered[0][1].time - 0.8)]
-    phrase_end = ordered[0][1].time + ordered[0][1].length
-    for (_, prev), (_, following) in zip(ordered, ordered[1:]):
-        if prev.line_break_after:
-            # Dense UltraStar phrases may have less than the normal preroll gap.
-            # Never place that preroll inside the completed phrase's notes.
-            page_starts.append(max(0.0, following.time - 0.8,
-                                   min(phrase_end, following.time)))
-            phrase_end = following.time + following.length
-        else:
-            phrase_end = max(phrase_end, following.time + following.length)
+    page_starts = [time for _, time in phrase_page_starts(chart.notes)]
     for time in sorted(set(page_starts + [end - 1.0])):
         append("Section", "lpsPageBreakMarker", e.code(24, time, 0.08))
     append("Section", "ixSeqSuspend", e.code(20, end, 0.08))

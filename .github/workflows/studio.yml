@@ -1,0 +1,43 @@
+name: Studio beta builds
+on:
+  workflow_dispatch:
+  push:
+    paths: ['studio/**', 'tests/test_studio.py', 'pyproject.toml', 'OpenLipsStudio.spec', '.github/workflows/studio.yml']
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-14, macos-15-intel, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: python -m PyInstaller --noconfirm OpenLipsStudio.spec
+      - name: Smoke test frozen Unix build
+        if: runner.os != 'Windows'
+        run: dist/OpenLipsStudio/OpenLipsStudio --smoke-test smoke.png
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Smoke test frozen Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/OpenLipsStudio/OpenLipsStudio.exe -ArgumentList '--smoke-test','smoke.png' -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenLips-Studio-0.1.0-beta-${{ matrix.os }}
+          path: |
+            dist/OpenLipsStudio/
+            dist/OpenLipsStudio.app/
+            smoke.png
+          retention-days: 14

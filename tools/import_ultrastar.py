@@ -27,6 +27,7 @@ class UltraStarNote:
     text: str
     end_word: bool
     line_break_after: bool = False
+    page_break_beat: int | None = None
 
     @property
     def raw_pitch(self) -> int:
@@ -90,7 +91,7 @@ def beat_to_seconds(beat: int | float, bpm: float, gap_ms: float) -> float:
     return gap_ms / 1000.0 + (float(beat) * 60.0 / (bpm * 4.0))
 
 
-def _set_previous_line_break(notes: list[UltraStarNote]) -> None:
+def _set_previous_line_break(notes: list[UltraStarNote], beat: int | None = None) -> None:
     if not notes:
         return
     previous = notes[-1]
@@ -103,6 +104,7 @@ def _set_previous_line_break(notes: list[UltraStarNote]) -> None:
         text=previous.text,
         end_word=True,
         line_break_after=True,
+        page_break_beat=beat,
     )
 
 
@@ -159,7 +161,16 @@ def parse_ultrastar_text(text: str, encoding: str = "unknown") -> UltraStarChart
             break
         note_type = line[0]
         if note_type in PHRASE_BREAK_TYPES:
-            _set_previous_line_break(notes)
+            parts = line[1:].split()
+            try:
+                beat = int(parts[0]) if parts else None
+            except ValueError:
+                beat = None
+                warnings.append(f'line {line_number}: invalid phrase beat; automatic page timing retained')
+            if len(parts) > 1 or metadata.get('RELATIVE', '').upper() in ('YES', 'TRUE', '1'):
+                beat = None
+                warnings.append(f'line {line_number}: relative/multi-value phrase timing unsupported; automatic page timing retained')
+            _set_previous_line_break(notes, beat)
             continue
         if note_type == "*" and len(line[1:].split()) == 1:
             warnings.append(f"line {line_number}: '*' phrase marker treated as line break")
@@ -232,6 +243,12 @@ def chart_to_json_payload(chart: UltraStarChart) -> dict[str, Any]:
                 },
             }
         )
+        if note.page_break_beat is not None:
+            page_time = beat_to_seconds(note.page_break_beat, bpm, gap_ms)
+            if page_time >= 0:
+                notes[-1]['page_break_time'] = round(page_time, 6)
+            else:
+                chart.warnings.append(f'line {note.line_number}: negative page time omitted')
     return {
         "title": chart.title,
         "artist": chart.artist,
