@@ -55,6 +55,7 @@ class StudioProject:
     source: str = ""
     draft_lyrics: str = ""
     warnings: list[str] = field(default_factory=list)
+    lyric_reference: dict = field(default_factory=dict)
 
     def validate(self):
         if not math.isfinite(self.bpm) or not 1 <= self.bpm <= 1000:
@@ -66,6 +67,13 @@ class StudioProject:
                 raise ValueError(f"Project {name} must be text")
         if len(self.notes) > 100000:
             raise ValueError("Project contains too many notes")
+        if not isinstance(self.lyric_reference, dict):
+            raise ValueError('Lyric reference must be an object')
+        if self.lyric_reference:
+            from studio.lrc import parse_lrc
+            if self.lyric_reference.get('format') != 'lrc' or not isinstance(self.lyric_reference.get('source', ''), str):
+                raise ValueError('Unsupported lyric reference')
+            parse_lrc(self.lyric_reference.get('raw'))
         ids = set()
         for note in self.notes:
             note.validate()

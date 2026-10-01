@@ -5,6 +5,16 @@ _language = None
 
 # Source labels are retained as keys for compatibility with older UI code.
 CATALOG = {
+    'lrc.import': ('Import synchronized lyrics (LRC)', 'Synchronisierten Songtext importieren (LRC)'),
+    'lrc.review': ('Review lyric timing', 'Songtext-Zeitmarken prüfen'),
+    'lrc.title': ('Lyric timing', 'Songtext-Zeitmarken'),
+    'lrc.time': ('Start (s)', 'Start (s)'),
+    'lrc.words': ('Word anchors', 'Wort-Zeitmarken'),
+    'lrc.summary': ('{count} lines · LRC offset: {offset} ms', '{count} Zeilen · LRC-Offset: {offset} ms'),
+    'lrc.none': ('No synchronized lyric reference attached', 'Kein synchronisierter Songtext hinterlegt'),
+    'lrc.synchronized': ('Synchronized lyrics (LRC)', 'Synchronisierter Songtext (LRC)'),
+    'lrc.plain': ('Plain lyrics', 'Songtext ohne Zeitmarken'),
+    'lrc.accept': ('Use lyrics', 'Songtext übernehmen'),
     'media.portable_limit': (
         'Final media conversion currently requires Windows. On macOS and Linux, supply already-compatible audio and optional video for game export. MP3, MP4, H.264 and AAC can be reference media, but are not verified game-export formats. Editing, imports and .olp projects remain available.',
         'Die finale Medienkonvertierung benötigt derzeit Windows. Unter macOS und Linux müssen Audio und optionales Video für den Spieleexport bereits im kompatiblen Format vorliegen. MP3, MP4, H.264 und AAC können als Referenzmedien dienen, sind aber keine bestätigten Spieleexportformate. Bearbeitung, Imports und .olp-Projekte bleiben verfügbar.'),

@@ -1,8 +1,35 @@
 # Integrated AI chart creation: source review and proposal
 
-Research snapshot, 2026-10-01. This document proposes a built-in, optional
-Studio feature, not a new plugin. No AI runtime was installed or executed,
-and no third-party code or model was incorporated in this pass.
+Research and implementation snapshot, 2026-10-01. The optional built-in feature
+starts with implemented LRC reference import. The AI stages below remain a
+proposal: no new AI runtime/model was installed or executed in this pass.
+
+## Implemented first step (unreleased)
+
+File -> Import synchronized lyrics (LRC) opens a review of line starts and
+enhanced word anchors. Accepting stores the original text/source in
+`StudioProject.lyric_reference`, updates the lyric draft, and preserves all
+existing notes. Tools -> Review lyric timing reopens the stored anchors.
+Cancellation makes no changes; acceptance supports undo/redo and `.olp`
+round-trips. Existing schema-1 projects without this optional field still load.
+The lyrics-search workflow offers synchronized LRCLIB text when supplied,
+using the same review/acceptance path rather than discarding timestamps.
+
+UTF-8/BOM, metadata, repeated line starts, enhanced word starts and millisecond
+offsets are supported. Positive offset advances lyrics:
+`effective_seconds = timestamp_seconds - offset_ms / 1000`.
+This follows the convention documented by the
+[Paroles LRC parser](https://github.com/Clarkkkk/paroles). The raw source remains
+unchanged; reloading recalculates once, never offsets already-adjusted anchors.
+Negative anchors and nonchronological enhanced words are reported, not silently
+clamped. Unrecognized lines remain in source with warnings. Input is bounded
+to 2 MiB, 10,000 line anchors and 100,000 word anchors;
+NUL-containing/non-UTF-8 files are rejected.
+
+LRC attachment does **not** create pitches, infer word ends, modify chart page
+events or perform forced alignment. Existing manual lyric assignment still
+works independently; the saved reference is provenance, not automatic mapping.
+Next: isolated CPU-first F0 analysis and a reviewed note/lyric alignment result.
 
 ## Reviewed projects
 
@@ -116,9 +143,9 @@ because a GPU is present.
 
 ## LRC integration
 
-Studio already performs explicit-consent LRCLIB searches, but currently consumes
-plain lyrics; it does **not yet** import or retain synchronized LRC cues.
-Use synchronized lyrics as a first-class input, not as disposable plain text.
+Studio performs explicit-consent LRCLIB searches and now retains synchronized
+LRC references in development builds. The following constraints continue to
+apply when adding alignment and analysis.
 
 - Support UTF-8/BOM, line timestamps, metadata, repeated timestamps and `[offset:]`.
   Preserve repeated chorus occurrences. Timestamp offsets are separate from
@@ -184,5 +211,6 @@ chart-quality checks before implementing a separately validated Lips estimator.
 4. Hardware-specific validated builds, presets and recovery tests.
 5. End-to-end new-chart gameplay and microphone-scoring checks.
 
-This is an integration recommendation, not an implemented AI assistant or LRC
-import release. It is independent of the MPEG-4 gameplay acceptance experiment.
+LRC reference import is implemented in the source tree, not yet released.
+The rest remains an integration recommendation, not an implemented AI assistant.
+It is independent of the paused MPEG-4 gameplay acceptance experiment.

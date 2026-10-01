@@ -83,6 +83,7 @@ class StudioWindow(QMainWindow):
         file.addSeparator()
         for label, callback in [(tr('MIDI importieren'), self.import_midi),
                                 (tr('UltraStar importieren'), self.import_txt),
+                                (tr('lrc.import'), self.import_lrc),
                                 (tr('Audio laden'), self.load_audio),
                                 (tr('Referenzvideo laden'), self.load_video),
                                 (tr('Cover laden'), self.load_cover),
@@ -93,6 +94,7 @@ class StudioWindow(QMainWindow):
             file.addAction(label, callback)
         tools = self.menuBar().addMenu(tr('Werkzeuge'))
         tools.addAction(tr('Lyrics suchen'), self.search_lyrics)
+        tools.addAction(tr('lrc.review'), self.review_lrc)
         tools.addAction('Plugins', self.plugins_dialog)
         tools.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
         languages = self.menuBar().addMenu(tr('ui.language'))
@@ -339,7 +341,19 @@ class StudioWindow(QMainWindow):
         labels = [f'{i + 1}. {r.get("artistName", "")} - {r.get("trackName", "")} ({r.get("duration", "?")} s)' for i, r in enumerate(results)]
         label, ok = QInputDialog.getItem(self, tr('Suchergebnisse'), 'Version', labels, 0, False)
         if ok:
-            self.lyrics.setPlainText(results[labels.index(label)]['plainLyrics'])
+            result = results[labels.index(label)]
+            synced = result.get('syncedLyrics')
+            if isinstance(synced, str) and synced.strip():
+                options = [tr('lrc.synchronized'), tr('lrc.plain')]
+                choice, accepted = QInputDialog.getItem(self, tr('Suchergebnisse'), tr('Songtext'), options, 0, False)
+                if not accepted:
+                    return
+                if choice == options[0]:
+                    from studio.lrc import parse_lrc
+                    self.attempt(lambda: self.accept_lrc(parse_lrc(synced), f'LRCLIB:{result.get("id", "")}'))
+                    return
+            self.snapshot()
+            self.lyrics.setPlainText(result.get('plainLyrics') or '')
 
     def plugins_dialog(self):
         from studio.plugin_dialog import PluginDialog
@@ -609,6 +623,33 @@ class StudioWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, tr('UltraStar importieren'), '', 'UltraStar (*.txt)')
         if path:
             self.attempt(lambda: self.replace_project(import_ultrastar(path)))
+
+    def import_lrc(self):
+        from studio.lrc import read_lrc
+        path, _ = QFileDialog.getOpenFileName(self, tr('lrc.import'), '', 'LRC (*.lrc)')
+        if path:
+            self.attempt(lambda: self.accept_lrc(read_lrc(path), path))
+
+    def accept_lrc(self, document, source=''):
+        from studio.lrc import attach_lrc
+        from studio.lrc_dialog import LrcDialog
+        if LrcDialog(document, self).exec() != LrcDialog.DialogCode.Accepted:
+            return
+        self.snapshot()
+        attach_lrc(self.project, document, source)
+        self.loading = True
+        self.lyrics.setPlainText(self.project.draft_lyrics)
+        self.loading = False
+        self.changed()
+
+    def review_lrc(self):
+        from studio.lrc import parse_lrc
+        from studio.lrc_dialog import LrcDialog
+        reference = self.project.lyric_reference
+        if not reference:
+            self.statusBar().showMessage(tr('lrc.none'))
+            return
+            self.attempt(lambda: LrcDialog(parse_lrc(reference['raw']), self, importing=False).exec())
 
     def load_audio(self):
         path, _ = QFileDialog.getOpenFileName(self, tr('Audio laden'), '', tr('Audio (*.mp3 *.wav *.flac *.ogg *.m4a);;Alle Dateien (*)'))

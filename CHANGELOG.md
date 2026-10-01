@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add built-in LRC import and a synchronized lyric review dialog, preserving
+  repeated lines, enhanced word anchors, source text and offsets in `.olp`.
+- Offer synchronized LRCLIB results without discarding their timestamps.
+  Import acceptance is undoable and does not alter existing notes or pitches.
+- Add read-only ASF packet and native video-delivery diagnostics; pause portable
+  codec research after localizing the remux stall to decoder dispatch.
+
 - Add English/German media requirements to the conversion and experimental DLC
   dialogs, including the macOS/Linux requirement for pre-encoded game media.
 - Document tested OG ASF/WVC1/WMA Pro settings separately from original DLC
