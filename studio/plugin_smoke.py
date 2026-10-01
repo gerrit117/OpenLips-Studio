@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import time
+import sys
 
 from PySide6.QtCore import QSettings, QTimer
 
@@ -63,6 +64,8 @@ def run(app, window, output):
             app.exit(0)
         except Exception as error:
             (output / 'error.txt').write_text(str(error), encoding='utf-8')
+            print(str(error), file=sys.stderr, flush=True)
+            print(dialog.log.toPlainText(), file=sys.stderr, flush=True)
             app.exit(1)
 
     timer.timeout.connect(check)

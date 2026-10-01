@@ -3,19 +3,17 @@ from PyInstaller.utils.hooks import collect_data_files
 import sys
 from studio import DISPLAY_VERSION
 from pathlib import Path
+from tools.bundle_plugin_runtime import bundle
 
 media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
 media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
 worker = Path('dist/OpenLipsBasicPitch')
-worker_data = [(str(worker), 'plugin-runtime/OpenLipsBasicPitch')] if worker.is_dir() else []
-worker_executable = worker / ('OpenLipsBasicPitch.exe' if sys.platform == 'win32' else 'OpenLipsBasicPitch')
-worker_binaries = [(str(worker_executable), 'plugin-runtime/OpenLipsBasicPitch')] if worker_executable.is_file() else []
 icon = 'studio/assets/app-icon.ico' if sys.platform == 'win32' else None
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') +
-                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('studio/assets', 'studio/assets')] + worker_data,
-             binaries=media_binaries + worker_binaries,
+                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('studio/assets', 'studio/assets')],
+             binaries=media_binaries,
              hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins', 'studio.plugin_dialog', 'studio.plugin_smoke'],
              excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore', 'imageio_ffmpeg'],
              noarchive=False)
@@ -29,9 +27,13 @@ pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True,
           name='OpenLipsStudio', console=False, icon=icon)
 coll = COLLECT(exe, a.binaries, a.datas, name='OpenLipsStudio')
+if worker.is_dir():
+    bundle(worker, Path('dist/OpenLipsStudio'))
 if sys.platform == 'darwin':
     app = BUNDLE(coll, name='OpenLipsStudio.app',
                  icon='studio/assets/app-icon.icns',
                  bundle_identifier='org.openlips.studio',
                  info_plist={'CFBundleShortVersionString': DISPLAY_VERSION.split()[0],
                              'NSHighResolutionCapable': True})
+    if worker.is_dir():
+        bundle(worker, Path('dist/OpenLipsStudio.app'))

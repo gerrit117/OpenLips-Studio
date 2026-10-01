@@ -54,6 +54,13 @@ python tools/collect_runtime_notices.py --out dist/OpenLipsBasicPitch/licenses
 
 Switch back to the GUI environment before building `OpenLipsStudio.spec`.
 The app spec embeds `dist/OpenLipsBasicPitch` into its private runtime directory.
+The finished worker is copied intact **after** the GUI's PyInstaller analysis,
+preserving executable permissions, native library paths and internal symlinks.
+Its Python 3.11 binaries must not be re-analyzed/rewritten as GUI Python 3.12
+libraries. macOS app bundles are ad-hoc re-signed after adding the worker; they
+are not Apple Developer signed or notarized. CI tests the actual `.app`, too.
+Intel macOS uses Numba 0.62.x or earlier, which still provides upstream wheels;
+newer releases would require an unsupported LLVM source-build path.
 Source-mode Studio discovers a built worker automatically, or accepts a Python
 path from the plugin dialog for development. Release builds always use their
 bundled worker. Each OS must build its own worker and Qt app. CI tests both
