@@ -28,7 +28,7 @@ def relative_path(value):
 
 
 def validate_manifest(data):
-    if not isinstance(data, dict) or not re.fullmatch(r'[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}', str(data.get('id', ''))):
+    if not isinstance(data, dict) or not isinstance(data.get('id'), str) or not re.fullmatch(r'[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,127}', data['id']):
         raise ValueError('Invalid plugin ID')
     if data['id'].rstrip(' .') != data['id']:
         raise ValueError('Invalid plugin ID')
@@ -61,7 +61,7 @@ def validate_manifest(data):
         raise ValueError('Invalid plugin parameters')
     keys = set()
     for parameter in parameters:
-        if not isinstance(parameter, dict) or not re.fullmatch(r'[a-zA-Z0-9_]+', str(parameter.get('key', ''))):
+        if not isinstance(parameter, dict) or not isinstance(parameter.get('key'), str) or not re.fullmatch(r'[a-zA-Z0-9_]+', parameter['key']):
             raise ValueError('Invalid parameter key')
         if parameter['key'] in keys or not isinstance(parameter.get('label'), str):
             raise ValueError('Duplicate/invalid parameter')

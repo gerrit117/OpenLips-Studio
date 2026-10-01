@@ -417,3 +417,20 @@ def test_studio_does_not_import_or_bundle_basic_pitch():
     assert 'OpenLipsBasicPitch' not in spec
     for path in (PLUGIN_SOURCE / 'engine.py', PLUGIN_SOURCE / 'worker.py'):
         assert 'from studio' not in path.read_text(encoding='utf-8')
+
+
+def test_linking_new_folder_does_not_reuse_id_trust(tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QFileDialog
+    from studio.plugin_dialog import PluginDialog
+    app = qt_app()
+    (tmp_path / 'openlips-plugin.json').write_text(json.dumps({'id': 'remembered', 'module': 'plugin.py'}))
+    (tmp_path / 'plugin.py').write_text("raise RuntimeError('must not execute when linked')")
+    settings = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
+    settings.setValue('plugins/enabled', ['remembered'])
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path))
+    dialog = PluginDialog(StudioProject(), settings=settings)
+    dialog.add_folder()
+    assert dialog.plugin is None and not dialog.enable.isChecked()
+    assert not dialog.enabled_ids
+    dialog.close()

@@ -281,6 +281,16 @@ class PluginDialog(QDialog):
             return
         folder = QFileDialog.getExistingDirectory(self, 'Plugin-Ordner mit openlips-plugin.json')
         if folder and folder not in self.folders:
+            try:
+                manifest = Path(folder) / 'openlips-plugin.json'
+                if manifest.stat().st_size > 65536:
+                    raise ValueError('Plugin manifest exceeds 64 KiB')
+                ident = json.loads(manifest.read_text(encoding='utf-8')).get('id')
+                self.enabled_ids = [value for value in self.enabled_ids if value != ident]
+                self.settings.setValue('plugins/enabled', self.enabled_ids)
+            except Exception as error:
+                self.fail(str(error))
+                return
             self.folders.append(folder)
             self.settings.setValue('plugins/folders', self.folders)
             self.refresh_offers()
@@ -521,7 +531,7 @@ class PluginDialog(QDialog):
 
     def done(self, result):
         if self.busy():
-            self.status.setText('Analyse zuerst abbrechen oder abwarten.')
+            self.status.setText('Laufenden Vorgang zuerst beenden oder abwarten.')
             return
         if self.temp:
             self.temp.cleanup()
