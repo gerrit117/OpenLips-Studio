@@ -32,6 +32,15 @@ def file_hash(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def reference_stream_maps(streams):
+    """ASF IDs are referenced by the game; FFmpeg assigns them in map order."""
+    if len(streams) != 2 or sorted(s['number'] for s in streams) != [1, 2]:
+        raise ValueError('Requires exactly two contiguous ASF stream IDs (1, 2)')
+    ordered = sorted(streams, key=lambda s: s['number'])
+    return [value for s in ordered for value in
+            ('-map', {'audio': '0:a:0', 'video': '0:v:0'}[s['kind']])]
+
+
 def build(source, output, ffmpeg=None):
     from studio.media import ffmpeg_encoder
     source, output = Path(source).resolve(strict=True), Path(output).resolve()
@@ -45,6 +54,8 @@ def build(source, output, ffmpeg=None):
     audio = [s for s in original['streams'] if s.get('kind') == 'audio']
     if len(video) != 1 or video[0]['fourcc'] != 'WVC1' or len(audio) != 1 or audio[0]['codec_tag'] != 0x162:
         raise ValueError('Requires a known-working WVC1/WMA Pro ASF reference')
+    stream_maps = reference_stream_maps(original['streams'])
+    reference_ids = {s['kind']: s['number'] for s in original['streams']}
     original_sha = file_hash(source)
     encoded_video_hash = video_hash(ffmpeg, source)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +67,7 @@ def build(source, output, ffmpeg=None):
         for name, codec in [('remux-control', 'copy'), ('vc1-wma-standard', 'wmav2')]:
             raw = Path(temp) / (name + '.wmv')
             command = [ffmpeg, '-v', 'error', '-nostdin', '-n', '-i', source,
-                       '-map', '0:v:0', '-map', '0:a:0', '-map_metadata', '-1',
+                       *stream_maps, '-map_metadata', '-1',
                        '-c:v', 'copy', '-c:a', codec]
             if codec != 'copy':
                 command += ['-ar', '48000', '-ac', '2', '-b:a', '192k']
@@ -70,6 +81,8 @@ def build(source, output, ffmpeg=None):
             destination = stage / raw.name
             normalize(raw, destination)
             checked = inspect(destination)
+            if {s.get('kind'): s['number'] for s in checked['streams']} != reference_ids:
+                raise ValueError('Generated ASF stream IDs differ from the reference')
             expected = 0x162 if codec == 'copy' else 0x161
             audios = [s for s in checked['streams'] if s.get('kind') == 'audio']
             if len(audios) != 1 or audios[0]['codec_tag'] != expected:
@@ -85,6 +98,7 @@ def build(source, output, ffmpeg=None):
             raise ValueError('Reference changed during preparation')
         original['filename'] = str(source)
         report = dict(reference=original, reference_sha256=original_sha,
+                      reference_stream_ids=reference_ids,
                       encoded_video_hash=encoded_video_hash, variants=rows,
                       source_unchanged=True,
                       warning='Encoding/header checks only. Test original, then remux control, then WMA Standard with the same chart/profile. No game files installed.')

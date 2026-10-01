@@ -1,0 +1,9 @@
+diff --git a/src/xenia/kernel/xboxkrnl/xboxkrnl_misc.cc b/src/xenia/kernel/xboxkrnl/xboxkrnl_misc.cc
+--- a/src/xenia/kernel/xboxkrnl/xboxkrnl_misc.cc
++++ b/src/xenia/kernel/xboxkrnl/xboxkrnl_misc.cc
+@@ -125,4 +125,4 @@ dword_result_t MicDeviceRequest_entry(pointer_t<X_MIC_DEVICE> device_ptr) {
+-  XELOGE("MicDeviceRequest State: {:08X} Action: {:04X} USER: {:08X}",
++  XELOGD("MicDeviceRequest State: {:08X} Action: {:04X} USER: {:08X}",
+          static_cast<uint32_t>(device_ptr->info.state.get()),
+          static_cast<uint16_t>(device_ptr->info.request_type.get()),
+          device_ptr->info.user_index.get());

@@ -6,7 +6,7 @@ import shutil
 import tempfile
 
 from tools.analyze_asf import inspect
-from tools.build_media_codec_tests import file_hash, run, video_hash
+from tools.build_media_codec_tests import file_hash, reference_stream_maps, run, video_hash
 
 VARIANTS = (('remux-control', 'copy', 'WVC1'),
             ('mpeg4-mp4s', 'mpeg4', 'MP4S'),
@@ -32,6 +32,8 @@ def build(source, output, ffmpeg=None):
     audio = [s for s in original['streams'] if s.get('kind') == 'audio']
     if len(video) != 1 or video[0]['fourcc'] != 'WVC1' or len(audio) != 1 or audio[0]['codec_tag'] != 0x162:
         raise ValueError('Requires a known-working WVC1/WMA Pro ASF reference')
+    stream_maps = reference_stream_maps(original['streams'])
+    reference_ids = {s['kind']: s['number'] for s in original['streams']}
     source_sha = file_hash(source)
     source_audio = audio_hash(ffmpeg, source)
     source_video = video_hash(ffmpeg, source)
@@ -44,7 +46,7 @@ def build(source, output, ffmpeg=None):
         for name, codec, tag in VARIANTS:
             destination = stage / (name + '.wmv')
             command = [ffmpeg, '-v', 'error', '-nostdin', '-n', '-i', source,
-                       '-map', '0:v:0', '-map', '0:a:0', '-map_metadata', '-1',
+                       *stream_maps, '-map_metadata', '-1',
                        '-c:v', codec, '-c:a', 'copy']
             if codec != 'copy':
                 # Actual matching bitstreams, no header-tag disguise. Keep source
@@ -59,6 +61,8 @@ def build(source, output, ffmpeg=None):
             checked = inspect(destination)
             videos = [s for s in checked['streams'] if s.get('kind') == 'video']
             audios = [s for s in checked['streams'] if s.get('kind') == 'audio']
+            if {s.get('kind'): s['number'] for s in checked['streams']} != reference_ids:
+                raise ValueError('Generated ASF stream IDs differ from the reference')
             if len(videos) != 1 or videos[0]['fourcc'] != tag:
                 raise ValueError('Generated video tag does not match intended codec')
             if codec == 'copy' and video_hash(ffmpeg, destination) != source_video:
@@ -78,6 +82,7 @@ def build(source, output, ffmpeg=None):
         if file_hash(source) != source_sha:
             raise ValueError('Reference changed during preparation')
         report = dict(reference_sha256=source_sha, encoded_audio_hash=source_audio,
+                      reference_stream_ids=reference_ids,
                       variants=rows, source_unchanged=True,
                       warning='Experimental only; ASF is retained, not MP4. Test original and remux control first. No game files installed; FFmpeg decode is not Lips acceptance.')
         (stage / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

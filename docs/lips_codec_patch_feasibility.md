@@ -227,6 +227,15 @@ report. Mac/Linux warnings remain accurate until a path passes these gates.
 
 ## Reproduction and private artifacts
 
+### Runtime follow-up
+
+The preparation-only status above is superseded by the controlled tests in
+[OG ASF runtime probes](mpeg4_runtime_probe.md). The original probes had
+inverted ASF stream IDs and failed before codec selection. Corrected stream
+IDs restore the WVC1 remux control. MP4S now reaches compressed-input setup
+but fails later; MP43 loads and advances chart time, with a suspected frozen
+video frame. Neither is a verified production export codec yet.
+
 `tools/ghidra/StudyOgVideoCodecRoutes.java` is a hash-guarded candidate survey
 for this OG image. Run it with `analyzeHeadless`, `-readOnly -noanalysis` and a
 private output path; use `StudyOgIxbReader.java` for the bounded addresses above.

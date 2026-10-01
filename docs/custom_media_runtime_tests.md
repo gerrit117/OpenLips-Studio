@@ -222,3 +222,11 @@ failed partial output is cleaned up. It selects 48 kHz stereo 192 kbit/s
 16-bit WMA Pro explicitly rather than the first enumerated type. The selected
 video subtype remains WVC1. Apply the bounded bitmap-header normalizer to a
 new copy before testing the output; codec names alone do not establish acceptance.
+
+## Subsequent ASF runtime investigation
+
+See [OG ASF runtime probes](mpeg4_runtime_probe.md) for the 2026-10-01
+stream-ID failure, corrected MPEG-4/WMA Standard tests, original playback control
+and isolated frame-duration metadata experiment. Initial Disc Read Error tests
+with inverted ASF stream IDs do not establish codec incompatibility. Successful
+initialization without advancing video is also not production acceptance.
