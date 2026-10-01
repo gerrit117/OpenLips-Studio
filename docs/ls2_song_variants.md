@@ -95,6 +95,19 @@ early-end/extend mechanism on the same full song, **not necessarily a second
 physically shortened media file** (medium confidence). Exact end-marker dispatch,
 fade handling, extension threshold and grading need native tests.
 
+An additional cross-corpus check found **exactly one short-end object in each
+of 129/129 distinct supported charts**, always owned by the **Section** sequence
+(129/129). Its trigger ranges from 70.526 to 224.805 seconds. Confidence is high
+for this ownership invariant. Put an eventual generated short endpoint in
+Section, not in a guessed Conductor track or a separately chopped note heap.
+Its timestamp alone does not establish how the media fade/extend logic works.
+
+The 139 timed gesture objects across the fourteen distinct local charts use
+target indices 1, 2, 3, 5, 7, 8, 9, 10 and 12 (index 5 occurs in 78 objects).
+These are occurrence counts, **not** verified gesture names or universal enums.
+ExciteMeter's dynamic icon indexing and mic modes do not prove that this authored
+target-index field uses the same enum; native dispatch must confirm it first.
+
 The later ixChart base is 108 bytes with sequence/extra-sequence vectors at
 72/88 and music-start offset 104; the older base is 92 bytes with music-start
 offset 88. Later lpsChart stores index/music data at 144/148. Shared member
