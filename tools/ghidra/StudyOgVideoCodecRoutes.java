@@ -113,6 +113,23 @@ public class StudyOgVideoCodecRoutes extends GhidraScript {
                     out.println(" SLOT " + Integer.toHexString(offset) + " " + toAddr(target) + " " + getFunctionAt(toAddr(target)));
                 }
             }
+            // The bounded 824C6508 export uses a three-entry, double-indirect
+            // callback table. Static contents may depend on runtime initialization.
+            long registry = 0x82ec7d9cL;
+            out.println("CANDIDATE_REGISTRY " + toAddr(registry));
+            for (int slot = 0; slot < 3; slot++) {
+                Address at = toAddr(registry + slot * 4);
+                try {
+                    long pointer = Integer.toUnsignedLong(currentProgram.getMemory().getInt(at));
+                    out.println(" REGISTRY_SLOT " + slot + " cell=" + toAddr(pointer));
+                    if (pointer != 0 && currentProgram.getMemory().contains(toAddr(pointer))) {
+                        long callback = Integer.toUnsignedLong(currentProgram.getMemory().getInt(toAddr(pointer)));
+                        out.println(" REGISTRY_CALLBACK " + toAddr(callback) + " " + getFunctionAt(toAddr(callback)));
+                    }
+                } catch (ghidra.program.model.mem.MemoryAccessException unavailable) {
+                    out.println(" REGISTRY_UNAVAILABLE " + at + " " + unavailable.getMessage());
+                }
+            }
         }
     }
 }

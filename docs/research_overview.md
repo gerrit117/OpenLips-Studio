@@ -19,6 +19,10 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- [AI chart creation review](studio_ai_chart_creation.md) evaluates UltraSinger,
+  optional built-in Studio integration, model/backend selection, LRC limitations
+  and runtime scoring. This is a proposal, not a completed AI/LRC release.
+
 - [Alternative decoder feasibility](lips_codec_patch_feasibility.md) records
   Xbox 360 FFmpeg port precedents and OG native video selector cases beyond
   the observed media corpus. No new decoder patch or codec gameplay acceptance

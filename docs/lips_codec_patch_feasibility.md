@@ -152,6 +152,60 @@ solve playback on a real Xbox. It must remain clearly separate.
 
 ## Next controlled gates
 
+### MPEG-4 follow-up, 2026-10-01
+
+Bounded analysis continued into `0x82507E00` -> `0x8252D3C8`. The latter
+explicitly maps FourCCs to decoder state at context `+0x3C90`: `MP4S` -> `0`,
+`MP42` -> `2`, `MP43` -> `3`, `WMV1` -> `4`, `WMV2` -> `5`, `WMV3` -> `6`,
+and `WMVA` -> `7`, with lowercase aliases. Unknown cases return `6` on that
+path. This strengthens the evidence beyond a superficial FourCC whitelist;
+it still does not establish successful ASF demux, initialization or playback.
+The final live indirect call from the factory to the selector remains untraced.
+The input setup path reaches the generic callback-selection loop at
+`0x824C6508`. Its three-entry table at `0x82EC7D9C` resolves through cells to
+`0x824E4970`, `0x824E3628` and `0x824E1EB8`. Those functions select further
+callback tables based on input/options; they are not a direct recovered call
+to the video selector. The survey now exports these static registry entries
+privately so a later runtime trace can distinguish container selection from
+codec initialization.
+
+`tools/build_mpeg4_codec_tests.py` now generates an original copy, remux control
+and three separate candidates using FFmpeg's real matching encoders:
+
+| Variant | Encoder | Actual output FourCC | Container/audio |
+|---|---|---|---|
+| Control | video copy | WVC1 | ASF / original WMA Pro packets |
+| MPEG-4 Part 2 | mpeg4 | MP4S | ASF / original WMA Pro packets |
+| Microsoft MPEG-4 v3 | msmpeg4 | MP43 | ASF / original WMA Pro packets |
+| Microsoft MPEG-4 v2 | msmpeg4v2 | MP42 | ASF / original WMA Pro packets |
+
+These are **not MP4 container files, H.264 or AAC**. FFmpeg's
+[codec-tag table](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/riff.c)
+confirms the bitstream/tag pairings. The tool preserves source dimensions/rate,
+uses YUV420p, no B-frames and a modest video bitrate. It verifies actual ASF
+tags, nonzero bitmap bit count, unchanged encoded audio hashes and full FFmpeg
+decoding. The remux control additionally requires unchanged video packet hashes.
+Outputs publish only after all validation succeeds and never replace inputs.
+
+The full Amazing reference was processed successfully locally: all four
+generated files fully decode with FFmpeg, with unchanged WMA Pro packet hashes.
+The latest verified files remain private under
+`private/outputs/amazing-mpeg4-tests-verified-20261001/`.
+**No candidate was installed or tested in Lips in this pass.** FFmpeg decoding
+does not test Microsoft's decoder constraints or Lips clock integration.
+
+Reproduce with a legally available working reference:
+
+```powershell
+py -m tools.build_mpeg4_codec_tests Amazing.wmv --out private/outputs/mpeg4-tests
+```
+
+Test original -> remux control -> each video candidate with the same chart,
+profile and audio assets. If remux fails, investigate ASF metadata before
+attributing the failure to a video decoder. Keep this separate from WMA Standard
+testing; a successful video-only experiment still leaves the audio encoding
+requirement for an entirely cross-platform production pipeline unresolved.
+
 1. Recover or runtime-trace the final indirect selector dispatch. Record decoder
    creation errors before changing any game code.
 2. Keep WVC1 video packets unchanged and test WMA Standard separately against
