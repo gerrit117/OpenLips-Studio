@@ -2,6 +2,10 @@
 
 ## Scope and validation
 
+Follow-up: the custom package is enumerated and accessed by Xenia, but the user
+reports no song in the OG list. See [DLC import comparison](dlc_import_comparison.md)
+for the four-original-package comparison and unresolved native import boundary.
+
 `tools/build_dlc.py` generates a real **unsigned LIVE/STFS marketplace-content
 container**, not a renamed directory. Its TitleID is OG Lips `4D530888`, content
 type `00000002`. It creates DLC.xml, injects prepared assets, rehashes the
