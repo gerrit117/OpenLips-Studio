@@ -1,6 +1,9 @@
 name: Studio beta builds
 permissions:
   contents: read
+concurrency:
+  group: studio-build-${{ github.ref }}
+  cancel-in-progress: true
 on:
   workflow_dispatch:
   push:
@@ -75,6 +78,11 @@ jobs:
           XDG_DATA_HOME="$PWD/private/desktop-smoke" sh dist/OpenLipsStudio/_internal/studio/assets/install-desktop-entry.sh
           test -f private/desktop-smoke/applications/openlips-studio.desktop
           test -f private/desktop-smoke/icons/hicolor/256x256/apps/openlips-studio.png
+      - name: Test plugin runtime inside the actual macOS app bundle
+        if: runner.os == 'macOS'
+        run: dist/OpenLipsStudio.app/Contents/MacOS/OpenLipsStudio --smoke-plugin private/gui-plugin-app-bundle-smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
       - name: Smoke test frozen Windows build
         if: runner.os == 'Windows'
         shell: pwsh
