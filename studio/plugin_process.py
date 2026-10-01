@@ -18,7 +18,7 @@ def platform_tag():
 
 def relative_path(value):
     if not isinstance(value, str) or not value or '\\' in value:
-        raise ValueError('Plugin paths must be relative POSIX paths')
+        raise ValueError('Unsafe plugin path: use relative POSIX paths')
     parts = value.split('/')
     if any(p in ('', '.', '..') or ':' in p or p.rstrip(' .') != p for p in parts):
         raise ValueError('Unsafe plugin path')
