@@ -4,12 +4,13 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from PySide6.QtCore import QThread, Signal
+from studio import __version__
 
 
 def search_lyrics(title, artist):
     query = urlencode({'track_name': title, 'artist_name': artist})
     request = Request('https://lrclib.net/api/search?' + query,
-                      headers={'User-Agent': 'OpenLips-Studio/0.1.0-beta'})
+                      headers={'User-Agent': 'OpenLips-Studio/' + __version__})
     with urlopen(request, timeout=15) as response:
         payload = response.read(2 * 1024 * 1024 + 1)
     if len(payload) > 2 * 1024 * 1024:

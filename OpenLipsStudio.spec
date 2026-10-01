@@ -1,6 +1,7 @@
 # Native builds must run on the target OS; do not cross-compile Qt bundles.
 from PyInstaller.utils.hooks import collect_data_files
 import sys
+from studio import DISPLAY_VERSION
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') +
@@ -21,5 +22,5 @@ coll = COLLECT(exe, a.binaries, a.datas, name='OpenLipsStudio')
 if sys.platform == 'darwin':
     app = BUNDLE(coll, name='OpenLipsStudio.app',
                  bundle_identifier='org.openlips.studio',
-                 info_plist={'CFBundleShortVersionString': '0.1.0',
+                 info_plist={'CFBundleShortVersionString': DISPLAY_VERSION.split()[0],
                              'NSHighResolutionCapable': True})

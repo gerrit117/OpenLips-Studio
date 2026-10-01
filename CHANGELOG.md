@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 Beta
+
+- Install required Qt graphics/audio libraries on Linux build runners.
+- Avoid duplicate native CI builds when tagging the same main-branch commit.
+- Native Windows and Apple Silicon builds passed tests and frozen startup.
+- Intel macOS/Linux verification follows the corrected build matrix.
+
 ## 0.1.0 Beta
 
 - Native modular desktop editor with horizontal Lips-inspired note bars.

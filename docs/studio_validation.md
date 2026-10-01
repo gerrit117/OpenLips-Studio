@@ -27,6 +27,12 @@ or notes are committed in tests.
 No real song is included in the beta artifact. Native STFS tests can be enabled
 with `OPENLIPS_STFS_BACKEND`; they otherwise skip rather than simulate acceptance.
 
+The first GitHub native matrix passed Windows and Apple Silicon tests/build/start
+checks. Ubuntu initially failed importing QtTest because libEGL was absent on
+the headless runner, not because of Python format logic. Version 0.1.1 installs
+the required graphics/audio runtime libraries before testing. Native CI output
+is distinct from local interactive audio/video validation.
+
 68 previously tracked private sample assets were removed from the current Git
 index without deleting existing local files. Older Git history still contains
 them. Public visibility/release remains gated on that history and license audit.

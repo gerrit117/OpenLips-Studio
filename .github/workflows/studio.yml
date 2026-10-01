@@ -2,6 +2,7 @@ name: Studio beta builds
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths: ['studio/**', 'tests/test_studio.py', 'pyproject.toml', 'OpenLipsStudio.spec', '.github/workflows/studio.yml']
 jobs:
   desktop:
@@ -15,6 +16,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Linux Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libpulse0
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py -q
         env:
@@ -35,7 +41,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
       - uses: actions/upload-artifact@v4
         with:
-          name: OpenLips-Studio-0.1.0-beta-${{ matrix.os }}
+          name: OpenLips-Studio-0.1.1-beta-${{ matrix.os }}
           path: |
             dist/OpenLipsStudio/
             dist/OpenLipsStudio.app/

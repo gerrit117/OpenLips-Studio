@@ -17,6 +17,8 @@ for modern glibc-based desktop distributions, not promised for every Linux:
 Ubuntu/Debian/Fedora compatibility requires actual testing. Alpine/musl and ARM
 Linux are not covered. Desktop X11/Wayland, OpenGL and audio runtime libraries
 may still need installation through the distribution's package manager.
+The Linux CI baseline installs `libegl1`, `libgl1`, `libopengl0`, `libxcb-cursor0`,
+`libxkbcommon-x11-0` and `libpulse0`. Package names can differ on other distributions.
 AppImage/Flatpak/DEB/RPM packaging is a follow-up, not another editor rewrite.
 
 Native STFS and legacy media-conversion helpers remain separate Windows
