@@ -8,11 +8,13 @@ from tools.bundle_plugin_runtime import bundle
 media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
 media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
 worker = Path('dist/OpenLipsBasicPitch')
+notices = Path('build/studio-licenses')
+notice_data = [(str(notices), 'licenses')] if notices.is_dir() else []
 icon = 'studio/assets/app-icon.ico' if sys.platform == 'win32' else None
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') +
-                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('studio/assets', 'studio/assets')],
+                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('studio/assets', 'studio/assets')] + notice_data,
              binaries=media_binaries,
              hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins', 'studio.plugin_dialog', 'studio.plugin_smoke'],
              excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore', 'imageio_ffmpeg'],

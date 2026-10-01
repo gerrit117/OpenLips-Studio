@@ -59,12 +59,11 @@ jobs:
           mkdir private\runtime\og-framing-test
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cl /EHsc /std:c++17 tools\media\transcode_windows.cpp /Fo:private\runtime\og-framing-test\transcode_windows.obj /Fe:private\runtime\og-framing-test\transcode_windows.exe
+      - name: Prepare desktop notices before app-bundle signing
+        run: python tools/collect_runtime_notices.py --out build/studio-licenses
       - run: python -m PyInstaller --noconfirm OpenLipsStudio.spec
       - name: Inventory desktop dependency notices
         run: python tools/collect_runtime_notices.py --out dist/OpenLipsStudio/licenses
-      - name: Preserve desktop notices in macOS app bundle
-        if: runner.os == 'macOS'
-        run: python tools/collect_runtime_notices.py --out dist/OpenLipsStudio.app/Contents/Resources/licenses
       - name: Smoke test frozen Unix build
         if: runner.os != 'Windows'
         run: dist/OpenLipsStudio/OpenLipsStudio --smoke-test smoke.png
