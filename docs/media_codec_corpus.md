@@ -3,6 +3,10 @@
 Read-only investigation, 2026-10-01. No media, executable, profile or saved
 Ghidra project was patched. The working Windows encoder remains unchanged.
 
+The follow-up [decoder feasibility investigation](lips_codec_patch_feasibility.md)
+finds native legacy video selector cases not represented in this corpus.
+Observed asset formats are therefore not an exhaustive decoder capability list.
+
 ## Samples
 
 `tools/inventory_media_codecs.py` inspected **591 media paths, zero failures**:

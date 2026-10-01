@@ -19,6 +19,11 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- [Alternative decoder feasibility](lips_codec_patch_feasibility.md) records
+  Xbox 360 FFmpeg port precedents and OG native video selector cases beyond
+  the observed media corpus. No new decoder patch or codec gameplay acceptance
+  is claimed; the working encoder remains unchanged.
+
 - The [media codec census](media_codec_corpus.md) distinguishes WMA Standard
   RIFF/xWMA song audio from WMA Pro ASF movie audio, with native OG parser
   evidence. [Large-library performance research](large_song_library_performance.md)
