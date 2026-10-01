@@ -1,8 +1,37 @@
-# Integrated AI chart creation: source review and proposal
+# Integrated AI chart creation
 
-Research and implementation snapshot, 2026-10-01. The optional built-in feature
-starts with implemented LRC reference import. The AI stages below remain a
-proposal: no new AI runtime/model was installed or executed in this pass.
+Research and implementation snapshot, 2026-10-01. The built-in feature now has
+SwiftF0 pitch detection, optional Demucs separation and faster-whisper recognition,
+review/accept/undo, stored LRC references and independent background workers.
+See [measured tests and remaining checks](ai_song_creation_test_report.md).
+Recommendations below remain explicitly recommendations where not implemented.
+
+Tools -> Create chart from audio (AI) accepts reference audio/video. Pitch-only
+analysis runs in the bundled app without external Python. Optional heavy stages
+use the standalone OpenLipsAI executable (or a developer Python environment
+installed from requirements-ai.txt). Both output a Studio project directly,
+without quantizing through UltraStar TXT. Results replace notes only after
+acceptance. Metadata is preserved and acceptance is undoable.
+
+The bundled SwiftF0 model is 135,090 bytes. Larger models are optional downloads:
+htdemucs is approximately 80 MiB; Whisper base/small are much larger. Choices
+include tiny, base, small, medium and large-v3. CPU is tested; CUDA/MPS separation
+and CUDA transcription are capability-probed, with RuntimeError CPU retries.
+MPS transcription and SwiftF0 use CPU. Windows AMD GPU acceleration is not
+implemented; a detected graphics card does not imply backend support.
+
+Enhanced LRC words are used as supplied; plain LRC keeps whole line fragments,
+with warnings that it lacks word alignment. ASR word timestamps are estimates,
+not verified syllables. One-note-per-word mode chooses the most sustained
+measured pitch inside each word and simplifies melismas; contour mode preserves
+pitch changes but can produce empty lyric continuations requiring editor review.
+Optional EN/DE CTC word alignment inside supplied LRC windows is implemented
+using the Wav2Vec2 model family also used by WhisperX. It remains experimental
+on singing; phoneme timing and automatic syllabification are not implemented.
+Windows longer than 60 seconds or unsupported characters are reported, not
+filled with uniform invented word timings. The pinned TorchAudio 2.8 API is
+deprecated and must be replaced before upgrading to 2.9:
+[official documentation](https://docs.pytorch.org/audio/2.8.0/tutorials/ctc_forced_alignment_api_tutorial.html).
 
 ## Implemented first step (unreleased)
 
@@ -211,6 +240,8 @@ chart-quality checks before implementing a separately validated Lips estimator.
 4. Hardware-specific validated builds, presets and recovery tests.
 5. End-to-end new-chart gameplay and microphone-scoring checks.
 
-LRC reference import is implemented in the source tree, not yet released.
-The rest remains an integration recommendation, not an implemented AI assistant.
-It is independent of the paused MPEG-4 gameplay acceptance experiment.
+LRC references, pitch detection, optional separation/transcription and reviewed
+note mapping are implemented. Hardware-specific acceleration and exhaustive
+gameplay/scoring checks remain open. CTC word alignment has an initial singing
+benchmark, not verified syllable timing. This workflow is independent
+of the paused MPEG-4 gameplay acceptance experiment.

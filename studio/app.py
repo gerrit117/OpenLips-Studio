@@ -95,6 +95,7 @@ class StudioWindow(QMainWindow):
         tools = self.menuBar().addMenu(tr('Werkzeuge'))
         tools.addAction(tr('Lyrics suchen'), self.search_lyrics)
         tools.addAction(tr('lrc.review'), self.review_lrc)
+        tools.addAction(tr('ai.title'), self.ai_chart_dialog)
         tools.addAction('Plugins', self.plugins_dialog)
         tools.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
         languages = self.menuBar().addMenu(tr('ui.language'))
@@ -118,6 +119,7 @@ class StudioWindow(QMainWindow):
         toolbar.addAction(self.action(tr('Cover laden'), 'fa5s.image', self.load_cover))
         toolbar.addAction(self.action(tr('OG-Medien konvertieren'), 'fa5s.exchange-alt', self.convert_media))
         toolbar.addAction(self.action('Plugins', 'fa5s.plug', self.plugins_dialog))
+        toolbar.addAction(self.action(tr('ai.title'), 'fa5s.wave-square', self.ai_chart_dialog))
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
@@ -354,6 +356,27 @@ class StudioWindow(QMainWindow):
                     return
             self.snapshot()
             self.lyrics.setPlainText(result.get('plainLyrics') or '')
+
+    def ai_chart_dialog(self):
+        from studio.ai_dialog import AiChartDialog
+        dialog = AiChartDialog(self.project, self)
+        if dialog.exec() and dialog.result_project:
+            result = dialog.result_project
+            self.stop()
+            self.snapshot()
+            self.project.notes = result.notes
+            self.project.source = result.source
+            self.project.warnings = result.warnings
+            if result.lyric_reference:
+                self.project.lyric_reference = result.lyric_reference
+            if result.draft_lyrics:
+                self.project.draft_lyrics = result.draft_lyrics
+            self.project.audio_path = result.audio_path
+            self.lyrics.setPlainText(self.project.draft_lyrics)
+            self.timeline.selected_id = ''
+            self.timeline.origin = 0
+            self.configure_media()
+            self.changed()
 
     def plugins_dialog(self):
         from studio.plugin_dialog import PluginDialog

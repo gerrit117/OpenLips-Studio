@@ -100,7 +100,11 @@ Die [genauen Medienanforderungen und Vorbereitungsschritte](docs/studio_media.md
 
 Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Es gibt Builds für Windows, macOS auf Apple Silicon und Intel sowie Linux.
 
+Die eingebaute, optionale KI-Analyse erstellt bearbeitbare Chart-Entwürfe aus Audio: Gesang trennen, Tonhöhen erkennen und Wörter zuordnen. Bitte prüfe das Ergebnis sorgfältig; die Texterkennung macht bei Gesang noch deutliche Fehler. Das kleine Tonhöhenmodell ist enthalten, die große KI-Engine wird separat angeboten. Eine exakte automatische Silbenerkennung ist noch nicht fertig.
+
 Entpacke das vollständige Studio-Archiv und lass die enthaltenen Dateien zusammen. Python ist enthalten. Basic Pitch ist ein separater, optionaler **`.opl`**-Download für deine Plattform und wird über die Plugin-Verwaltung installiert. Das Paket enthält sein eigenes Modell und die Analyseumgebung. Eine zusätzliche Python-Installation, ein Spotify-Konto oder ein API-Schlüssel sind nicht nötig. Die Audiodatei wird lokal verarbeitet und nicht hochgeladen. Weitere Informationen stehen im [Plugin-Katalog](plugins/README.md), der [Editor-Anleitung](docs/studio.md), der [Plugin-Entwicklerdokumentation](docs/studio_plugins.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
+
+Für Windows gibt es zusätzlich einen Installationsassistenten, für macOS ein DMG mit einer Verknüpfung zu „Programme“. Für Gesangstrennung und Texterkennung entpackst du das **OpenLips-AI**-Archiv und wählst die enthaltene `OpenLipsAI`-Datei im Audio-Chart-Dialog aus. Größere Modelle werden beim ersten Einsatz heruntergeladen und lokal zwischengespeichert. Die [Testergebnisse und bekannten Grenzen](docs/ai_song_creation_test_report.md) sind dokumentiert.
 
 ## Dokumentation
 
@@ -125,6 +129,8 @@ Für Recherche und Tests waren auch [Xenia](https://github.com/xenia-project/xen
 Danke auch an alle, die einen Build testen, Fehler melden, Erkenntnisse teilen oder anderen beim Einstieg helfen. Die Lizenzen und Hinweise zu Abhängigkeiten stehen in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Ein besonderes Dankeschön geht an **Spotifys Audio Intelligence Lab und die Entwickler von [Basic Pitch](https://github.com/spotify/basic-pitch)**, die ihr Transkriptionsmodell und den Quellcode als Open Source bereitstellen. Das erste integrierte Studio-Plugin nutzt ihre Arbeit über [ONNX Runtime](https://github.com/microsoft/onnxruntime). Die Einbindung ist unabhängig und weder ein Spotify-Dienst noch eine offizielle Unterstützung durch Spotify.
+
+Die eingebaute Audio-Chart-Funktion wurde durch [UltraSinger](https://github.com/rakuri255/UltraSinger) und [UltraSinger Studio](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0) inspiriert. Danke an ihre Entwickler und an die Teams hinter [Demucs](https://github.com/facebookresearch/demucs), [Whisper](https://github.com/openai/whisper), [faster-whisper](https://github.com/SYSTRAN/faster-whisper) und [SwiftF0](https://github.com/lars76/swift-f0). Die Einbindungen arbeiten lokal und sind keine offiziellen Dienste dieser Projekte.
 
 Danke auch an **Markus Böhning und die Mitwirkenden von [USDB Syncer](https://github.com/bohning/usdb_syncer)** sowie an das [yt-dlp](https://github.com/yt-dlp/yt-dlp)-Team. Ein eigenständiges USDB-Downloader-Plugin ist in Entwicklung und nutzt die bestehende Such- und Downloadoberfläche. Native Plugin-Pakete und Tests mit angemeldeten Downloads stehen noch aus.
 

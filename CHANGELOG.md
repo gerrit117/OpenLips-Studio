@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 Beta
+
+- Add a built-in, optional audio-to-chart workflow with isolated background
+  inference, result review, cancellation and undoable acceptance.
+- Bundle SwiftF0's small model for offline pitch analysis; add optional native
+  Demucs/Whisper engines, selectable transcription models and CPU fallback.
+- Preserve LRC references, distinguish word estimates from syllable alignment,
+  and offer an exportable one-note-per-word draft with explicit quality warnings.
+- Add optional bounded EN/DE CTC alignment of supplied lyric text, without
+  silently interpolated failures; document measured singing-timing errors.
+- Benchmark real local song audio against structural lyric references without
+  publishing recordings or lyrics. Document singing recognition limitations.
+- Add hash-guarded Xenia A/B launchers and read-only, corpus-wide song-variant
+  diagnostics for duet tracks, short-mode markers and later chart schemas.
+- Add a per-user Windows installer and native macOS drag-to-Applications DMGs.
+- Test the frozen pitch engine, retain model/dependency notices and publish
+  optional AI runtime archives separately from the main app and `.opl` plugins.
 
 - Add built-in LRC import and a synchronized lyric review dialog, preserving
   repeated lines, enhanced word anchors, source text and offsets in `.olp`.
