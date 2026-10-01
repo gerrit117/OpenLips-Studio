@@ -43,7 +43,7 @@ def test_worker_bundle_is_an_intact_separate_runtime(tmp_path):
     mac_app = tmp_path / 'OpenLipsStudio.app'
     mac_app.mkdir()
     result = bundle(worker, mac_app, sign=False)
-    assert result.parent.parent == mac_app / 'Contents/Frameworks'
+    assert result.parent.parent == mac_app / 'Contents/Resources'
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='Unix permission/symlink semantics')

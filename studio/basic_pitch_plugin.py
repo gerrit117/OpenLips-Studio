@@ -10,6 +10,8 @@ def worker_command(request, output, python_path=''):
     name = 'OpenLipsBasicPitch.exe' if sys.platform == 'win32' else 'OpenLipsBasicPitch'
     base = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
     worker = base / 'plugin-runtime' / 'OpenLipsBasicPitch' / name
+    if getattr(sys, 'frozen', False) and sys.platform == 'darwin' and not worker.is_file():
+        worker = Path(sys.executable).parent.parent / 'Resources/plugin-runtime/OpenLipsBasicPitch' / name
     if not getattr(sys, 'frozen', False) and not worker.is_file():
         worker = base / 'dist' / 'OpenLipsBasicPitch' / name
     args = ['--request', str(request), '--output', str(output)]

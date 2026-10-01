@@ -59,6 +59,10 @@ preserving executable permissions, native library paths and internal symlinks.
 Its Python 3.11 binaries must not be re-analyzed/rewritten as GUI Python 3.12
 libraries. macOS app bundles are ad-hoc re-signed after adding the worker; they
 are not Apple Developer signed or notarized. CI tests the actual `.app`, too.
+The intact macOS worker lives in `Contents/Resources/plugin-runtime`, not in
+`Frameworks`: Apple's signing tool interprets mixed metadata directories there
+as malformed code bundles. The copied worker retains its original individual
+ad-hoc signatures, and the outer app is signed without recursive reclassification.
 Intel macOS uses Numba 0.62.x or earlier, which still provides upstream wheels;
 newer releases would require an unsupported LLVM source-build path.
 Source-mode Studio discovers a built worker automatically, or accepts a Python

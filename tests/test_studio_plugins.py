@@ -267,3 +267,15 @@ def test_opl_ui_install_and_unlink_keep_original_files(tmp_path, monkeypatch):
     assert not dialog.folders
     assert package.exists() and (installed / 'plugin.py').exists()
     dialog.close()
+
+
+def test_mac_app_worker_uses_intact_resources_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(sys, 'platform', 'darwin')
+    contents = tmp_path / 'OpenLipsStudio.app/Contents'
+    monkeypatch.setattr(sys, '_MEIPASS', str(contents / 'Frameworks'), raising=False)
+    monkeypatch.setattr(sys, 'executable', str(contents / 'MacOS/OpenLipsStudio'))
+    worker = contents / 'Resources/plugin-runtime/OpenLipsBasicPitch/OpenLipsBasicPitch'
+    worker.parent.mkdir(parents=True)
+    worker.touch()
+    assert worker_command('request', 'output')[0] == str(worker)

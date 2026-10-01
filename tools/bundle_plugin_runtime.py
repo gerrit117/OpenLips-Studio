@@ -16,7 +16,9 @@ def bundle(worker, application, sign=True):
     for path in worker.rglob('*'):
         if path.is_symlink():
             path.resolve(strict=True).relative_to(worker)
-    base = application / ('Contents/Frameworks' if application.suffix == '.app' else '_internal')
+    # A worker contains both native code and data/metadata. Frameworks makes
+    # codesign misidentify .dist-info directories as malformed nested bundles.
+    base = application / ('Contents/Resources' if application.suffix == '.app' else '_internal')
     target = base / 'plugin-runtime/OpenLipsBasicPitch'
     target.resolve().relative_to(application)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -30,5 +32,5 @@ def bundle(worker, application, sign=True):
         staging.rename(target)
     if sys.platform == 'darwin' and application.suffix == '.app' and sign:
         # Adding nested code changes the existing ad-hoc bundle signature.
-        subprocess.run(['codesign', '--force', '--deep', '--sign', '-', str(application)], check=True)
+        subprocess.run(['codesign', '--force', '--sign', '-', str(application)], check=True)
     return target
