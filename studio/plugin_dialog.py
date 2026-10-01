@@ -53,6 +53,24 @@ class ImportWorker(QThread):
             self.failed.emit(str(error))
 
 
+class PackageInstallWorker(QThread):
+    installed = Signal(str, str)
+    failed = Signal(str)
+
+    def __init__(self, path, root, parent):
+        super().__init__(parent)
+        self.path, self.root = path, root
+
+    def run(self):
+        try:
+            from studio.plugin_package import install_package
+            folder = install_package(self.path, self.root)
+            manifest = json.loads((folder / 'openlips-plugin.json').read_text(encoding='utf-8'))
+            self.installed.emit(str(folder), manifest['id'])
+        except Exception as error:
+            self.failed.emit(str(error))
+
+
 class PluginDialog(QDialog):
     accepted_project = Signal(object)
 
@@ -101,7 +119,7 @@ class PluginDialog(QDialog):
         self.details.setTextFormat(Qt.TextFormat.PlainText)
         self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         body.addWidget(self.details)
-        self.enable = QCheckBox('Plugin aktivieren (vertrauenswürdiger Python-Code)')
+        self.enable = QCheckBox('Plugin aktivieren (nur vertrauenswürdige Quellen)')
         self.enable.clicked.connect(self.enable_selected)
         body.addWidget(self.enable)
         form = QFormLayout()
@@ -200,7 +218,8 @@ class PluginDialog(QDialog):
             if plugins:
                 self.plugin = plugins[0]
                 plugin = self.plugin
-                self.details.setText(f'{plugin.label} {plugin.version} · {plugin.author}\n{plugin.description}\n{plugin.homepage}')
+                permissions = ', '.join(plugin.permissions) or 'Not declared'
+                self.details.setText(f'{plugin.label} {plugin.version} · {plugin.author}\n{plugin.description}\n{plugin.homepage}\nPermissions (informational): {permissions}')
                 for parameter in plugin.parameters:
                     value = self.settings.value(f'plugins/{plugin.id}/{parameter.key}', parameter.default)
                     if parameter.kind in ('int', 'float'):
@@ -216,6 +235,9 @@ class PluginDialog(QDialog):
                     elif parameter.kind == 'bool':
                         control = QCheckBox()
                         control.setChecked(str(value).lower() in ('true', '1'))
+                    elif parameter.kind == 'text':
+                        control = QLineEdit(str(value))
+                        control.setMaxLength(8192)
                     else:
                         control = QComboBox()
                         for label, data in parameter.choices:
@@ -226,7 +248,7 @@ class PluginDialog(QDialog):
         self.updating = True
         self.runtime.setText(self.settings.value(f'plugins/{offer.id}/python', '', type=str))
         self.updating = False
-        self.runtime.setVisible(offer.id == 'spotify-basic-pitch' and not getattr(sys, 'frozen', False))
+        self.runtime.setVisible(self.plugin is not None and not self.plugin.process_plugin and not getattr(sys, 'frozen', False))
         self.runtime_label.setVisible(self.runtime.isVisibleTo(self))
         self.status.setText('Bereit' if self.plugin else 'Zum Verwenden aktivieren')
         self.update_buttons()
@@ -236,9 +258,9 @@ class PluginDialog(QDialog):
         if index < 0:
             return
         offer = self.offers[index]
-        if checked and offer.id != 'spotify-basic-pitch':
+        if checked:
             answer = QMessageBox.warning(self, 'Plugin vertrauen?',
-                'Dieses Plugin führt Python-Code mit deinen Benutzerrechten aus. Nur vertrauenswürdige Quellen aktivieren.',
+                'Dieses Plugin führt Code mit deinen Benutzerrechten aus und ist nicht sandboxed. Es kann Dateien und Netzwerk verwenden. Nur vertrauenswürdige Quellen aktivieren.',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if answer != QMessageBox.StandardButton.Yes:
                 self.enable.setChecked(False)
@@ -270,20 +292,32 @@ class PluginDialog(QDialog):
         if not path:
             return
         try:
-            from studio.plugin_package import inspect_package, install_package
+            from studio.plugin_package import inspect_package
             manifest = inspect_package(path)
             if manifest['id'] in [offer.id for offer in self.offers]:
                 raise ValueError('A plugin with this ID is already available. Disable/remove its link first.')
             root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'plugins'
-            folder = install_package(path, root)
-            self.folders.append(str(folder))
-            self.settings.setValue('plugins/folders', self.folders)
-            self.refresh_offers()
-            index = next(i for i, offer in enumerate(self.offers) if offer.id == manifest['id'])
-            self.list.setCurrentRow(index)
-            self.status.setText('Installiert, noch nicht aktiviert. Nur vertrauenswürdige Plugins aktivieren.')
+            self.process = None
+            self.worker = PackageInstallWorker(path, root, self)
+            self.worker.installed.connect(self.package_installed)
+            self.worker.failed.connect(self.fail)
+            self.worker.finished.connect(self.update_buttons)
+            self.progress.setRange(0, 0)
+            self.status.setText('Plugin wird installiert …')
+            self.worker.start()
+            self.update_buttons()
         except Exception as error:
             self.fail(str(error))
+
+    def package_installed(self, folder, ident):
+        self.folders.append(folder)
+        self.settings.setValue('plugins/folders', self.folders)
+        self.refresh_offers()
+        index = next(i for i, offer in enumerate(self.offers) if offer.id == ident)
+        self.list.setCurrentRow(index)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(100)
+        self.status.setText('Installiert, noch nicht aktiviert. Nur vertrauenswürdige Plugins aktivieren.')
 
     def choose_input(self):
         extensions = ' '.join('*' + ext for ext in self.plugin.extensions) if self.plugin else '*'
@@ -309,6 +343,8 @@ class PluginDialog(QDialog):
                 value = control.currentData()
             elif isinstance(control, QCheckBox):
                 value = control.isChecked()
+            elif isinstance(control, QLineEdit):
+                value = control.text()
             else:
                 value = control.value()
             values[key] = value
@@ -349,16 +385,14 @@ class PluginDialog(QDialog):
             if not source.is_file():
                 raise ValueError('Please select a file')
             options = self.options()
-            if self.plugin.id == 'spotify-basic-pitch':
-                from studio.basic_pitch_plugin import validate_options
-                validate_options(options)
             if self.temp:
                 self.temp.cleanup()
             self.temp = tempfile.TemporaryDirectory(prefix='openlips-plugin-')
             output = Path(self.temp.name)
             if self.plugin.create_command:
                 request = output / 'request.json'
-                request.write_text(json.dumps({'protocol': 1, 'input': str(source), 'options': options}), encoding='utf-8')
+                request.write_text(json.dumps({'protocol': 1, 'input': str(source), 'options': options,
+                                              'project': self.project.to_payload()}, ensure_ascii=False, allow_nan=False), encoding='utf-8')
                 python = '' if getattr(sys, 'frozen', False) else self.runtime.text().strip()
                 command = self.plugin.create_command(request, output, python)
                 if not command or not all(isinstance(part, str) for part in command):
@@ -418,6 +452,7 @@ class PluginDialog(QDialog):
             return
         try:
             path = Path(self.temp.name) / 'result.json'
+            path.resolve(strict=True).relative_to(Path(self.temp.name).resolve())
             if path.stat().st_size > 64 * 1024 * 1024:
                 raise ValueError('Plugin result exceeds 64 MiB')
             result = StudioProject.from_payload(json.loads(path.read_text(encoding='utf-8')))
@@ -474,7 +509,9 @@ class PluginDialog(QDialog):
             if not Path(path).suffix:
                 path += '.mid'
             try:
-                shutil.copyfile(Path(self.temp.name) / 'draft.mid', path)
+                source = Path(self.temp.name) / 'draft.mid'
+                source.resolve(strict=True).relative_to(Path(self.temp.name).resolve())
+                shutil.copyfile(source, path)
             except OSError as error:
                 self.status.setText(str(error))
                 self.log.appendPlainText(str(error))

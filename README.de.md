@@ -91,7 +91,7 @@ Die Medienkonvertierung richtet sich derzeit an den getesteten Wiedergabeweg des
 
 Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Es gibt Builds für Windows, macOS auf Apple Silicon und Intel sowie Linux.
 
-Entpacke das vollständige Archiv und lass die enthaltenen Dateien zusammen. Python und die separate Basic-Pitch-Analyseumgebung sind bereits enthalten. Du brauchst weder eine Python-Installation noch ein Spotify-Konto oder einen API-Schlüssel. Die Audiodatei wird lokal verarbeitet und nicht hochgeladen. Hinweise zur Einrichtung und zu den aktuellen Plattformgrenzen stehen in der [Editor-Anleitung](docs/studio.md), der [Plugin-Anleitung](docs/studio_plugins.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
+Entpacke das vollständige Studio-Archiv und lass die enthaltenen Dateien zusammen. Python ist enthalten. Basic Pitch ist ein separater, optionaler **`.opl`**-Download für deine Plattform und wird über die Plugin-Verwaltung installiert. Das Paket enthält sein eigenes Modell und die Analyseumgebung. Eine zusätzliche Python-Installation, ein Spotify-Konto oder ein API-Schlüssel sind nicht nötig. Die Audiodatei wird lokal verarbeitet und nicht hochgeladen. Weitere Informationen stehen im [Plugin-Katalog](plugins/README.md), der [Editor-Anleitung](docs/studio.md), der [Plugin-Entwicklerdokumentation](docs/studio_plugins.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
 
 ## Dokumentation
 

@@ -38,6 +38,8 @@ class ImportPlugin:
     homepage: str = ''
     parameters: tuple[PluginParameter, ...] = ()
     create_command: Callable | None = None
+    process_plugin: bool = False
+    permissions: tuple[str, ...] = ()
 
     def validate(self):
         if self.api_version != API_VERSION:
@@ -50,7 +52,7 @@ class ImportPlugin:
             raise ValueError('parameterized plugins require a process runner')
         keys = set()
         for parameter in self.parameters:
-            if parameter.key in keys or parameter.kind not in ('float', 'int', 'bool', 'choice'):
+            if parameter.key in keys or parameter.kind not in ('float', 'int', 'bool', 'choice', 'text'):
                 raise ValueError('invalid or duplicate plugin parameter')
             keys.add(parameter.key)
 
@@ -67,6 +69,9 @@ def load_local_plugin(manifest):
     """Called only after explicit trust/enablement. Plugins have full user access."""
     manifest = Path(manifest).resolve()
     data = json.loads(manifest.read_text(encoding='utf-8'))
+    if data.get('api_version') == 2:
+        from studio.plugin_process import load_process_plugin
+        return load_process_plugin(manifest.parent, data)
     source = (manifest.parent / data['module']).resolve()
     source.relative_to(manifest.parent)
     if source.suffix != '.py' or not source.is_file():
@@ -84,10 +89,9 @@ def load_local_plugin(manifest):
 
 
 def available_plugins(folders=()):
-    from studio.basic_pitch_plugin import create_plugin
-    offers = [PluginOffer('spotify-basic-pitch', 'Basic Pitch', 'Bundled .opl / Spotify', create_plugin)]
+    offers = []
     errors = []
-    seen = {offers[0].id}
+    seen = set()
     for entry in entry_points(group=ENTRY_POINT_GROUP):
         if entry.name in seen:
             errors.append(f'{entry.name}: duplicate plugin ID')
@@ -100,6 +104,9 @@ def available_plugins(folders=()):
             if manifest.stat().st_size > 64 * 1024:
                 raise ValueError('manifest exceeds 64 KiB')
             data = json.loads(manifest.read_text(encoding='utf-8'))
+            if data.get('api_version') == 2:
+                from studio.plugin_process import validate_manifest
+                validate_manifest(data)
             ident = data['id']
             if not isinstance(ident, str) or not re.fullmatch(r'[a-zA-Z0-9_.-]+', ident):
                 raise ValueError('invalid plugin ID')

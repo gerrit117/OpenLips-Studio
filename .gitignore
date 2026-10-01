@@ -21,6 +21,7 @@ dist/
 .venv/
 *.olips
 *.olp
+*.opl
 examples/ultrastar/*.txt
 tools/input.txt
 tools/test_chart*.json

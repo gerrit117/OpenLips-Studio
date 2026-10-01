@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['studio/**', 'tests/test_studio*', 'tools/media/**', 'tools/package_studio_release.py', 'tools/basic_pitch_requirements.txt', 'tools/collect_runtime_notices.py', 'tools/bundle_plugin_runtime.py', 'pyproject.toml', 'OpenLipsStudio.spec', 'BasicPitchWorker.spec', '.github/workflows/studio.yml']
+    paths: ['studio/**', 'plugins/**', 'tests/test_studio*', 'tools/media/**', 'tools/package_studio_release.py', 'tools/package_basic_pitch_plugin.py', 'tools/basic_pitch_requirements.txt', 'tools/collect_runtime_notices.py', 'pyproject.toml', 'OpenLipsStudio.spec', 'BasicPitchWorker.spec', '.github/workflows/studio.yml']
 jobs:
   desktop:
     strategy:
@@ -26,7 +26,7 @@ jobs:
           python -m pip install -r tools/basic_pitch_requirements.txt
           python -m pip install --no-deps basic-pitch==0.4.0
       - name: Test real Basic Pitch inference on original synthetic audio
-        run: python studio/basic_pitch_worker.py --self-test --output private/worker-source-smoke
+        run: python plugins/basic_pitch/worker.py --self-test --output private/worker-source-smoke
       - name: Build isolated Basic Pitch worker
         run: python -m PyInstaller --noconfirm BasicPitchWorker.spec
       - name: Inventory worker dependencies and preserve license notices
@@ -49,9 +49,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libegl1 libgl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libpulse0
       - run: python -m pip install -e ".[dev]"
+      - name: Package standalone Basic Pitch plugin
+        run: python -m tools.package_basic_pitch_plugin
       - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py tests/test_studio_media.py tests/test_studio_release.py tests/test_studio_plugins.py -q
         env:
           QT_QPA_PLATFORM: offscreen
+          OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ runner.os == 'Linux' && 'linux-x64' || runner.os == 'Windows' && 'windows-x64' || matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
       - name: Build Windows native media encoder
         if: runner.os == 'Windows'
         shell: cmd
@@ -74,6 +77,7 @@ jobs:
         run: dist/OpenLipsStudio/OpenLipsStudio --smoke-plugin private/gui-plugin-smoke
         env:
           QT_QPA_PLATFORM: offscreen
+          OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ runner.os == 'Linux' && 'linux-x64' || matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
       - name: Test Linux desktop integration
         if: runner.os == 'Linux'
         run: |
@@ -85,6 +89,7 @@ jobs:
         run: dist/OpenLipsStudio.app/Contents/MacOS/OpenLipsStudio --smoke-plugin private/gui-plugin-app-bundle-smoke
         env:
           QT_QPA_PLATFORM: offscreen
+          OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
       - name: Smoke test frozen Windows build
         if: runner.os == 'Windows'
         shell: pwsh
@@ -101,6 +106,7 @@ jobs:
           if ($process.ExitCode -ne 0) { Get-Content private/gui-plugin-smoke/*.txt; exit $process.ExitCode }
         env:
           QT_QPA_PLATFORM: offscreen
+          OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-windows-x64.opl
       - run: python -m tools.package_studio_release --target ${{ matrix.os }}
       - uses: actions/upload-artifact@v4
         with:
@@ -153,13 +159,13 @@ jobs:
                 target_commitish: context.sha, name: 'OpenLips Studio ' + version.replace(/b\d+$/, ' Beta'),
                 prerelease: /b\d+$/.test(version), draft: false,
                 body: fs.readFileSync('CHANGELOG.md', 'utf8').split(/^## /m)[1].split(/^## /m)[0].replace(/^[^\n]*\n/, '').trim() + '\n\n' +
-                      'Native Windows, macOS (Apple Silicon / Intel) and Linux builds. Extract the complete archive. Python and the isolated Basic Pitch / ONNX runtime are included.\n\n' +
+                      'Native Windows, macOS (Apple Silicon / Intel) and Linux builds. Extract the complete Studio archive. Basic Pitch is a separate platform-specific .opl download containing its own model and runtime; install it through Tools > Plugins. No separate Python installation is needed.\n\n' +
                       'Beta: DLC discovery is experimental; final OG media encoding currently requires Windows. Optional static-cover video requires external FFmpeg.\n\n' +
                       'Technical documentation: https://github.com/' + owner + '/' + repo + '/tree/' + tag + '/docs'
               })).data;
             }
-            const files = fs.readdirSync('release_assets').filter(name => /\.(zip|tar\.gz|sha256)$/.test(name));
-            if (files.length !== 8) throw new Error('Expected four native archives and four checksum files');
+            const files = fs.readdirSync('release_assets').filter(name => /\.(zip|tar\.gz|opl|sha256)$/.test(name));
+            if (files.length !== 16) throw new Error('Expected four Studio archives, four plugin packages and eight checksum files');
             const existing = (await github.rest.repos.listReleaseAssets({owner, repo, release_id: release.id})).data;
             for (const name of files) {
               const old = existing.find(asset => asset.name === name);

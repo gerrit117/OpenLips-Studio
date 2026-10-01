@@ -1,4 +1,4 @@
-# OpenLips Studio 0.2.0 Beta
+# OpenLips Studio 0.2.1 Beta
 
 ## Start
 
@@ -92,10 +92,11 @@ use worker threads for network/package operations.
 
 The plugin manager supports opt-in installed entry points and trusted local
 plugin folders, parameters, background jobs, result previews and undoable
-acceptance. Its first built-in plugin is Spotify Basic Pitch, with a separately
-bundled ONNX worker. See the [plugin guide and API](studio_plugins.md) for setup,
-limitations, cancellation, development and credits. Plugin code is trusted
-Python, not sandboxed. Merely opening Studio does not execute third-party plugins.
+acceptance. API-2 plugins have independent native runtimes and communicate through
+JSON rather than importing host Python. Basic Pitch is an optional separate `.opl`
+package, not built into Studio. See the [plugin guide and API](studio_plugins.md)
+for setup, limitations, development and credits. Plugins are trusted code, not
+sandboxed. Merely opening Studio does not execute third-party plugins.
 
 ## Public-release checklist
 

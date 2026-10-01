@@ -1,165 +1,199 @@
-# Studio plugins and Basic Pitch
+# Plugin developer guide
 
-## Using the built-in plugin
+Studio 0.2.1 supports independent **API-2 process plugins**. A plugin ships its own
+executable, libraries and optional models in a platform-specific **`.opl`** ZIP.
+It can be written in Python, Rust, C++, or another language: Studio communicates
+through files and stdout rather than importing the plugin's runtime. **`.olp`**
+is the song-project format and must not be used for plugins.
 
-Open **Werkzeuge > Plugins**, or the plug icon in the toolbar. Select Basic Pitch
-and explicitly enable it. Choose a local WAV, FLAC, MP3, OGG or M4A recording.
-An isolated vocal track gives a more useful draft than a full band recording:
-Basic Pitch is instrument-agnostic, not a vocal source-separation model.
+## Installation and trust
 
-Adjust onset/frame thresholds (0..1), minimum note duration (milliseconds),
-and minimum/maximum MIDI pitch. The defaults restrict predictions to MIDI 45..84.
-Lower thresholds can recover quieter notes but also increase false detections.
-The strongest-note option selects the highest-confidence concurrent note and
-merges adjacent segments at the same pitch. This is a simple monophonic filter,
-not a guarantee that the chosen voice is the singer. Keep-all retains overlaps.
+Download the `.opl` for your OS and architecture. Open **Werkzeuge > Plugins**,
+choose **.opl installieren**, then explicitly enable the installed plugin. Review
+its description, author and declared permissions. Installation alone executes no
+code. Analysis runs separately; errors/cancellation leave the editor unchanged.
+Preview the result before accepting it. Note replacement is undoable.
 
-Start analysis. The dialog stays responsive, shows the current analysis stage
-and a bounded log, and allows cancellation. The progress bar is indeterminate
-during inference: no invented duration estimate or fake percentage is displayed.
-Cancellation kills only the isolated worker and never changes the editor project.
-The first 200 notes are shown in the result table; the summary counts all notes.
+Studio itself does not include Basic Pitch. The separate Basic Pitch package
+contains its model and full ONNX/Python runtime. See the [plugin catalog](../plugins/README.md)
+and [Basic Pitch guide](../plugins/basic_pitch/README.md).
 
-Save the draft MIDI separately, or explicitly take the notes into the editor.
-Existing notes and their syllables are replaced after confirmation. Project
-title/artist/BPM, cover/video references and lyric draft are preserved. If there
-is no existing reference media, the source recording becomes the audio reference.
-Undo restores the previous notes and media link. Lyrics, sung syllable boundaries,
-phrase/page breaks and musical tempo are **not inferred** by this plugin.
-Review/edit the draft before assigning lyrics or exporting a Lips song.
+**Process isolation is not a security sandbox.** Enabled plugins have your user
+permissions and can access files or the network. Permission declarations are
+informational, not OS-enforced capabilities. Only install trusted packages.
+An LLM/cloud plugin must clearly disclose uploads and service requirements. This
+release does not implement an LLM provider, secret vault, download manager or
+automatic dependency installer. Never store API tokens in manifests or packages.
 
-Basic Pitch runs locally. No Spotify account/API key, audio upload or internet
-connection is required for analysis after downloading the complete app archive.
-The model and ONNX runtime are included separately from the Qt editor. Studio
-does not crash or discard work if the worker is missing or fails; see its log.
-Optional compressed-codec decoding depends on the bundled SoundFile/libsndfile
-support. Convert problematic inputs to PCM WAV before retrying.
+Installed packages live under Qt's per-user AppDataLocation `plugins/` directory,
+in an `id-version` subfolder. Installation validates first, extracts to a fresh
+staging directory and renames only on success. Source archives are untouched.
+Removing a manager link disables that plugin but keeps its installed files.
+To switch versions, unlink the old version and install/link the new one. Existing
+installation directories are never silently overwritten.
 
-## Runtime and native builds
+## Manifest
 
-Studio may use Python >=3.11. Basic Pitch 0.4.0 has older backend dependency
-constraints, so its worker uses a **separate Python 3.11 ONNX environment**, not
-the GUI interpreter. No TensorFlow, CoreML or cloud backend is needed.
-Setuptools <81 is required by Resampy's current `pkg_resources` import.
-
-For development, create an isolated Python 3.11 environment, then run:
-
-```sh
-python -m pip install -r tools/basic_pitch_requirements.txt
-python -m pip install --no-deps basic-pitch==0.4.0
-python studio/basic_pitch_worker.py --self-test --output private/worker-source-smoke
-python -m PyInstaller --noconfirm BasicPitchWorker.spec
-python tools/collect_runtime_notices.py --out dist/OpenLipsBasicPitch/licenses
-```
-
-Switch back to the GUI environment before building `OpenLipsStudio.spec`.
-The app spec embeds `dist/OpenLipsBasicPitch` into its private runtime directory.
-The finished worker is copied intact **after** the GUI's PyInstaller analysis,
-preserving executable permissions, native library paths and internal symlinks.
-Its Python 3.11 binaries must not be re-analyzed/rewritten as GUI Python 3.12
-libraries. macOS app bundles are ad-hoc re-signed after adding the worker; they
-are not Apple Developer signed or notarized. CI tests the actual `.app`, too.
-The intact macOS worker lives in `Contents/Resources/plugin-runtime`, not in
-`Frameworks`: Apple's signing tool interprets mixed metadata directories there
-as malformed code bundles. The copied worker retains its original individual
-ad-hoc signatures, and the outer app is signed without recursive reclassification.
-Intel macOS uses Numba 0.62.x or earlier, which still provides upstream wheels;
-newer releases would require an unsupported LLVM source-build path.
-Source-mode Studio discovers a built worker automatically, or accepts a Python
-path from the plugin dialog for development. Release builds always use their
-bundled worker. Each OS must build its own worker and Qt app. CI tests both
-source and frozen inference with a self-generated harmonic tone sequence.
-Tests never include songs, downloaded audio or third-party lyric/chart samples.
-
-## Plugin contract (API 1)
-
-Plugins use **`.opl`** packages, distinct from **`.olp`** song projects. A package
-is a ZIP containing `openlips-plugin.json` and its Python module/resources.
-Choose **.opl installieren** in the manager. Installation validates API/path/size
-limits and extracts to a new per-user plugin directory; it does not run the
-plugin. Activate it separately only if you trust its code. Duplicate installed
-IDs are rejected rather than overwritten. Removing the folder link leaves its
-local files intact. The first Basic Pitch `.opl` adapter is preinstalled in
-`studio/assets/basic-pitch.opl`; its native runtime is bundled separately for
-each OS. It does not need to be installed again. Third-party plugins can be
-distributed independently as `.opl`.
-
-To package a plugin directory:
-
-```sh
-python -m tools.package_studio_plugin examples/plugins/first-importer --out example-importer.opl
-```
-
-Packages have a 16 MiB unpacked/256-entry limit and cannot contain traversal
-paths, symlinks or duplicate names. Large ML runtimes should use a separate
-native worker, not inflate the small plugin code package.
-
-Existing `openlips_studio.importers` entry-point factories remain supported.
-They return `studio.plugins.ImportPlugin`; legacy `import_file(Path)` callables
-run in a thread and must return a validated `StudioProject`. Legacy threads
-cannot be safely killed; the dialog must wait until they finish.
-
-Release users can also link a local plugin folder containing:
+At the archive root place `openlips-plugin.json`:
 
 ```json
-{"id": "my-importer", "label": "My importer", "module": "plugin.py", "factory": "create_plugin"}
+{
+  "id": "example-lyric-mapping",
+  "label": "Example lyric mapping",
+  "version": "1.0.0",
+  "api_version": 2,
+  "type": "process",
+  "protocol": 1,
+  "result_type": "note-draft",
+  "author": "Your name",
+  "description": "Assign words from a text file to existing notes.",
+  "extensions": [".txt"],
+  "permissions": ["read-selected-text", "read-project", "write-job-output"],
+  "entrypoints": {"windows-x64": "runtime/LyricMapping/LyricMapping.exe"},
+  "parameters": [
+    {"key": "overwrite", "label": "Replace existing fragments", "kind": "bool", "default": false}
+  ]
+}
 ```
 
-The module must be a Python file within that folder. A single-module example:
+Supported targets: `windows-x64`, `windows-arm64`, `macos-x64`, `macos-arm64`,
+`linux-x64`, `linux-arm64`. Declaring a target does not prove it works: build and
+test natively on every claimed target. Basic Pitch currently publishes only
+Windows x64, both macOS architectures and Linux x64.
 
-```python
-from studio.plugins import ImportPlugin
-from studio.model import StudioProject, EditorNote
+The executable must exist inside the package. Use relative POSIX paths, no shell
+command strings, absolute paths or `..` components. Platform compatibility is
+checked before installation and again before execution. API version 2 requires
+Studio 0.2.1 or later; unknown APIs/protocols/result types are rejected.
 
-def import_file(path):
-    return StudioProject(title=path.stem, notes=[EditorNote(0, 1, 60)])
+Parameters generate standard controls in Studio: `int`, `float`, `bool`, `choice`,
+`text`. Numeric parameters require `minimum`, `maximum`, `default`; choices require
+`choices: [["Label", "value"]]`. `text` produces a short text input, not a secret
+field; values persist in user settings. Labels and descriptive fields are plain
+text, not HTML. Use a selected UTF-8 text file for long lyrics. Up to 64 controls
+are supported. Validate all options again inside the worker.
 
-def create_plugin():
-    return ImportPlugin('my-importer', 'My importer', ('.txt',), import_file)
+## Request and execution
+
+Studio creates a temporary job directory and invokes an argument list directly:
+
+```text
+PLUGIN_EXECUTABLE --request /job/request.json --output /job
 ```
 
-Manifests are read without executing plugin code; only explicitly enabled
-plugins are loaded. Enablement and parameter values are stored in local Qt
-settings. Removing a folder link does not delete any plugin files.
-**Plugins execute arbitrary code with your user privileges; this is not a
-sandbox or marketplace.** Trust the source before enabling one. Frozen apps
-cannot magically provide every third-party Python dependency; prefer an
-isolated process runner for plugins with native or conflicting dependencies.
+No shell expansion or activation script is involved. Locate private libraries
+and models relative to your executable, not the working directory. Plugins must
+not depend on Studio's Python interpreter or packages. A separately frozen Python
+runtime is supported; Studio resets inherited PyInstaller/library environment
+variables for the worker.
 
-Parameterized importers supply `parameters: tuple[PluginParameter, ...]` and
-`create_command(request_path, output_dir, python_override) -> list[str]`.
-The host builds float/int/bool/choice controls and starts the command without a
-shell. Request JSON is `{protocol: 1, input: absolute_path, options: {...}}`.
-The worker writes a `StudioProject.to_payload()` to `output_dir/result.json`
-and may write `draft.mid`. Exit nonzero for failure; no result is then accepted.
-Optional stdout lines prefixed `OPENLIPS_PLUGIN:` contain a JSON `message`
-and optional `progress`. Other stdout/stderr is logged, never interpreted as code.
-Results have the same 100,000-note and 64 MiB safety limits as Studio projects.
+`request.json` (UTF-8, at most 64 MiB):
 
-The current API handles import/draft generation, not arbitrary editor widgets
-or export hooks. Broader processing/export lifecycle hooks remain planned.
+```json
+{
+  "protocol": 1,
+  "input": "/absolute/path/selected-file.txt",
+  "options": {"overwrite": false},
+  "project": {
+    "format": "openlips-studio-project",
+    "schema_version": 1,
+    "title": "Example",
+    "notes": [
+      {"id": "note-1", "time": 1.0, "length": 0.5, "pitch": 60, "text": "", "end_word": true}
+    ]
+  }
+}
+```
 
-## Branding
+The project snapshot contains current notes, draft lyrics and metadata, including
+media paths. Treat it as input, not permission to modify source files. This enables
+future transcription/alignment plugins to return lyrics on existing notes rather
+than only create new notes. Keep stable note IDs when annotating existing notes.
+No current project is changed until the user explicitly accepts a validated result.
 
-The approved Studio wordmark appears quietly at the right of the editor toolbar.
-Windows uses a multi-size ICO in the executable; macOS uses an ICNS in the app
-bundle; Linux uses the PNG window icon. An ELF binary does not embed a desktop
-launcher icon like a Windows executable. After extracting the Linux build to
-its permanent location, optionally install its per-user launcher and icon:
+## Progress, results and errors
+
+Emit newline-terminated, flushed UTF-8 lines on stdout:
+
+```text
+OPENLIPS_PLUGIN:{"progress": 25, "message": "Analyzing audio locally"}
+```
+
+Messages update the status; the progress indicator is indeterminate during work,
+then complete on success. Other stdout/stderr lines appear in the bounded log.
+Do not print secrets. Exit nonzero on failure, with an actionable error message.
+Studio can terminate the worker on cancellation; do not spawn detached child
+processes, because child-process-tree cancellation is not provided yet.
+
+On success write `result.json` inside the job directory and exit 0. It uses the
+project JSON schema above, including a `notes` array. Notes require nonnegative
+finite `time`, positive finite `length`, integer MIDI `pitch` 0..127, optional
+`text`, `end_word`, `line_break_after`, `page_break_time`, and unique `id` (generated
+if omitted). Preserve phrase fields when editing an existing chart. Limits are
+64 MiB and 100,000 notes. Embedded NUL characters, bad timings and duplicate IDs
+are rejected. An empty draft is not accepted by the current GUI.
+
+Optional `draft.mid` enables MIDI export. Neither result file may resolve outside
+the job directory. Never modify original inputs. Job files are temporary; the
+user must accept/export before closing the dialog.
+
+Current result capability: **note-draft**, meaning notes, syllables and phrase
+fields are previewed then replace editor notes as one undoable action. Studio
+preserves its title/artist, lyric draft and existing reference media. Processing
+plugins can return modified copies of existing notes. There are no arbitrary
+editor widgets, live audio callbacks, unrestricted host commands or export hooks.
+New capability types should be explicitly versioned, not smuggled into this schema.
+
+## Build a package
+
+Layout:
+
+```text
+openlips-plugin.json
+README.md
+LICENSE
+runtime/MyWorker/MyWorker[.exe]
+runtime/MyWorker/... private dependencies and models ...
+```
+
+Stage only redistributable plugin files in an ignored build directory. Include
+dependency/model licenses and version inventories. Build the native executable on
+the target OS. Package it with:
 
 ```sh
-sh _internal/studio/assets/install-desktop-entry.sh
+python -m tools.package_studio_plugin build/my-plugin --out release_assets/my-plugin-windows-x64.opl
 ```
 
-No root access is needed. Move the app later and rerun the script to update the
-launcher path. Runtime icons are derived from the approved artwork by
-`python -m tools.build_studio_branding`; original artwork is unchanged.
+The tool creates a ZIP without overwriting existing output. API-2 packages support
+up to 2 GiB compressed and unpacked, and 50,000 entries. Paths, case-insensitive
+duplicates, reserved Windows names, special files and encrypted entries are
+rejected. Unix executable bits and safe internal symlinks are preserved; no entry
+may be extracted below a symlink. Escaping/dangling/cyclic links fail installation
+with rollback. Windows packages should avoid symlinks, which may require elevated
+privileges. Large packages install in a background thread; forced cancellation of
+an installation is not supported, so wait for completion before closing.
+
+Build/test an actual `.opl` on a clean machine, not just a source worker. CI tests
+Basic Pitch by installing the package into an isolated directory, running real
+inference through the frozen GUI, previewing, accepting, undoing and redoing.
+The Studio archive must remain usable without any plugin installed.
+
+## Examples and backward compatibility
+
+- [Basic Pitch](../plugins/basic_pitch/): complete independent ML worker.
+- [Example lyric mapping](../plugins/example_lyrics/): dependency-free processing
+  worker that maps text-file words to existing notes, without claiming AI alignment.
+- [Legacy Python importer](../examples/plugins/first-importer/): API-1 example.
+
+API-1 `openlips_studio.importers` entry points and trusted Python folders remain
+supported. They import host Python code on activation, unlike API-2 workers, and
+keep the smaller 16 MiB / 256-entry package limit with no symlinks. They are not
+appropriate for incompatible ML dependency stacks. Neither API is sandboxed.
 
 ## Credits
 
-Basic Pitch / its model: Copyright 2022 Spotify AB, Apache-2.0, developed by
-Spotify's Audio Intelligence Lab and its contributors. See the
-[upstream project, authors and research](https://github.com/spotify/basic-pitch).
-This plugin is not a Spotify service or an endorsement. Dependency inventories
-and shipped notices are included in native archives. See
-[third-party notices](../THIRD_PARTY_NOTICES.md).
+Basic Pitch and its model: Copyright 2022 Spotify AB, Apache-2.0, developed by
+Spotify's Audio Intelligence Lab and contributors. The integration is independent,
+not a Spotify service or endorsement. See [Basic Pitch](https://github.com/spotify/basic-pitch),
+[ONNX Runtime](https://github.com/microsoft/onnxruntime), shipped plugin inventories
+and [third-party notices](../THIRD_PARTY_NOTICES.md).

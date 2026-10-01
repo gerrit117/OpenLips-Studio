@@ -3,18 +3,18 @@ from PyInstaller.utils.hooks import collect_data_files
 import sys
 from studio import DISPLAY_VERSION
 from pathlib import Path
-from tools.bundle_plugin_runtime import bundle
 
 media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
 media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
-worker = Path('dist/OpenLipsBasicPitch')
 notices = Path('build/studio-licenses')
 notice_data = [(str(notices), 'licenses')] if notices.is_dir() else []
 icon = 'studio/assets/app-icon.ico' if sys.platform == 'win32' else None
+asset_data = [(str(path), 'studio/assets') for path in Path('studio/assets').iterdir()
+              if path.is_file() and path.suffix in ('.png', '.ico', '.icns', '.sh')]
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') +
-                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('studio/assets', 'studio/assets')] + notice_data,
+                   [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.')] + asset_data + notice_data,
              binaries=media_binaries,
              hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins', 'studio.plugin_dialog', 'studio.plugin_smoke'],
              excludes=['PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineCore', 'imageio_ffmpeg'],
@@ -29,13 +29,9 @@ pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True,
           name='OpenLipsStudio', console=False, icon=icon)
 coll = COLLECT(exe, a.binaries, a.datas, name='OpenLipsStudio')
-if worker.is_dir():
-    bundle(worker, Path('dist/OpenLipsStudio'))
 if sys.platform == 'darwin':
     app = BUNDLE(coll, name='OpenLipsStudio.app',
                  icon='studio/assets/app-icon.icns',
                  bundle_identifier='org.openlips.studio',
                  info_plist={'CFBundleShortVersionString': DISPLAY_VERSION.split()[0],
                              'NSHighResolutionCapable': True})
-    if worker.is_dir():
-        bundle(worker, Path('dist/OpenLipsStudio.app'))

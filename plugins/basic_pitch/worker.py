@@ -7,9 +7,9 @@ from pathlib import Path
 import sys
 
 if not getattr(sys, 'frozen', False):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from studio.basic_pitch_plugin import project_from_events, validate_options
+from plugins.basic_pitch.engine import project_from_events, validate_options
 
 PROTOCOL_PREFIX = 'OPENLIPS_PLUGIN:'
 
@@ -99,7 +99,7 @@ def main():
             synthetic_audio(source)
             request = {'protocol': 1, 'input': str(source), 'options': {}}
         else:
-            if not args.request or args.request.stat().st_size > 65536:
+            if not args.request or args.request.stat().st_size > 64 * 1024 * 1024:
                 raise ValueError('Missing or oversized request')
             request = json.loads(args.request.read_text(encoding='utf-8'))
         project = transcribe(request, args.output)

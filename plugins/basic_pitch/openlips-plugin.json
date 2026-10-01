@@ -1,10 +1,28 @@
 {
   "id": "spotify-basic-pitch",
   "label": "Basic Pitch",
-  "api_version": 1,
-  "module": "plugin.py",
-  "factory": "create_plugin",
+  "api_version": 2,
+  "type": "process",
+  "protocol": 1,
+  "result_type": "note-draft",
   "author": "Spotify Audio Intelligence Lab; OpenLips integration",
-  "version": "0.4.0",
-  "runtime": "bundled-openlips-basic-pitch"
+  "version": "0.4.0-2",
+  "homepage": "https://github.com/spotify/basic-pitch",
+  "description": "Local audio to editable note draft. Includes the model and ONNX runtime; no vocal separation or lyric recognition.",
+  "extensions": [".wav", ".flac", ".mp3", ".ogg", ".m4a"],
+  "permissions": ["read-selected-audio", "read-project", "write-job-output"],
+  "entrypoints": {
+    "windows-x64": "runtime/OpenLipsBasicPitch/OpenLipsBasicPitch.exe",
+    "macos-x64": "runtime/OpenLipsBasicPitch/OpenLipsBasicPitch",
+    "macos-arm64": "runtime/OpenLipsBasicPitch/OpenLipsBasicPitch",
+    "linux-x64": "runtime/OpenLipsBasicPitch/OpenLipsBasicPitch"
+  },
+  "parameters": [
+    {"key": "onset_threshold", "label": "Anschlagschwelle", "kind": "float", "default": 0.5, "minimum": 0, "maximum": 1},
+    {"key": "frame_threshold", "label": "Halteschwelle", "kind": "float", "default": 0.3, "minimum": 0, "maximum": 1},
+    {"key": "minimum_note_length", "label": "Mindestdauer (ms)", "kind": "int", "default": 127, "minimum": 20, "maximum": 2000},
+    {"key": "minimum_pitch", "label": "Tiefster MIDI-Ton", "kind": "int", "default": 45, "minimum": 21, "maximum": 108},
+    {"key": "maximum_pitch", "label": "Höchster MIDI-Ton", "kind": "int", "default": 84, "minimum": 21, "maximum": 108},
+    {"key": "melody_mode", "label": "Überlappende Noten", "kind": "choice", "default": "strongest", "choices": [["Stärkste Note behalten", "strongest"], ["Alle behalten", "all"]]}
+  ]
 }

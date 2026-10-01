@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.1 Beta
+
+- Independent API-2 process plugins with platform-specific executable entrypoints,
+  private runtimes/models and declarative UI parameters, without host Python imports.
+- Basic Pitch moved entirely into `plugins/basic_pitch`; Studio no longer bundles
+  its code, model or runtime. Four standalone platform `.opl` packages are released
+  separately from the Studio downloads.
+- Atomic background installation of larger native plugin packages, preserving
+  executable permissions and validated internal symlinks; compatibility/path/size
+  validation and rollback leave existing files untouched.
+- Versioned request/progress/result protocol includes the current project snapshot
+  for processing and future lyric-alignment plugins. Text settings are supported.
+- Plugin catalog, complete developer guide, and independent lyric-mapping example.
+- Legacy API-1 importers remain supported. Explicit activation and undoable draft
+  acceptance remain required; process isolation is not a security sandbox.
+- Native CI tests install the actual `.opl` into a separate directory and exercise
+  real inference, previews and undo/redo through the frozen host app.
+
 ## 0.2.0 Beta
 
 - Usable opt-in plugin manager with per-plugin settings, trusted local plugin folders

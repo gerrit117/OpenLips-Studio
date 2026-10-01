@@ -3,12 +3,31 @@ import json
 from pathlib import Path
 import time
 import sys
+import os
+import math
+import struct
+import wave
 
 from PySide6.QtCore import QSettings, QTimer
 
-from studio.basic_pitch_worker import synthetic_audio
 from studio.model import StudioProject
 from studio.plugin_dialog import PluginDialog
+
+
+def synthetic_audio(path):
+    rate = 22050
+    samples = []
+    for pitch in (60, 64, 67, 72):
+        frequency = 440 * 2 ** ((pitch - 69) / 12)
+        for index in range(rate):
+            t = index / rate
+            envelope = min(1, t / .03, (1 - t) / .05)
+            value = sum(math.sin(2 * math.pi * frequency * h * t) / h for h in range(1, 5))
+            samples.append(round(7000 * envelope * value))
+        samples.extend([0] * (rate // 5))
+    with wave.open(str(path), 'wb') as stream:
+        stream.setparams((1, 2, rate, 0, 'NONE', 'not compressed'))
+        stream.writeframes(struct.pack('<' + 'h' * len(samples), *samples))
 
 
 def run(app, window, output):
@@ -18,6 +37,12 @@ def run(app, window, output):
     synthetic_audio(source)
     window.replace_project(StudioProject(title='Plugin Test', artist='OpenLips Studio'))
     settings = QSettings(str(output / 'settings.ini'), QSettings.Format.IniFormat)
+    from studio.plugin_package import install_package
+    package = os.environ.get('OPENLIPS_SMOKE_PLUGIN')
+    if not package:
+        raise ValueError('Set OPENLIPS_SMOKE_PLUGIN to the platform .opl for this integration test')
+    folder = install_package(package, output / 'installed-plugins')
+    settings.setValue('plugins/folders', [str(folder)])
     settings.setValue('plugins/enabled', ['spotify-basic-pitch'])
     dialog = PluginDialog(window.project, window, settings)
     dialog.input.setText(str(source))

@@ -91,7 +91,7 @@ Media conversion currently targets the tested original-game path on Windows; edi
 
 Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Builds are available for Windows, macOS on Apple Silicon and Intel, and Linux.
 
-Extract the complete archive and keep its files together. Python and the separate Basic Pitch analysis runtime are included; you don't need to install Python or use a Spotify account or API key. Audio is processed locally, not uploaded. For setup details and current platform limitations, see the [editor guide](docs/studio.md), [plugin guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
+Extract the complete Studio archive and keep its files together. Python is included. Basic Pitch is a separate, optional **`.opl`** download for your platform; install it in the plugin manager. Its package includes its own model and analysis runtime, without a separate Python installation, Spotify account or API key. Audio is processed locally, not uploaded. See the [plugin catalog](plugins/README.md), [editor guide](docs/studio.md), [plugin developer guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
 
 ## Documentation
 
@@ -115,7 +115,7 @@ The research and testing also benefited from [Xenia](https://github.com/xenia-pr
 
 Thank you, too, to everyone who tests a build, reports a bug, shares a useful finding or helps someone else get started. Dependency licenses and notices are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-A special thank you to **Spotify's Audio Intelligence Lab and the authors of [Basic Pitch](https://github.com/spotify/basic-pitch)** for making their transcription model and code available as open source. Studio's first built-in plugin uses their work through [ONNX Runtime](https://github.com/microsoft/onnxruntime). It is an independent integration, not a Spotify service or endorsement.
+A special thank you to **Spotify's Audio Intelligence Lab and the authors of [Basic Pitch](https://github.com/spotify/basic-pitch)** for making their transcription model and code available as open source. The independent Basic Pitch plugin uses their work through [ONNX Runtime](https://github.com/microsoft/onnxruntime). It is not a Spotify service or endorsement.
 
 ## Independence, rights and responsibility
 

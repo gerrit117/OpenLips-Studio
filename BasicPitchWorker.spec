@@ -6,7 +6,7 @@ datas = collect_data_files('basic_pitch') + copy_metadata('basic-pitch')
 for package in ('numpy', 'librosa', 'mir_eval', 'onnxruntime', 'pretty_midi', 'resampy',
                 'scikit-learn', 'scipy', 'soundfile', 'numba', 'llvmlite', 'soxr', 'mido'):
     datas += copy_metadata(package)
-a = Analysis(['studio/basic_pitch_worker.py'], pathex=['.'], datas=datas,
+a = Analysis(['plugins/basic_pitch/worker.py'], pathex=['.'], datas=datas,
              hiddenimports=collect_submodules('librosa') + ['onnxruntime', 'basic_pitch.inference'],
              excludes=['PySide6', 'qtawesome', 'tensorflow', 'coremltools', 'tflite_runtime',
                        'matplotlib', 'IPython', 'pytest'], noarchive=False)

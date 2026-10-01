@@ -5,11 +5,13 @@ same Python/Qt sources across platforms. A frozen release includes Python,
 Qt, dependencies and dictionaries: end users do not install Python separately.
 Source checkout/development does require Python 3.11+.
 
-From 0.2.0 Beta, each native archive also includes the isolated Basic Pitch / ONNX
-worker and model; no extra user Python installation is required. The worker uses
-its own Python 3.11 runtime independently of the GUI. Both frozen runtimes and
-the GUI-to-worker workflow are tested before release publication. See the
-[plugin guide](studio_plugins.md), including Linux desktop icon setup.
+From 0.2.1 Beta, Basic Pitch is distributed separately as a platform-specific
+`.opl` containing its independent Python 3.11 / ONNX runtime and model. Studio
+works without it installed; no extra user Python installation is required for
+either download. The actual plugin package is installed and tested through the
+frozen GUI before release. See the [plugin guide](studio_plugins.md).
+On Linux install the desktop icon using
+`sh _internal/studio/assets/install-desktop-entry.sh` from the Studio directory.
 
 Native builds are required; PyInstaller is not a cross-compiler. The build
 matrix produces Windows x64, macOS Apple Silicon, macOS Intel and Linux x64

@@ -1,0 +1,22 @@
+{
+  "id": "example-lyric-mapping",
+  "label": "Example lyric mapping",
+  "version": "1.0.0",
+  "api_version": 2,
+  "type": "process",
+  "protocol": 1,
+  "result_type": "note-draft",
+  "author": "OpenLips contributors",
+  "description": "Developer example: map words from a text file onto existing notes. No AI or syllabification.",
+  "extensions": [".txt"],
+  "permissions": ["read-selected-text", "read-project", "write-job-output"],
+  "entrypoints": {
+    "windows-x64": "runtime/LyricMapping/LyricMapping.exe",
+    "macos-x64": "runtime/LyricMapping/LyricMapping",
+    "macos-arm64": "runtime/LyricMapping/LyricMapping",
+    "linux-x64": "runtime/LyricMapping/LyricMapping"
+  },
+  "parameters": [
+    {"key": "overwrite", "label": "Replace existing lyric fragments", "kind": "bool", "default": false}
+  ]
+}
