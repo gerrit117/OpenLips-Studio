@@ -33,7 +33,7 @@ filled with uniform invented word timings. The pinned TorchAudio 2.8 API is
 deprecated and must be replaced before upgrading to 2.9:
 [official documentation](https://docs.pytorch.org/audio/2.8.0/tutorials/ctc_forced_alignment_api_tutorial.html).
 
-## Implemented first step (unreleased)
+## LRC reference import
 
 File -> Import synchronized lyrics (LRC) opens a review of line starts and
 enhanced word anchors. Accepting stores the original text/source in
@@ -58,7 +58,8 @@ NUL-containing/non-UTF-8 files are rejected.
 LRC attachment does **not** create pitches, infer word ends, modify chart page
 events or perform forced alignment. Existing manual lyric assignment still
 works independently; the saved reference is provenance, not automatic mapping.
-Next: isolated CPU-first F0 analysis and a reviewed note/lyric alignment result.
+The separate audio-analysis workflow described above can combine these anchors
+with measured pitch and optional estimated CTC word alignment.
 
 ## Reviewed projects
 

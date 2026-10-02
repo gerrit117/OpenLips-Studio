@@ -95,6 +95,35 @@ early-end/extend mechanism on the same full song, **not necessarily a second
 physically shortened media file** (medium confidence). Exact end-marker dispatch,
 fade handling, extension threshold and grading need native tests.
 
+The 2026-10-02 binding audit resolved the missing native references by tracking
+PowerPC address construction across a reused nonvolatile base register. Raw
+pointer scans and adjacent lis/addi scans alone did not find these bindings.
+For the exact NoH hash above, `SetShortModeEnabled` is bound through site
+`0x8240d04c` to Lua wrapper `0x8239f490`, which calls native setter
+`0x8225a010`. The setter writes a 32-bit state at **runtime object +0x27c**.
+`GetShortModeEnabled` is bound at `0x8240d060` to wrapper `0x8239f508`, which
+calls getter `0x8225a018` reading the same field. Confidence: high for this
+single executable's static binding, unverified across other executable versions.
+This is a chart-player runtime state, **not an IXB serialized field offset**.
+
+The `BeginShortModeApproach` and `ShortModeExtended` bindings were also resolved
+at `0x8240ca3c` / `0x8240ca54`. Their accessor wrappers address runtime event
+containers at **+0x10c / +0x11c**; companion wrappers route listener registration
+to those same containers. Confidence: medium for event-container semantics from
+static code plus Lua usage, not a proven complete media-stop/fade implementation.
+The event dispatch/threshold consumers still need targeted runtime comparison.
+
+`tools/ghidra/StudyVariantBindings.java` reproduces this bounded, hash-guarded
+audit in a read-only headless project. It distinguishes candidate constant
+references from established bindings, uses pseudo-disassembly for undefined
+regions, and limits decompilation. The large binding region is not fully defined
+as a function in the existing analysis. A save-register helper is also marked
+non-returning by Ghidra despite decoded instructions after its call, truncating
+one binding helper's decompilation. Raw C output alone is therefore insufficient;
+the documented setter/getter mappings were cross-checked against instructions.
+Game-derived exports remain private. This method has not established all QTE
+enums, duet routing or final short-mode behavior.
+
 An additional cross-corpus check found **exactly one short-end object in each
 of 129/129 distinct supported charts**, always owned by the **Section** sequence
 (129/129). Its trigger ranges from 70.526 to 224.805 seconds. Confidence is high
