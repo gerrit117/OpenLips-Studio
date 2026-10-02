@@ -2,34 +2,16 @@
 
 ## 0.3.0 Beta
 
-- Add a built-in, optional audio-to-chart workflow with isolated background
-  inference, result review, cancellation and undoable acceptance.
-- Bundle SwiftF0's small model for offline pitch analysis; add optional native
-  Demucs/Whisper engines, selectable transcription models and CPU fallback.
-- Preserve LRC references, distinguish word estimates from syllable alignment,
-  and offer an exportable one-note-per-word draft with explicit quality warnings.
-- Add optional bounded EN/DE CTC alignment of supplied lyric text, without
-  silently interpolated failures; document measured singing-timing errors.
-- Benchmark real local song audio against structural lyric references without
-  publishing recordings or lyrics. Document singing recognition limitations.
-- Add hash-guarded Xenia A/B launchers and read-only, corpus-wide song-variant
-  diagnostics for duet tracks, short-mode markers and later chart schemas.
-- Add a per-user Windows installer and native macOS drag-to-Applications DMGs.
-- Test the frozen pitch engine, retain model/dependency notices and publish
-  optional AI runtime archives separately from the main app and `.opl` plugins.
-
-- Add built-in LRC import and a synchronized lyric review dialog, preserving
-  repeated lines, enhanced word anchors, source text and offsets in `.olp`.
-- Offer synchronized LRCLIB results without discarding their timestamps.
-  Import acceptance is undoable and does not alter existing notes or pitches.
-- Add read-only ASF packet and native video-delivery diagnostics; pause portable
-  codec research after localizing the remux stall to decoder dispatch.
-
-- Add English/German media requirements to the conversion and experimental DLC
-  dialogs, including the macOS/Linux requirement for pre-encoded game media.
-- Document tested OG ASF/WVC1/WMA Pro settings separately from original DLC
-  RIFF/XWMA profiles, unverified alternatives and the 720p export ceiling.
-- Fix the missing translation import in the experimental DLC dialog.
+- Create editable chart drafts from audio with optional vocal separation,
+  pitch detection and lyric recognition. Review, cancel or accept with undo.
+- Import synchronized LRC lyrics and retain their timing in projects; optionally
+  align supplied English/German words or use one note per word.
+- Include offline pitch detection and offer a separate AI engine with selectable
+  transcription models. Automatic singing recognition still requires review.
+- Preserve synchronized lyrics from LRCLIB search results.
+- Add a Windows installer and macOS drag-to-Applications DMGs.
+- Clarify media requirements in English/German and fix the DLC dialog translation
+  error. Final media conversion on macOS/Linux still needs compatible source files.
 
 ## 0.2.1 Beta
 
