@@ -34,8 +34,11 @@ def validate_manifest(data):
         raise ValueError('Invalid plugin ID')
     if data.get('api_version') != 2 or data.get('type') != 'process' or data.get('protocol') != PROTOCOL_VERSION:
         raise ValueError('Unsupported process plugin API/type/protocol')
-    if data.get('result_type') != 'note-draft':
+    if data.get('result_type') not in ('note-draft', 'song-import'):
         raise ValueError('Unsupported plugin result type')
+    for key in ('input_required', 'interactive'):
+        if not isinstance(data.get(key, True if key == 'input_required' else False), bool):
+            raise ValueError('Plugin execution flags must be boolean')
     for field in ('description', 'author', 'homepage'):
         if not isinstance(data.get(field, ''), str):
             raise ValueError('Plugin descriptive fields must be text')
@@ -114,4 +117,6 @@ def load_process_plugin(folder, data):
                         description=data.get('description', ''), author=data.get('author', ''),
                         version=data['version'], homepage=data.get('homepage', ''),
                         parameters=parameters, create_command=command, process_plugin=True,
-                        permissions=tuple(data.get('permissions', [])))
+                        permissions=tuple(data.get('permissions', [])),
+                        result_type=data['result_type'], input_required=data.get('input_required', True),
+                        interactive=data.get('interactive', False))

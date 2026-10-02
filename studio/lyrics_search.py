@@ -18,7 +18,8 @@ def search_lyrics(title, artist):
     rows = json.loads(payload)
     if not isinstance(rows, list):
         raise ValueError('Unexpected lyrics search response')
-    return [r for r in rows if isinstance(r, dict) and isinstance(r.get('plainLyrics'), str)][:30]
+    return [r for r in rows if isinstance(r, dict) and
+            (isinstance(r.get('plainLyrics'), str) or isinstance(r.get('syncedLyrics'), str))][:30]
 
 
 class LyricsSearch(QThread):

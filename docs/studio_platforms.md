@@ -17,7 +17,10 @@ Native builds are required; PyInstaller is not a cross-compiler. The build
 matrix produces Windows x64, macOS Apple Silicon, macOS Intel and Linux x64
 artifacts. macOS gets an `.app` bundle plus the portable build directory.
 Artifacts include smoke-test output; success is reported only after the jobs
-actually complete. Apple signing/notarization and installers remain pending.
+actually complete. Apple signing/notarization remains pending. Version 0.3.0 adds
+a Windows per-user Inno Setup wizard and native macOS DMG with an Applications
+shortcut; neither requires users to install Python. Linux retains the portable
+archive and desktop-entry installer.
 Run `36818350412` completed successfully on all four native targets for 0.1.1 Beta.
 From 0.1.3 Beta, successful main-branch builds publish versioned prereleases
 with all four native archives and SHA-256 checksums. Windows/macOS use ZIP;
@@ -40,8 +43,27 @@ AppImage/Flatpak/DEB/RPM packaging is a follow-up, not another editor rewrite.
 The Windows application bundles its native OG media encoder. Native STFS remains
 a separate backend; optional cover-video preparation requires FFmpeg. Final OG
 media encoding is refused on macOS/Linux; see [media scope](studio_media.md).
+On those systems, game export needs already-compatible media: OG uses the
+tested ASF/WVC1/WMA Pro profile, while experimental DLC packaging requires
+RIFF/XWMA full audio and preview. Editor reference playback is not a codec
+conversion. See [exact profiles and preparation](studio_media.md#already-compatible-media-on-macos-and-linux).
 A portable editor is not proof that these backends work on macOS/Linux.
 No unsigned Xbox content or copyrighted media is bundled in app artifacts.
+
+## Optional built-in AI engine
+
+SwiftF0's small model is bundled with Studio. Heavy stages use the separate
+OpenLips-AI archive, not an `.opl` plugin. Extract it and select OpenLipsAI in
+Tools -> Create chart from audio (AI). Placing its `ai` folder beside the Windows
+Studio executable enables automatic discovery. Larger named models download
+on first use to `~/.cache/openlips/ai`; audio is processed locally.
+
+Optional developer installation uses Python 3.11 and `requirements-ai.txt`.
+Windows/Linux release engines use Torch 2.8 CPU wheels. macOS Intel pins the
+last supported Torch 2.2.2 Intel wheel and NumPy <2; Apple Silicon uses Torch
+2.8. Studio excludes these heavy dependencies. Actual GPU acceleration
+requires compatible runtime builds/drivers; CPU is the tested baseline.
+See [tests and limitations](ai_song_creation_test_report.md).
 
 References: [PyInstaller platform builds](https://pyinstaller.org/en/stable/usage.html),
 [current GitHub runner targets](https://github.com/actions/runner-images),

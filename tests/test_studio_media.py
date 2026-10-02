@@ -51,6 +51,7 @@ def test_video_uses_video_audio_not_separate_reference(tmp_path, monkeypatch, ap
     encoder.touch()
     calls = []
     monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(media, 'ffmpeg_encoder', lambda: 'synthetic-ffmpeg')
     def fake_run(args, log):
         calls.append(args)
         Path(args[2]).write_bytes(b'encoded')
@@ -74,6 +75,7 @@ def test_failed_encoding_never_publishes_partial_folder(tmp_path, monkeypatch, a
     encoder = tmp_path / 'helper.exe'
     encoder.touch()
     monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(media, 'ffmpeg_encoder', lambda: 'synthetic-ffmpeg')
     def fail(*args):
         raise ValueError('synthetic failure')
     monkeypatch.setattr(media, 'run_encoder', fail)

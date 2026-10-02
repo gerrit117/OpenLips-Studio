@@ -10,8 +10,8 @@ Existing originals and the known-working game installation are never changed.
   video clears a previously selected reference audio track; choosing separate
   audio afterwards is still possible for editor comparison.
 - Audio mode uses the selected audio, producing an audio-only ASF `.wma`.
-- Cover-video mode uses the audio plus a static cover. An explicitly selected
-  FFmpeg executable creates an H.264/AAC intermediate; the native encoder then
+- Cover-video mode uses the audio plus a static cover. Bundled FFmpeg
+  creates an H.264/AAC intermediate; the native encoder then
   creates the final VC-1/WMA Pro ASF. Both exported audio and video use the same
   intermediate soundtrack. This intermediate involves an extra lossy audio pass.
 - Each preparation creates `song.wma`, optional `song.wmv`, `cover.jpg` and a
@@ -36,10 +36,101 @@ It writes WVC1/VC-1 Advanced video at **768 x 432**, 24000/1001 fps, approximate
 The previously validated bounded ASF header normalization remains mandatory.
 
 FFmpeg is used only for the optional cover-video intermediate, not to substitute
-WMV2/WMA2 for the accepted codecs. It is not bundled automatically; choose a
-trusted executable or install one on PATH. The native final encoder currently
+WMV2/WMA2 for the accepted codecs. The next desktop build bundles FFmpeg through
+imageio-ffmpeg; source runs use its wheel or an existing PATH installation.
+The GUI no longer asks for encoder paths. The native final encoder currently
 requires Windows. macOS/Linux support editing, projects, chart export and covers,
 but refuse final media encoding instead of emitting an incompatible format.
+The conversion dialog now explains this limitation before a job is started.
+See [cross-platform backend research](cross_platform_media_backends.md) for
+investigated alternatives and their unverified codec/platform requirements.
+
+## Already-compatible media on macOS and Linux
+
+Final conversion is currently Windows-only. This does not prevent editing or
+exporting chart/lyric files on macOS/Linux. For game media, supply files already
+prepared for the target generation and container. Studio's conversion and DLC
+dialogs show these requirements in English or German. Existing released builds
+will receive the revised notices only in a subsequent release.
+
+| Asset / target | Required preparation | Evidence and limits |
+|---|---|---|
+| Tested OG movie | ASF container, `.wmv`; VC-1 Advanced / WVC1; 768×432; 24000/1001 fps; ~2 Mbit/s; embedded WMA Pro 0x0162, 48 kHz stereo, 16-bit, 192 kbit/s | Generated movie previously played in OG/Xenia. ASF bitmap header must declare biBitCount=24; use the bounded normalizer, not a global byte replacement. |
+| OG separate audio | ASF container, `.wma`; WMA Pro 0x0162, 48 kHz stereo, 16-bit, 192 kbit/s | Original OG path and current encoder profile; newly generated audio-only gameplay remains to be tested. |
+| Experimental DLC full audio **and preview** | RIFF/XWMA container; WMA Standard 0x0161, 48 kHz stereo, 16-bit; valid fmt, dpds and data chunks | 76/76 original xWMA paths match these codec/settings. Block alignment varies; do not hard-code 8192 for every file. New portable encoding and current DLC discovery remain unverified. |
+| Optional DLC movie | Original samples contain ASF WMV3 or WVC1 with embedded WMA Pro | These are observed original profiles, not a guarantee that Studio's OG output is valid in every DLC/later release. |
+
+1280×720 is Studio's maximum allowed video size, **not** a verified 720p
+encoding profile. The working generated profile remains 768×432. WMV3 means
+WMV9 Simple/Main; WVC1 means VC-1 Advanced. Neither is WMV2. The filename suffix
+does not identify the codec or container. MP4/H.264/AAC, MP3 and arbitrary WAV
+are not verified direct game-export alternatives, even if editor playback works.
+Regular WMA in ASF is not interchangeable with xWMA: RIFF chunk layout and
+packet decoded-size information must also be valid.
+
+Preparation:
+
+1. Choose the target (OG ASF assets or experimental DLC RIFF/XWMA). Do not mix
+   the audio containers or reuse an unrelated generation's media assumptions.
+2. For the tested OG conversion, open the project with its media on Windows and
+   use **File > Convert OG media**. Keep the entire generated output directory.
+   The selected video supplies its own soundtrack; a separate mismatched audio
+   track must not silently replace it. For audio-only export, playback of the
+   new output still needs validation.
+3. Return the generated files to macOS/Linux. Projects reference media separately;
+   update those references if file locations changed. Chart/lyric export is not
+   automatic song registration or a complete media package.
+4. DLC export requires separately prepared xWMA full audio and preview. Do not
+   feed it Studio's ASF `song.wma`. There is no verified automatic portable
+   conversion step for these assets yet; stop rather than substitute or rename.
+5. Check headers with `py tools/analyze_asf.py <file>` for ASF. On macOS/Linux,
+   use `python3` instead of `py`. For a media directory, use
+   `python3 tools/inventory_media_codecs.py --help` for container-based inspection.
+   Header validation is necessary, but a successful game test is still required.
+
+Video is optional. Studio can export an audio-only chart reference, but automatic
+selection/registration of the game's fallback visuals and end-to-end playback
+must be checked for the target release. No fallback video is bundled.
+
+### Deutsch: Medien vorbereiten
+
+Die finale Konvertierung benötigt vorerst Windows. Unter macOS und Linux müssen
+die Medien für den Spieleexport bereits passend codiert sein. Import, Bearbeitung,
+Projekte und Chartexport bleiben verfügbar. MP3/MP4 eignen sich als Referenzmedien,
+sind jedoch keine bestätigten direkten Spieleformate.
+
+- **Getestetes OG-Video:** ASF `.wmv`, VC-1 Advanced/WVC1, 768×432, 24000/1001 fps
+  (etwa 23,976), etwa 2 Mbit/s. Eingebettetes Audio: WMA Pro, 48 kHz, Stereo,
+  16 Bit, 192 kbit/s. Der ASF-Bitmap-Header muss 24 Bit deklarieren. Die funktionierende
+  Konvertierung nimmt diese begrenzte Header-Korrektur automatisch vor.
+- **Separates OG-Audio:** ASF `.wma`, WMA Pro mit denselben Audioeinstellungen.
+  Neu erzeugtes Audio ohne Video ist noch nicht vollständig im Spiel bestätigt.
+- **Experimenteller DLC-Export:** RIFF/XWMA für Vollaudio und Vorschau, nicht
+  ASF `.wma`. Die untersuchten Originale verwenden WMA Standard, 48 kHz, Stereo,
+  16 Bit sowie gültige fmt/dpds/data-Chunks. Neu codierte Dateien und die aktuelle
+  DLC-Erkennung müssen noch im Spiel geprüft werden.
+- **Auflösung:** maximal 1280×720 im Export; das ist keine Zusage für jede
+  720p-Datei. Das bestätigte erzeugte Videoprofil ist weiterhin 768×432.
+
+Für den getesteten OG-Weg das Projekt mit seinen Medien unter Windows öffnen,
+**Datei > OG-Medien konvertieren** verwenden und die erzeugten Dateien anschließend
+auf macOS/Linux übernehmen. Medien sind nicht in der `.olp` eingebettet; bei einem
+Ordnerwechsel müssen die Verknüpfungen angepasst werden. DLC-xWMA muss separat
+vorbereitet werden. Umbenennen ersetzt keine Konvertierung. Video ist optional;
+die Wiedergabe ohne eigenes Video muss für die jeweilige Spielversion geprüft werden.
+
+## Optional game codec patch research
+
+Supporting other codecs by changing Lips is a separate, unimplemented research
+path, not a Studio capability. First trace the exact ASF/movie and RIFF/audio
+decoder dispatch and establish whether a candidate decoder exists in the game
+or its platform services. A supported but gated format might need a narrow
+dispatch/container change; a missing decoder needs an actual new decoding path,
+buffering, clock integration and platform-compatible code. Changing an extension
+or codec tag cannot provide decoding. An emulator-only solution would not prove
+support on a physical Xbox. Preserve the working encoder and game checkpoint;
+distribute only an opt-in, hash-guarded patcher for users' own game files if a
+patch is eventually validated, never original game code or assets.
 
 ASF outputs are **not** RIFF/xWMA DLC files. The experimental DLC export still
 requires separately prepared xWMA full audio and preview; it does not automatically

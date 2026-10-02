@@ -1,0 +1,26 @@
+{
+  "id": "usdb-downloader",
+  "label": "USDB Downloader",
+  "version": "1.0.0",
+  "api_version": 2,
+  "type": "process",
+  "protocol": 1,
+  "result_type": "song-import",
+  "input_required": false,
+  "interactive": true,
+  "author": "Markus Böhning and USDB Syncer contributors; OpenLips integration",
+  "description": "Open USDB Syncer, sign in, download a song and send it to Studio. Includes yt-dlp; downloads require the appropriate rights.",
+  "homepage": "https://github.com/bohning/usdb_syncer",
+  "extensions": [],
+  "permissions": ["network-usdb-and-media-providers", "read-selected-song", "write-plugin-library", "os-credential-store", "write-job-output"],
+  "entrypoints": {
+    "windows-x64": "runtime/OpenLipsUSDB/OpenLipsUSDB.exe",
+    "macos-arm64": "runtime/OpenLipsUSDB/OpenLipsUSDB",
+    "macos-x64": "runtime/OpenLipsUSDB/OpenLipsUSDB",
+    "linux-x64": "runtime/OpenLipsUSDB/OpenLipsUSDB"
+  },
+  "parameters": [
+    {"key": "video", "label": "Download video (max. 720p)", "kind": "bool", "default": true},
+    {"key": "rights_confirmed", "label": "I have the rights/permission to download the selected media", "kind": "bool", "default": false}
+  ]
+}

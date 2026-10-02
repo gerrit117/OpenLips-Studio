@@ -1,0 +1,248 @@
+# Integrated AI chart creation
+
+Research and implementation snapshot, 2026-10-01. The built-in feature now has
+SwiftF0 pitch detection, optional Demucs separation and faster-whisper recognition,
+review/accept/undo, stored LRC references and independent background workers.
+See [measured tests and remaining checks](ai_song_creation_test_report.md).
+Recommendations below remain explicitly recommendations where not implemented.
+
+Tools -> Create chart from audio (AI) accepts reference audio/video. Pitch-only
+analysis runs in the bundled app without external Python. Optional heavy stages
+use the standalone OpenLipsAI executable (or a developer Python environment
+installed from requirements-ai.txt). Both output a Studio project directly,
+without quantizing through UltraStar TXT. Results replace notes only after
+acceptance. Metadata is preserved and acceptance is undoable.
+
+The bundled SwiftF0 model is 135,090 bytes. Larger models are optional downloads:
+htdemucs is approximately 80 MiB; Whisper base/small are much larger. Choices
+include tiny, base, small, medium and large-v3. CPU is tested; CUDA/MPS separation
+and CUDA transcription are capability-probed, with RuntimeError CPU retries.
+MPS transcription and SwiftF0 use CPU. Windows AMD GPU acceleration is not
+implemented; a detected graphics card does not imply backend support.
+
+Enhanced LRC words are used as supplied; plain LRC keeps whole line fragments,
+with warnings that it lacks word alignment. ASR word timestamps are estimates,
+not verified syllables. One-note-per-word mode chooses the most sustained
+measured pitch inside each word and simplifies melismas; contour mode preserves
+pitch changes but can produce empty lyric continuations requiring editor review.
+Optional EN/DE CTC word alignment inside supplied LRC windows is implemented
+using the Wav2Vec2 model family also used by WhisperX. It remains experimental
+on singing; phoneme timing and automatic syllabification are not implemented.
+Windows longer than 60 seconds or unsupported characters are reported, not
+filled with uniform invented word timings. The pinned TorchAudio 2.8 API is
+deprecated and must be replaced before upgrading to 2.9:
+[official documentation](https://docs.pytorch.org/audio/2.8.0/tutorials/ctc_forced_alignment_api_tutorial.html).
+
+## LRC reference import
+
+File -> Import synchronized lyrics (LRC) opens a review of line starts and
+enhanced word anchors. Accepting stores the original text/source in
+`StudioProject.lyric_reference`, updates the lyric draft, and preserves all
+existing notes. Tools -> Review lyric timing reopens the stored anchors.
+Cancellation makes no changes; acceptance supports undo/redo and `.olp`
+round-trips. Existing schema-1 projects without this optional field still load.
+The lyrics-search workflow offers synchronized LRCLIB text when supplied,
+using the same review/acceptance path rather than discarding timestamps.
+
+UTF-8/BOM, metadata, repeated line starts, enhanced word starts and millisecond
+offsets are supported. Positive offset advances lyrics:
+`effective_seconds = timestamp_seconds - offset_ms / 1000`.
+This follows the convention documented by the
+[Paroles LRC parser](https://github.com/Clarkkkk/paroles). The raw source remains
+unchanged; reloading recalculates once, never offsets already-adjusted anchors.
+Negative anchors and nonchronological enhanced words are reported, not silently
+clamped. Unrecognized lines remain in source with warnings. Input is bounded
+to 2 MiB, 10,000 line anchors and 100,000 word anchors;
+NUL-containing/non-UTF-8 files are rejected.
+
+LRC attachment does **not** create pitches, infer word ends, modify chart page
+events or perform forced alignment. Existing manual lyric assignment still
+works independently; the saved reference is provenance, not automatic mapping.
+The separate audio-analysis workflow described above can combine these anchors
+with measured pitch and optional estimated CTC word alignment.
+
+## Reviewed projects
+
+[UltraSinger](https://github.com/rakuri255/UltraSinger) provides an existing
+music-to-chart pipeline. Source reviewed: device detection, vocal separation,
+Whisper transcription/alignment, pitch tracking, hyphenation, dependency
+manifest and license. The current code uses Demucs, WhisperX and SwiftF0;
+older descriptions of its CREPE pipeline should not be treated as current.
+
+[UltraSinger Studio](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0)
+adds a browser interface, installation helpers, presets, external lyrics and
+LRC handling. At review time the repository tree contains README, changelog,
+license and a source ZIP, rather than independently browsable application
+modules. The ZIP was inspected locally without extracting or executing its
+installer or bundled virtual environment. Reviewed sources include
+`web/lyrics_finder.py`, `web/pipeline_launcher.py` and the vendored lyrics parser.
+Its Windows-oriented installation is not a ready cross-platform Studio backend.
+
+Both top-level projects declare MIT licenses:
+[UltraSinger license](https://github.com/rakuri255/UltraSinger/blob/main/LICENSE),
+[Studio license](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0/blob/main/LICENSE).
+Reuse can be considered with retained notices and attribution. This does not
+license every dependency, model weight or retrieved lyric. Audit these
+separately before distribution; retain upstream authors' credits in About,
+third-party notices and documentation. Do not redistribute the bundled venv.
+
+## Recommendation
+
+Implement a native Studio workflow using small backend adapters, rather than
+embedding the foreign web app or importing its full CLI into the Qt process:
+
+1. Select reference audio/video and optional existing vocal stem.
+2. Select lyric source: user text, local LRC, consent-based LRCLIB lookup,
+   or transcription. Preserve supplied text instead of replacing it with ASR.
+3. Separate vocals if needed; skip when a usable isolated stem is supplied.
+4. Transcribe only if lyrics are missing. Align known words inside trusted
+   line windows; transcription and forced alignment are different operations.
+5. Extract voiced F0 and segment musical notes. Combine word/phoneme timing
+   with note boundaries, including one syllable held across multiple pitches.
+6. Present a preview with uncertain words, octave jumps and very short notes
+   flagged. Accept into the existing editor as one undoable operation.
+7. Save to `.olp`; export through the existing Lips writer and media pipeline.
+
+Use a built-in feature with a separately managed worker process/runtime:
+integrated UI does not require putting Torch/native inference libraries in the
+main GUI interpreter. This also accommodates the reviewed upstream manifest's
+Python `>=3.12,<3.14` requirement without breaking the current local 3.14 tools.
+Workers need versioned structured results, cancellation, progress, resource
+limits and no silent edits to an existing project.
+
+The editor already supplies notes, timing, lyrics, phrase breaks, media preview,
+undo and projects. Add an analysis dialog and review overlay, not another editor.
+Suggested controls: Fast/Balanced/Quality presets; advanced per-stage model,
+language, device, batch/chunk size and precision; separation toggle; pitch range;
+minimum-note/merge settings; optional key quantization; model-cache management.
+
+## Models and limitations
+
+| Stage | Initial recommendation | Alternatives and cautions |
+|---|---|---|
+| Separation | Demucs `htdemucs`, optional | Fine-tuned variant for quality; BS-RoFormer/MelBand-RoFormer candidates need song benchmarks, licensing and memory review |
+| ASR | Whisper small/base for modest hardware; large-v3 option | faster-whisper for CUDA/CPU; whisper.cpp for broader acceleration; bigger is not automatically better for sung words |
+| Alignment | Language-specific WhisperX alignment | CPU fallback; verify singing/elongated vowels; don't silently invent timings for dropped words |
+| Pitch | SwiftF0 CPU-first | torchcrepe comparison backend; RMVPE candidate after code/weight/license review; Basic Pitch remains useful for MIDI but isn't the sole vocal F0 method |
+| Note segmentation | Stable F0 segments plus aligned syllables | Gate unvoiced/instrumental frames, smooth vibrato, preserve real pitch changes and repeated-note articulation |
+
+SwiftF0's [current upstream API](https://github.com/lars76/swift-f0)
+includes note segmentation, a 16 ms frame period and a small ONNX model.
+Its published benchmark is not our accuracy measurement on Lips songs.
+Use actual returned timestamps, not an assumed hop duration. The reviewed
+UltraSinger adapter uses an older constructor/call style and describes the
+256/16000 hop as approximately 62.5 ms: that arithmetic would be **16 ms**
+(62.5 frames/second), so do not carry that comment into Studio. Pin and test
+backend versions instead of assuming the adapter matches current SwiftF0.
+
+Another portability/security concern: the reviewed Whisper module temporarily
+monkey-patches `torch.load` to force `weights_only=False`. Do not copy a global
+override into Studio. Only load trusted, pinned model artifacts; isolate any
+necessary compatibility behavior. No arbitrary remote-code-enabled models.
+
+Do not enable forced key quantization by default without review: chromatic notes
+and modulations are real music, not necessarily detector errors. Dictionary
+hyphenation alone does not locate sung syllables. Uniform word division and
+silently interpolated alignment failures must be labelled estimates.
+
+## Hardware acceleration and fallback
+
+Acceleration is chosen **per stage**, not with one CUDA/CPU switch. Upstream
+UltraSinger's device detector checks CUDA only, so unchanged it does not exploit
+Apple Metal or AMD/Intel GPU backends. CPU remains the baseline for every stage.
+
+| System/hardware | Practical candidates | Limits |
+|---|---|---|
+| Windows/Linux NVIDIA | faster-whisper/CTranslate2 CUDA; Torch CUDA for supported stages | Probe actual driver, compute capability and precision; legacy GPUs need compatible builds |
+| macOS Apple Silicon | whisper.cpp Metal/Core ML; Torch MPS for compatible separation/alignment stages | CTranslate2 CUDA cannot become Metal by passing `mps`; test each adapter's operators |
+| Windows/Linux AMD/Intel | whisper.cpp Vulkan; appropriate ROCm or other tested providers | Not universal GPU support for the full pipeline; model/backend/build specific |
+| Any supported system | CPU/int8 ASR where supported; SwiftF0 CPU; chunked separation/alignment | Slower heavy stages; disclose time/memory estimates and avoid promising real time |
+
+References: [faster-whisper](https://github.com/SYSTRAN/faster-whisper),
+[whisper.cpp backends](https://github.com/ggml-org/whisper.cpp),
+[WhisperX](https://github.com/m-bain/whisperX),
+[ONNX Runtime providers](https://onnxruntime.ai/docs/execution-providers/).
+Availability of a provider is not proof a particular model runs on it.
+
+Probe with a small actual inference, not just GPU enumeration. On allocation
+failure, release the failed worker, lower batch/chunk size or model size, then
+offer CPU fallback without losing the project. Report the actual backend used.
+Process stages sequentially and unload large models to reduce peak memory.
+CPU/GPU selection mainly affects execution; do not promise higher quality simply
+because a GPU is present.
+
+## LRC integration
+
+Studio performs explicit-consent LRCLIB searches and now retains synchronized
+LRC references in development builds. The following constraints continue to
+apply when adding alignment and analysis.
+
+- Support UTF-8/BOM, line timestamps, metadata, repeated timestamps and `[offset:]`.
+  Preserve repeated chorus occurrences. Timestamp offsets are separate from
+  media offsets; document their sign and apply exactly once.
+- Support enhanced per-word `<mm:ss.xx>` cues where present. Preserve source
+  precision and distinguish supplied starts from inferred ends.
+- Plain LRC supplies line start times, not exact word/syllable durations or
+  pitch. It can skip text recognition, but usually **not word alignment**.
+- Enhanced LRC can supply word anchors, but still lacks sung F0, reliable
+  note ends, phoneme segmentation and melisma mapping.
+- Retain original cues/source provenance in the project. Map them to existing
+  notes, or combine with new pitch analysis; never create invented pitches
+  silently. Line/phrase cues suggest breaks but are not automatically optimal
+  Lips page-switch times.
+- Validate the recording/version: radio edit, video intro, remix and live lyrics
+  can differ. Show matches and uncovered sections before accepting.
+- LRCLIB lookup should match artist/title, duration and version, let users choose
+  a result and record attribution. Public access is not a grant to redistribute
+  copyrighted lyrics. Keep local files/manual input working offline.
+
+The fork's LRC helpers are a useful reference, not a normative universal LRC
+specification. Its heuristic/fallback interpolation needs review before adoption.
+
+## Intermediate format
+
+For the initial compatibility experiment, existing UltraSinger TXT output can
+pass through our existing UltraStar importer. That is a fast way to benchmark
+real songs without rewriting its full pipeline.
+
+For the integrated feature, use **analysis data -> StudioProject/internal
+SongChart -> Lips**. Preserve absolute seconds, confidence, original lyric cues,
+phrase information and pitch contours. Do not force analysis through beat-grid
+TXT: it can quantize timing and lose uncertainty/provenance. UltraStar TXT and
+MIDI should remain optional interchange/export formats, not required hops.
+
+## Scoring
+
+Lips computes the player's score during gameplay. Read-only OG Lua inspection
+shows the score display reading `GetChartGrader(...):GetTotalScore()`, and
+history querying `GetTotalScoreWithStars()`, `GetTotalPossibleScore()` and
+`GetPossibleMarkerScore()`. Diagnostics query live pitch distance, pitch-perfect
+multiplier, hit combo and vibrato combo. No original scripts are distributed.
+
+Charts provide the reference notes, durations and gameplay events that the
+grader evaluates; they do not contain a pre-awarded score for a player's future
+performance. Chart structure/bonuses can influence possible points. The exact
+native formula and complete marker weighting have **not** been established, nor
+has microphone scoring of a custom chart been exhaustively validated.
+
+UltraStar similarly computes scores at runtime. Its TXT note types/durations
+affect scoring (e.g. golden versus freestyle), not a fixed earned point number
+per line. See the [format specification](https://usdx.eu/format/) and
+[USDX score code](https://github.com/UltraStar-Deluxe/USDX/blob/master/src/base/USingScores.pas).
+Do not copy UltraSinger's UltraStar score estimate into Lips as an authoritative
+score: the games have different rules. Studio can offer reference-pitch and
+chart-quality checks before implementing a separately validated Lips estimator.
+
+## Delivery order
+
+1. LRC parsing/cue persistence and user-text alignment workflow.
+2. Isolated CPU-first SwiftF0 analysis, note segmentation and editable preview.
+3. Optional separation and selectable transcription/alignment runtimes.
+4. Hardware-specific validated builds, presets and recovery tests.
+5. End-to-end new-chart gameplay and microphone-scoring checks.
+
+LRC references, pitch detection, optional separation/transcription and reviewed
+note mapping are implemented. Hardware-specific acceleration and exhaustive
+gameplay/scoring checks remain open. CTC word alignment has an initial singing
+benchmark, not verified syllable timing. This workflow is independent
+of the paused MPEG-4 gameplay acceptance experiment.

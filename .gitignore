@@ -17,6 +17,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+release_assets/
 *.egg-info/
 .venv/
 *.olips

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
     QDoubleSpinBox, QSpinBox, QComboBox, QPlainTextEdit, QProgressBar, QTabWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QSplitter)
 import qtawesome as qta
+from studio.i18n import tr
 
 from studio.model import StudioProject, pitch_name
 from studio.plugins import available_plugins, discover_plugins
@@ -23,7 +24,7 @@ def plugin_process_environment():
     environment.insert('PYINSTALLER_RESET_ENVIRONMENT', '1')
     if getattr(sys, 'frozen', False):
         # The separately frozen worker must not load the GUI's Python/Qt libraries.
-        for key in ('DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH', 'PYTHONHOME', 'PYTHONPATH'):
+        for key in ('DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH', 'PYTHONHOME', 'PYTHONPATH', 'QT_PLUGIN_PATH', 'QML2_IMPORT_PATH'):
             environment.remove(key)
         if sys.platform.startswith('linux'):
             original = environment.value('LD_LIBRARY_PATH_ORIG')
@@ -73,6 +74,7 @@ class PackageInstallWorker(QThread):
 
 class PluginDialog(QDialog):
     accepted_project = Signal(object)
+    accepted_song = Signal(object)
 
     def __init__(self, project, parent=None, settings=None):
         super().__init__(parent)
@@ -82,6 +84,7 @@ class PluginDialog(QDialog):
         self.settings = settings if settings is not None else QSettings('OpenLips', 'OpenLips Studio')
         self.plugin = None
         self.result = None
+        self.song_import = None
         self.worker = None
         self.process = None
         self.temp = None
@@ -100,14 +103,14 @@ class PluginDialog(QDialog):
         self.list = QListWidget()
         self.list.setMinimumWidth(160)
         left_layout.addWidget(self.list)
-        self.add_button = QPushButton(qta.icon('fa5s.folder-plus', color='#cdd3d9'), 'Plugin hinzufügen')
+        self.add_button = QPushButton(qta.icon('fa5s.folder-plus', color='#cdd3d9'), tr('Plugin hinzufügen'))
         self.add_button.clicked.connect(self.add_folder)
         left_layout.addWidget(self.add_button)
-        self.install_button = QPushButton(qta.icon('fa5s.file-import', color='#cdd3d9'), '.opl installieren')
+        self.install_button = QPushButton(qta.icon('fa5s.file-import', color='#cdd3d9'), tr('.opl installieren'))
         self.install_button.clicked.connect(self.install_opl)
         left_layout.addWidget(self.install_button)
-        self.remove_button = QPushButton(qta.icon('fa5s.unlink', color='#cdd3d9'), 'Verknüpfung entfernen')
-        self.remove_button.setToolTip('Lokalen Plugin-Ordner aus Studio entfernen; Dateien bleiben erhalten')
+        self.remove_button = QPushButton(qta.icon('fa5s.unlink', color='#cdd3d9'), tr('Verknüpfung entfernen'))
+        self.remove_button.setToolTip(tr('Lokalen Plugin-Ordner aus Studio entfernen; Dateien bleiben erhalten'))
         self.remove_button.clicked.connect(self.remove_folder)
         left_layout.addWidget(self.remove_button)
         splitter.addWidget(left)
@@ -119,7 +122,7 @@ class PluginDialog(QDialog):
         self.details.setTextFormat(Qt.TextFormat.PlainText)
         self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         body.addWidget(self.details)
-        self.enable = QCheckBox('Plugin aktivieren (nur vertrauenswürdige Quellen)')
+        self.enable = QCheckBox(tr('Plugin aktivieren (nur vertrauenswürdige Quellen)'))
         self.enable.clicked.connect(self.enable_selected)
         body.addWidget(self.enable)
         form = QFormLayout()
@@ -129,13 +132,13 @@ class PluginDialog(QDialog):
         self.input = QLineEdit(project.audio_path)
         row.addWidget(self.input)
         self.browse_button = QPushButton(qta.icon('fa5s.folder-open', color='#cdd3d9'), '')
-        self.browse_button.setToolTip('Quelldatei auswählen')
+        self.browse_button.setToolTip(tr('Quelldatei auswählen'))
         self.browse_button.clicked.connect(self.choose_input)
         row.addWidget(self.browse_button)
-        form.addRow('Quelldatei', source)
+        form.addRow(tr('Quelldatei'), source)
         self.runtime = QLineEdit()
-        self.runtime.setPlaceholderText('Gebündelte Runtime verwenden')
-        self.runtime.setToolTip('Optional für Entwickler: Python aus einer Basic-Pitch-Umgebung. Nicht die Studio-EXE.')
+        self.runtime.setPlaceholderText(tr('Gebündelte Runtime verwenden'))
+        self.runtime.setToolTip(tr('Optional für Entwickler: Python aus einer Basic-Pitch-Umgebung. Nicht die Studio-EXE.'))
         self.runtime.textChanged.connect(self.runtime_changed)
         form.addRow('Python (optional)', self.runtime)
         self.runtime_label = form.labelForField(self.runtime)
@@ -152,26 +155,26 @@ class PluginDialog(QDialog):
         self.progress = QProgressBar()
         self.progress.setValue(0)
         body.addWidget(self.progress)
-        self.status = QLabel('Plugin auswählen und aktivieren')
+        self.status = QLabel(tr('Plugin auswählen und aktivieren'))
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         body.addWidget(self.status)
         self.tabs = QTabWidget()
         self.preview = QTableWidget(0, 4)
-        self.preview.setHorizontalHeaderLabels(['Start (s)', 'Länge (s)', 'Ton', 'Text'])
+        self.preview.setHorizontalHeaderLabels([tr('Start (s)'), tr('Länge (s)'), tr('Ton'), 'Text'])
         self.preview.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.preview.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.tabs.addTab(self.preview, 'Notenentwurf')
+        self.tabs.addTab(self.preview, tr('Notenentwurf'))
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(1000)
-        self.tabs.addTab(self.log, 'Protokoll')
+        self.tabs.addTab(self.log, tr('Protokoll'))
         body.addWidget(self.tabs, 1)
         buttons = QHBoxLayout()
-        self.run_button = QPushButton(qta.icon('fa5s.play', color='#cdd3d9'), 'Analysieren')
-        self.cancel_button = QPushButton(qta.icon('fa5s.stop', color='#cdd3d9'), 'Abbrechen')
-        self.apply_button = QPushButton(qta.icon('fa5s.check', color='#cdd3d9'), 'Noten übernehmen')
-        self.export_button = QPushButton(qta.icon('fa5s.file-export', color='#cdd3d9'), 'MIDI speichern')
+        self.run_button = QPushButton(qta.icon('fa5s.play', color='#cdd3d9'), tr('Analysieren'))
+        self.cancel_button = QPushButton(qta.icon('fa5s.stop', color='#cdd3d9'), tr('Abbrechen'))
+        self.apply_button = QPushButton(qta.icon('fa5s.check', color='#cdd3d9'), tr('Noten übernehmen'))
+        self.export_button = QPushButton(qta.icon('fa5s.file-export', color='#cdd3d9'), tr('MIDI speichern'))
         self.run_button.clicked.connect(self.run_plugin)
         self.cancel_button.clicked.connect(self.cancel)
         self.apply_button.clicked.connect(self.apply_result)
@@ -200,6 +203,7 @@ class PluginDialog(QDialog):
 
     def select_plugin(self, index):
         self.result = None
+        self.song_import = None
         self.preview.setRowCount(0)
         self.plugin = None
         if not 0 <= index < len(self.offers):
@@ -218,8 +222,8 @@ class PluginDialog(QDialog):
             if plugins:
                 self.plugin = plugins[0]
                 plugin = self.plugin
-                permissions = ', '.join(plugin.permissions) or 'Not declared'
-                self.details.setText(f'{plugin.label} {plugin.version} · {plugin.author}\n{plugin.description}\n{plugin.homepage}\nPermissions (informational): {permissions}')
+                permissions = ', '.join(plugin.permissions) or tr('Not declared')
+                self.details.setText(f'{plugin.label} {plugin.version} · {plugin.author}\n{plugin.description}\n{plugin.homepage}\n' + tr('permissions.label', permissions=permissions))
                 for parameter in plugin.parameters:
                     value = self.settings.value(f'plugins/{plugin.id}/{parameter.key}', parameter.default)
                     if parameter.kind in ('int', 'float'):
@@ -241,16 +245,18 @@ class PluginDialog(QDialog):
                     else:
                         control = QComboBox()
                         for label, data in parameter.choices:
-                            control.addItem(label, data)
+                            control.addItem(tr(label), data)
                         control.setCurrentIndex(max(0, control.findData(value)))
                     self.controls[parameter.key] = control
-                    self.parameter_form.addRow(parameter.label, control)
+                    self.parameter_form.addRow(tr(parameter.label), control)
         self.updating = True
         self.runtime.setText(self.settings.value(f'plugins/{offer.id}/python', '', type=str))
         self.updating = False
         self.runtime.setVisible(self.plugin is not None and not self.plugin.process_plugin and not getattr(sys, 'frozen', False))
         self.runtime_label.setVisible(self.runtime.isVisibleTo(self))
-        self.status.setText('Bereit' if self.plugin else 'Zum Verwenden aktivieren')
+        self.status.setText(tr('Bereit') if self.plugin else tr('Zum Verwenden aktivieren'))
+        self.run_button.setText(tr('Öffnen') if self.plugin and self.plugin.interactive else tr('Analysieren'))
+        self.apply_button.setText(tr('Song übernehmen') if self.plugin and self.plugin.result_type == 'song-import' else tr('Noten übernehmen'))
         self.update_buttons()
 
     def enable_selected(self, checked):
@@ -259,8 +265,8 @@ class PluginDialog(QDialog):
             return
         offer = self.offers[index]
         if checked:
-            answer = QMessageBox.warning(self, 'Plugin vertrauen?',
-                'Dieses Plugin führt Code mit deinen Benutzerrechten aus und ist nicht sandboxed. Es kann Dateien und Netzwerk verwenden. Nur vertrauenswürdige Quellen aktivieren.',
+            answer = QMessageBox.warning(self, tr('Plugin vertrauen?'),
+                tr('Dieses Plugin führt Code mit deinen Benutzerrechten aus und ist nicht sandboxed. Es kann Dateien und Netzwerk verwenden. Nur vertrauenswürdige Quellen aktivieren.'),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if answer != QMessageBox.StandardButton.Yes:
                 self.enable.setChecked(False)
@@ -279,7 +285,7 @@ class PluginDialog(QDialog):
     def add_folder(self):
         if self.busy():
             return
-        folder = QFileDialog.getExistingDirectory(self, 'Plugin-Ordner mit openlips-plugin.json')
+        folder = QFileDialog.getExistingDirectory(self, tr('Plugin-Ordner mit openlips-plugin.json'))
         if folder and folder not in self.folders:
             try:
                 manifest = Path(folder) / 'openlips-plugin.json'
@@ -298,7 +304,7 @@ class PluginDialog(QDialog):
     def install_opl(self):
         if self.busy():
             return
-        path, _ = QFileDialog.getOpenFileName(self, 'Plugin installieren', '', 'OpenLips Plugin (*.opl)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Plugin installieren'), '', 'OpenLips Plugin (*.opl)')
         if not path:
             return
         try:
@@ -313,7 +319,7 @@ class PluginDialog(QDialog):
             self.worker.failed.connect(self.fail)
             self.worker.finished.connect(self.update_buttons)
             self.progress.setRange(0, 0)
-            self.status.setText('Plugin wird installiert …')
+            self.status.setText(tr('Plugin wird installiert …'))
             self.worker.start()
             self.update_buttons()
         except Exception as error:
@@ -330,11 +336,11 @@ class PluginDialog(QDialog):
         self.list.setCurrentRow(index)
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
-        self.status.setText('Installiert, noch nicht aktiviert. Nur vertrauenswürdige Plugins aktivieren.')
+        self.status.setText(tr('Installiert, noch nicht aktiviert. Nur vertrauenswürdige Plugins aktivieren.'))
 
     def choose_input(self):
         extensions = ' '.join('*' + ext for ext in self.plugin.extensions) if self.plugin else '*'
-        path, _ = QFileDialog.getOpenFileName(self, 'Quelldatei', '', f'Plugin-Dateien ({extensions})')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Quelldatei'), '', tr('Plugin-Dateien') + f' ({extensions})')
         if path:
             self.input.setText(path)
 
@@ -373,10 +379,11 @@ class PluginDialog(QDialog):
         local = index >= 0 and any(str(Path(folder)) == self.offers[index].source for folder in self.folders)
         self.remove_button.setEnabled(not running and local)
         self.enable.setEnabled(not running)
-        self.input.setEnabled(not running)
+        needs_input = self.plugin is None or self.plugin.input_required
+        self.input.setEnabled(not running and needs_input)
         self.runtime.setEnabled(not running)
         self.parameters.setEnabled(not running)
-        self.browse_button.setEnabled(not running)
+        self.browse_button.setEnabled(not running and needs_input)
         self.run_button.setEnabled(self.plugin is not None and not running)
         # Legacy in-process importers cannot be forcibly cancelled safely.
         self.cancel_button.setEnabled(running and self.process is not None)
@@ -388,15 +395,18 @@ class PluginDialog(QDialog):
         if self.busy() or not self.plugin:
             return
         self.result = None
+        self.song_import = None
         self.preview.setRowCount(0)
         self.log.clear()
         self.cancelled = False
         self.output_buffer = b''
         self.progress.setRange(0, 0)
         try:
-            source = Path(self.input.text()).resolve(strict=True)
-            if not source.is_file():
-                raise ValueError('Please select a file')
+            source = None
+            if self.plugin.input_required:
+                source = Path(self.input.text()).resolve(strict=True)
+                if not source.is_file():
+                    raise ValueError('Please select a file')
             options = self.options()
             if self.temp:
                 self.temp.cleanup()
@@ -404,8 +414,10 @@ class PluginDialog(QDialog):
             output = Path(self.temp.name)
             if self.plugin.create_command:
                 request = output / 'request.json'
-                request.write_text(json.dumps({'protocol': 1, 'input': str(source), 'options': options,
-                                              'project': self.project.to_payload()}, ensure_ascii=False, allow_nan=False), encoding='utf-8')
+                state = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'plugin-state' / self.plugin.id
+                state.mkdir(parents=True, exist_ok=True)
+                request.write_text(json.dumps({'protocol': 1, 'input': str(source) if source else None, 'options': options,
+                                              'project': self.project.to_payload(), 'state_dir': str(state.resolve())}, ensure_ascii=False, allow_nan=False), encoding='utf-8')
                 python = '' if getattr(sys, 'frozen', False) else self.runtime.text().strip()
                 command = self.plugin.create_command(request, output, python)
                 if not command or not all(isinstance(part, str) for part in command):
@@ -424,7 +436,7 @@ class PluginDialog(QDialog):
                 self.worker.failed.connect(self.fail)
                 self.worker.finished.connect(self.update_buttons)
                 self.worker.start()
-            self.status.setText('Analyse läuft lokal …')
+            self.status.setText(tr('plugin.interactive') if self.plugin.interactive else tr('Analyse läuft lokal …'))
         except Exception as error:
             self.fail(str(error))
         self.update_buttons()
@@ -457,13 +469,18 @@ class PluginDialog(QDialog):
             self.read_line(self.output_buffer.decode('utf-8', errors='replace')[:8192])
             self.output_buffer = b''
         if self.cancelled:
-            self.fail('Analyse abgebrochen. Das Projekt wurde nicht geändert.')
+            self.fail(tr('Analyse abgebrochen. Das Projekt wurde nicht geändert.'))
             return
         if exit_code != 0 or exit_status != QProcess.ExitStatus.NormalExit:
             self.log.appendPlainText(f'Worker exit_code={exit_code}, exit_status={exit_status.name}, error={self.process.errorString()}')
-            self.fail('Analyse fehlgeschlagen. Details stehen im Protokoll.')
+            self.fail(tr('Analyse fehlgeschlagen. Details stehen im Protokoll.'))
             return
         try:
+            if self.plugin.result_type == 'song-import':
+                from studio.plugin_song_import import SongImport
+                self.song_import = SongImport(self.temp.name)
+                self.show_result(self.song_import.project)
+                return
             path = Path(self.temp.name) / 'result.json'
             path.resolve(strict=True).relative_to(Path(self.temp.name).resolve())
             if path.stat().st_size > 64 * 1024 * 1024:
@@ -475,7 +492,7 @@ class PluginDialog(QDialog):
 
     def show_result(self, result):
         if not result.notes:
-            self.fail('Keine Noten gefunden.')
+            self.fail(tr('Keine Noten gefunden.'))
             return
         self.result = result
         notes = result.ordered()[:200]
@@ -485,7 +502,7 @@ class PluginDialog(QDialog):
                 self.preview.setItem(row, column, QTableWidgetItem(value))
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
-        self.status.setText(f'{len(result.notes)} Noten · {result.duration:.2f} s · Vorschau: erste {len(notes)}')
+        self.status.setText(tr('plugin.preview', count=len(result.notes), duration=result.duration, shown=len(notes)))
         for warning in result.warnings:
             self.log.appendPlainText(warning)
         self.tabs.setCurrentIndex(0)
@@ -493,6 +510,7 @@ class PluginDialog(QDialog):
 
     def fail(self, message):
         self.result = None
+        self.song_import = None
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.status.setText(str(message))
@@ -503,21 +521,37 @@ class PluginDialog(QDialog):
     def cancel(self):
         if self.process and self.busy():
             self.cancelled = True
-            self.process.kill()
+            if self.plugin and self.plugin.interactive and self.temp:
+                # Let downloaders close their child processes through their own cleanup.
+                (Path(self.temp.name) / 'cancel.request').touch()
+                self.status.setText(tr('plugin.cancelling'))
+                self.cancel_button.setEnabled(False)
+            else:
+                self.process.kill()
 
     def apply_result(self):
         if not self.result or self.busy():
             return
-        if self.project.notes and QMessageBox.question(self, 'Noten ersetzen?',
-            'Die vorhandenen Noten einschließlich Textzuordnung werden ersetzt. Metadaten und Textentwurf bleiben erhalten. Rückgängig ist möglich.') != QMessageBox.StandardButton.Yes:
+        if self.project.notes and QMessageBox.question(self, tr('Noten ersetzen?'),
+            tr('Der aktuelle Song wird durch den importierten Song ersetzt. Rückgängig ist möglich.') if self.song_import else
+            tr('Die vorhandenen Noten einschließlich Textzuordnung werden ersetzt. Metadaten und Textentwurf bleiben erhalten. Rückgängig ist möglich.')) != QMessageBox.StandardButton.Yes:
             return
-        self.accepted_project.emit(self.result)
+        if self.song_import:
+            try:
+                root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'imported-songs'
+                result = self.song_import.adopt(root)
+            except Exception as error:
+                self.fail(str(error))
+                return
+            self.accepted_song.emit(result)
+        else:
+            self.accepted_project.emit(self.result)
         self.accept()
 
     def export_midi(self):
         if not self.result or not self.temp:
             return
-        path, _ = QFileDialog.getSaveFileName(self, 'MIDI-Entwurf speichern', self.result.title + '.mid', 'MIDI (*.mid)')
+        path, _ = QFileDialog.getSaveFileName(self, tr('MIDI-Entwurf speichern'), self.result.title + '.mid', 'MIDI (*.mid)')
         if path:
             if not Path(path).suffix:
                 path += '.mid'
@@ -531,7 +565,7 @@ class PluginDialog(QDialog):
 
     def done(self, result):
         if self.busy():
-            self.status.setText('Laufenden Vorgang zuerst beenden oder abwarten.')
+            self.status.setText(tr('Laufenden Vorgang zuerst beenden oder abwarten.'))
             return
         if self.temp:
             self.temp.cleanup()

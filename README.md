@@ -64,6 +64,8 @@ Some foundations are already in place:
 - **Import or create.** Bring in UltraStar TXT files, choose a melody track from a MIDI file, or add notes yourself. UltraStar timing and syllables are preserved on import.
 - **Start from a recording.** Enable Basic Pitch in the plugin manager, choose an audio file and adjust detection sensitivity, note duration and pitch limits. Review the locally generated draft, save it as MIDI or take its notes into the editor. The analysis can be cancelled; replacing notes can be undone. Isolated vocals work better than a full mix. This is not automatic vocal separation or lyric transcription.
 - **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
+- **Create a draft from audio.** Optional local vocal separation, pitch detection and lyric recognition produce an editable chart. Review the result before using it: singing recognition still makes substantial mistakes. Small-model pitch analysis is bundled; the heavier AI engine is a separate download.
+- **Keep synchronized lyrics.** Import LRC files and synchronized LRCLIB results, preview line/word timestamps and save them with the project. Exact automatic syllable alignment is still in progress.
 - **Check the timing.** Play reference audio or video alongside the chart. Adjust playback speed, zoom in and shift notes and page changes together when the chart needs a timing correction.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
 - **Prepare the presentation.** Choose a cover or generate a simple one. Windows can prepare media for the original Lips, including an optional static cover video. That option currently needs an external FFmpeg installation.
@@ -87,11 +89,21 @@ The confirmed end-to-end tests use the original Lips (2008) through Xenia. Later
 
 Media conversion currently targets the tested original-game path on Windows; editing and chart export are available on macOS and Linux too. Automatic DLC audio conversion, dependable DLC discovery and the community website are still work in progress. If a feature fails, please report it rather than assuming you've done something wrong.
 
+### Media on macOS and Linux
+
+**For now, game export requires already-compatible audio and, if used, video.** MP3/MP4 files can be used as editor references, but are not automatically converted to Lips media on these systems.
+
+The tested original-game video profile is **ASF `.wmv`, VC-1 Advanced (WVC1), 768 × 432 at 24000/1001 fps**, with **48 kHz stereo, 16-bit WMA Pro audio at 192 kbit/s**. Separate OG `.wma` audio uses ASF/WMA Pro. Experimental DLC packaging instead requires **RIFF/XWMA full audio and preview**; renaming `.wma` is not conversion. Video is optional. Original files also contain WMV3 video and WMA Standard/xWMA audio, but those observations do not validate every newly encoded file.
+
+See the [exact media requirements and preparation steps](docs/studio_media.md#already-compatible-media-on-macos-and-linux), including header requirements and the distinction between tested settings and the 720p limit.
+
 ## Download
 
 Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Builds are available for Windows, macOS on Apple Silicon and Intel, and Linux.
 
 Extract the complete Studio archive and keep its files together. Python is included. Basic Pitch is a separate, optional **`.opl`** download for your platform; install it in the plugin manager. Its package includes its own model and analysis runtime, without a separate Python installation, Spotify account or API key. Audio is processed locally, not uploaded. See the [plugin catalog](plugins/README.md), [editor guide](docs/studio.md), [plugin developer guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
+
+Windows also has an installer; macOS has a DMG with an Applications shortcut. For optional vocal separation and lyric recognition, extract the **OpenLips-AI** archive and select its `OpenLipsAI` executable in the audio-chart dialog. The larger models download on first use and remain in your local cache. See the [AI workflow and measured limitations](docs/ai_song_creation_test_report.md).
 
 ## Documentation
 
@@ -116,6 +128,10 @@ The research and testing also benefited from [Xenia](https://github.com/xenia-pr
 Thank you, too, to everyone who tests a build, reports a bug, shares a useful finding or helps someone else get started. Dependency licenses and notices are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 A special thank you to **Spotify's Audio Intelligence Lab and the authors of [Basic Pitch](https://github.com/spotify/basic-pitch)** for making their transcription model and code available as open source. The independent Basic Pitch plugin uses their work through [ONNX Runtime](https://github.com/microsoft/onnxruntime). It is not a Spotify service or endorsement.
+
+The built-in audio-chart workflow was inspired by [UltraSinger](https://github.com/rakuri255/UltraSinger) and [UltraSinger Studio](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0). Thank you to their authors, and to the teams behind [Demucs](https://github.com/facebookresearch/demucs), [Whisper](https://github.com/openai/whisper), [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [SwiftF0](https://github.com/lars76/swift-f0). These are independent local integrations, not affiliated services.
+
+Thank you also to **Markus Böhning and the contributors to [USDB Syncer](https://github.com/bohning/usdb_syncer)**, and to the [yt-dlp](https://github.com/yt-dlp/yt-dlp) team. A separate USDB Downloader plugin is in development, using their existing search/download interface rather than rebuilding it. Native plugin packages and authenticated download testing are still pending.
 
 ## Independence, rights and responsibility
 

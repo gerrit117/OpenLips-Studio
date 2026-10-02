@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QCheckBox, QLabel, QTextEdit, QPushButton, QToolBar, QFileDialog, QMessageBox,
     QInputDialog, QSlider, QComboBox, QGroupBox, QScrollArea, QLayout, QSizePolicy)
 import qtawesome as qta
+from studio.i18n import tr, language as ui_language, set_language
 
 from studio import DISPLAY_VERSION
 from studio.model import (StudioProject, demo_project, load_project, save_project,
@@ -67,48 +68,58 @@ class StudioWindow(QMainWindow):
         return a
 
     def build_ui(self):
-        file = self.menuBar().addMenu('Datei')
-        toolbar = QToolBar('Projekt', self)
+        file = self.menuBar().addMenu(tr('Datei'))
+        toolbar = QToolBar(tr('Projekt'), self)
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(toolbar)
         for label, icon, callback, shortcut in [
-            ('Neu', 'fa5s.file', self.new, QKeySequence.StandardKey.New),
-            ('Projekt oeffnen', 'fa5s.folder-open', self.open, QKeySequence.StandardKey.Open),
-            ('Speichern', 'fa5s.save', self.save, QKeySequence.StandardKey.Save)]:
+            (tr('Neu'), 'fa5s.file', self.new, QKeySequence.StandardKey.New),
+            (tr('Projekt oeffnen'), 'fa5s.folder-open', self.open, QKeySequence.StandardKey.Open),
+            (tr('Speichern'), 'fa5s.save', self.save, QKeySequence.StandardKey.Save)]:
             a = self.action(label, icon, callback, shortcut)
             file.addAction(a)
             toolbar.addAction(a)
-        file.addAction('Speichern unter', self.save_as, QKeySequence.StandardKey.SaveAs)
+        file.addAction(tr('Speichern unter'), self.save_as, QKeySequence.StandardKey.SaveAs)
         file.addSeparator()
-        for label, callback in [('MIDI importieren', self.import_midi),
-                                ('UltraStar importieren', self.import_txt),
-                                ('Audio laden', self.load_audio),
-                                ('Referenzvideo laden', self.load_video),
-                                ('Cover laden', self.load_cover),
-                                ('OG-Medien konvertieren', self.convert_media),
-                                ('Debug-JSON exportieren', self.export_json),
-                                ('X360-Paar exportieren', self.export_pair),
-                                ('DLC exportieren (experimentell)', self.export_dlc)]:
+        for label, callback in [(tr('MIDI importieren'), self.import_midi),
+                                (tr('UltraStar importieren'), self.import_txt),
+                                (tr('lrc.import'), self.import_lrc),
+                                (tr('Audio laden'), self.load_audio),
+                                (tr('Referenzvideo laden'), self.load_video),
+                                (tr('Cover laden'), self.load_cover),
+                                (tr('OG-Medien konvertieren'), self.convert_media),
+                                (tr('Debug-JSON exportieren'), self.export_json),
+                                (tr('X360-Paar exportieren'), self.export_pair),
+                                (tr('DLC exportieren (experimentell)'), self.export_dlc)]:
             file.addAction(label, callback)
-        tools = self.menuBar().addMenu('Werkzeuge')
-        tools.addAction('Lyrics suchen', self.search_lyrics)
+        tools = self.menuBar().addMenu(tr('Werkzeuge'))
+        tools.addAction(tr('Lyrics suchen'), self.search_lyrics)
+        tools.addAction(tr('lrc.review'), self.review_lrc)
+        tools.addAction(tr('ai.title'), self.ai_chart_dialog)
         tools.addAction('Plugins', self.plugins_dialog)
-        tools.addAction('Alle Noten zeitlich verschieben', self.shift_all_notes)
-        edit = self.menuBar().addMenu('Bearbeiten')
-        self.undo_action = self.action('Rueckgaengig', 'fa5s.undo', self.undo, QKeySequence.StandardKey.Undo)
-        self.redo_action = self.action('Wiederholen', 'fa5s.redo', self.redo, QKeySequence.StandardKey.Redo)
-        self.delete_action = self.action('Note loeschen', 'fa5s.trash-alt', self.delete_note, QKeySequence.StandardKey.Delete)
+        tools.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
+        languages = self.menuBar().addMenu(tr('ui.language'))
+        for label, code in [('English', 'en'), ('Deutsch', 'de')]:
+            action = languages.addAction(label)
+            action.setCheckable(True)
+            action.setChecked(ui_language() == code)
+            action.triggered.connect(lambda checked=False, value=code: self.change_language(value))
+        edit = self.menuBar().addMenu(tr('Bearbeiten'))
+        self.undo_action = self.action(tr('Rueckgaengig'), 'fa5s.undo', self.undo, QKeySequence.StandardKey.Undo)
+        self.redo_action = self.action(tr('Wiederholen'), 'fa5s.redo', self.redo, QKeySequence.StandardKey.Redo)
+        self.delete_action = self.action(tr('Note loeschen'), 'fa5s.trash-alt', self.delete_note, QKeySequence.StandardKey.Delete)
         for a in (self.undo_action, self.redo_action, self.delete_action):
             edit.addAction(a)
             toolbar.addAction(a)
         toolbar.addSeparator()
-        toolbar.addAction(self.action('MIDI importieren', 'fa5s.music', self.import_midi))
-        toolbar.addAction(self.action('UltraStar importieren', 'fa5s.file-import', self.import_txt))
-        toolbar.addAction(self.action('Audio laden', 'fa5s.headphones', self.load_audio))
-        toolbar.addAction(self.action('Referenzvideo laden', 'fa5s.film', self.load_video))
-        toolbar.addAction(self.action('Cover laden', 'fa5s.image', self.load_cover))
-        toolbar.addAction(self.action('OG-Medien konvertieren', 'fa5s.exchange-alt', self.convert_media))
+        toolbar.addAction(self.action(tr('MIDI importieren'), 'fa5s.music', self.import_midi))
+        toolbar.addAction(self.action(tr('UltraStar importieren'), 'fa5s.file-import', self.import_txt))
+        toolbar.addAction(self.action(tr('Audio laden'), 'fa5s.headphones', self.load_audio))
+        toolbar.addAction(self.action(tr('Referenzvideo laden'), 'fa5s.film', self.load_video))
+        toolbar.addAction(self.action(tr('Cover laden'), 'fa5s.image', self.load_cover))
+        toolbar.addAction(self.action(tr('OG-Medien konvertieren'), 'fa5s.exchange-alt', self.convert_media))
         toolbar.addAction(self.action('Plugins', 'fa5s.plug', self.plugins_dialog))
+        toolbar.addAction(self.action(tr('ai.title'), 'fa5s.wave-square', self.ai_chart_dialog))
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
@@ -132,7 +143,7 @@ class StudioWindow(QMainWindow):
         self.bpm_edit.setRange(1, 1000)
         self.bpm_edit.setDecimals(2)
         self.key_label = QLabel()
-        for label, widget in [('Titel', self.title_edit), ('Artist', self.artist_edit), ('BPM', self.bpm_edit)]:
+        for label, widget in [(tr('Titel'), self.title_edit), (tr('Artist'), self.artist_edit), ('BPM', self.bpm_edit)]:
             meta.addWidget(QLabel(label))
             meta.addWidget(widget, 1 if isinstance(widget, QLineEdit) else 0)
         meta.addWidget(self.key_label)
@@ -149,7 +160,7 @@ class StudioWindow(QMainWindow):
         side.setContentsMargins(8, 0, 0, 0)
         sidebar.setMinimumWidth(240)
         sidebar.setMaximumWidth(320)
-        box = QGroupBox('Note / Silbe')
+        box = QGroupBox(tr('Note / Silbe'))
         form = QFormLayout(box)
         self.time_edit = QDoubleSpinBox()
         self.length_edit = QDoubleSpinBox()
@@ -171,10 +182,10 @@ class StudioWindow(QMainWindow):
         self.page_edit.setDecimals(3)
         self.page_edit.setSuffix(' s')
         self.page_edit.setSingleStep(.025)
-        for label, widget in [('Start', self.time_edit), ('Laenge', self.length_edit),
-            ('MIDI-Ton', self.pitch_edit), ('Tonname', self.pitch_label),
-            ('Text', self.text_edit), ('Wortende', self.word_edit), ('Phrasenende', self.phrase_edit),
-            ('Seitenzeit festlegen', self.page_override), ('Seitenwechsel', self.page_edit)]:
+        for label, widget in [('Start', self.time_edit), (tr('Laenge'), self.length_edit),
+            (tr('MIDI-Ton'), self.pitch_edit), (tr('Tonname'), self.pitch_label),
+            ('Text', self.text_edit), (tr('Wortende'), self.word_edit), (tr('Phrasenende'), self.phrase_edit),
+            (tr('Seitenzeit festlegen'), self.page_override), (tr('Seitenwechsel'), self.page_edit)]:
             form.addRow(label, widget)
         for widget in (self.time_edit, self.length_edit, self.pitch_edit, self.text_edit):
             widget.editingFinished.connect(self.edit_note)
@@ -184,15 +195,15 @@ class StudioWindow(QMainWindow):
         self.page_edit.editingFinished.connect(self.edit_note)
         box.setMinimumHeight(form.sizeHint().height() + 20)
         side.addWidget(box)
-        add = QPushButton(qta.icon('fa5s.plus', color='#cdd3d9'), 'Note erstellen')
+        add = QPushButton(qta.icon('fa5s.plus', color='#cdd3d9'), tr('Note erstellen'))
         add.clicked.connect(self.add_note)
         side.addWidget(add)
         self.lyrics = QTextEdit()
         self.lyrics.setAcceptRichText(False)
         self.lyrics.setMinimumHeight(100)
-        side.addWidget(QLabel('Songtext'))
+        side.addWidget(QLabel(tr('Songtext')))
         side.addWidget(self.lyrics, 1)
-        self.syllables = QCheckBox('Silben mit | trennen')
+        self.syllables = QCheckBox(tr('Silben mit | trennen'))
         side.addWidget(self.syllables)
         language = QHBoxLayout()
         self.language = QComboBox()
@@ -200,11 +211,11 @@ class StudioWindow(QMainWindow):
         self.language.addItem('Deutsch', 'de_DE')
         language.addWidget(self.language)
         suggest = QPushButton(qta.icon('fa5s.magic', color='#cdd3d9'), '')
-        suggest.setToolTip('Silbentrennung vorschlagen (experimentell)')
+        suggest.setToolTip(tr('Silbentrennung vorschlagen (experimentell)'))
         suggest.clicked.connect(self.suggest_text)
         language.addWidget(suggest)
         side.addLayout(language)
-        assign = QPushButton(qta.icon('fa5s.link', color='#cdd3d9'), 'Ab Auswahl zuordnen')
+        assign = QPushButton(qta.icon('fa5s.link', color='#cdd3d9'), tr('Ab Auswahl zuordnen'))
         assign.clicked.connect(self.assign)
         side.addWidget(assign)
         side_scroll = QScrollArea()
@@ -223,11 +234,11 @@ class StudioWindow(QMainWindow):
         layout.addWidget(self.scroll)
         transport = QHBoxLayout()
         self.play_button = QPushButton(qta.icon('fa5s.play', color='#cdd3d9'), '')
-        self.play_button.setToolTip('Wiedergabe / Pause')
+        self.play_button.setToolTip(tr('Wiedergabe / Pause'))
         self.play_button.setFixedWidth(44)
         self.play_button.clicked.connect(self.toggle_play)
         self.stop_button = QPushButton(qta.icon('fa5s.stop', color='#cdd3d9'), '')
-        self.stop_button.setToolTip('Stopp')
+        self.stop_button.setToolTip(tr('Stopp'))
         self.stop_button.clicked.connect(self.stop)
         self.stop_button.setFixedWidth(44)
         self.clock_label = QLabel('00:00.000')
@@ -235,11 +246,11 @@ class StudioWindow(QMainWindow):
         transport.addWidget(self.play_button)
         transport.addWidget(self.stop_button)
         transport.addWidget(self.clock_label)
-        self.follow_box = QCheckBox('Cursor folgen')
+        self.follow_box = QCheckBox(tr('Cursor folgen'))
         self.follow_box.setChecked(True)
         self.follow_box.toggled.connect(lambda v: setattr(self.timeline, 'follow', v))
         transport.addWidget(self.follow_box)
-        snap = QCheckBox('Raster')
+        snap = QCheckBox(tr('Raster'))
         snap.setChecked(True)
         snap.toggled.connect(lambda v: setattr(self.timeline, 'snap', v))
         transport.addWidget(snap)
@@ -248,7 +259,7 @@ class StudioWindow(QMainWindow):
         speed.addItems(['0.5x', '0.75x', '1x', '1.25x', '1.5x'])
         speed.setCurrentIndex(2)
         speed.currentTextChanged.connect(self.set_speed)
-        transport.addWidget(QLabel('Tempo'))
+        transport.addWidget(QLabel(tr('Tempo')))
         transport.addWidget(speed)
         zoom = QSlider(Qt.Orientation.Horizontal)
         zoom.setRange(20, 300)
@@ -259,14 +270,14 @@ class StudioWindow(QMainWindow):
         transport.addWidget(zoom)
         layout.addLayout(transport)
         reference = QHBoxLayout()
-        self.video_box = QCheckBox('Referenzvideo')
+        self.video_box = QCheckBox(tr('Referenzvideo'))
         self.video_box.setChecked(True)
         self.video_box.toggled.connect(self.toggle_video)
         reference.addWidget(self.video_box)
-        self.reference_label = QLabel('Keine Referenz')
+        self.reference_label = QLabel(tr('Keine Referenz'))
         self.reference_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         reference.addWidget(self.reference_label, 1)
-        reference.addWidget(QLabel('Referenz-Offset'))
+        reference.addWidget(QLabel(tr('Referenz-Offset')))
         self.reference_edit = QDoubleSpinBox()
         self.reference_edit.setRange(-86400, 86400)
         self.reference_edit.setDecimals(3)
@@ -279,7 +290,7 @@ class StudioWindow(QMainWindow):
         self.timeline.edited.connect(self.changed)
         self.timeline.edit_text.connect(self.focus_text)
         self.timeline.seek.connect(self.seek)
-        self.statusBar().showMessage('Bereit')
+        self.statusBar().showMessage(tr('Bereit'))
         self.lyrics.textChanged.connect(self.draft_changed)
 
     def draft_changed(self):
@@ -288,33 +299,106 @@ class StudioWindow(QMainWindow):
             self.project.draft_lyrics = self.lyrics.toPlainText()
             self.setWindowTitle(f'{self.project.title} * - OpenLips Studio {DISPLAY_VERSION}')
 
+    def change_language(self, value):
+        if value == ui_language():
+            return
+        position, selected = self.position, self.timeline.selected_id
+        draft = self.lyrics.toPlainText()
+        origin, scale, follow, snap = self.timeline.origin, self.timeline.scale, self.timeline.follow, self.timeline.snap
+        self.stop()
+        set_language(value)
+        self.menuBar().clear()
+        for toolbar in self.findChildren(QToolBar):
+            self.removeToolBar(toolbar)
+            toolbar.deleteLater()
+        self.loading = True
+        self.build_ui()
+        self.lyrics.setPlainText(draft)
+        self.loading = False
+        self.timeline.selected_id = selected
+        self.timeline.scale, self.timeline.follow, self.timeline.snap = scale, follow, snap
+        self.follow_box.setChecked(follow)
+        self.refresh()
+        self.seek(position)
+        self.timeline.origin = origin
+        self.timeline.update()
+
     def search_lyrics(self):
         from studio.lyrics_search import LyricsSearch
         if getattr(self, 'search_worker', None) and self.search_worker.isRunning():
             return
-        if QMessageBox.question(self, 'Lyrics suchen',
-            'Titel und Artist an LRCLIB senden? Gefundene Texte bleiben lokal. Bitte Nutzungsrechte beachten.') != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, tr('Lyrics suchen'),
+            tr('Titel und Artist an LRCLIB senden? Gefundene Texte bleiben lokal. Bitte Nutzungsrechte beachten.')) != QMessageBox.StandardButton.Yes:
             return
         self.search_worker = LyricsSearch(self.title_edit.text(), self.artist_edit.text(), self)
         self.search_worker.results.connect(self.lyrics_results)
         self.search_worker.failed.connect(lambda message: self.error(message))
         self.search_worker.start()
-        self.statusBar().showMessage('Lyrics-Suche laeuft ...')
+        self.statusBar().showMessage(tr('Lyrics-Suche laeuft ...'))
 
     def lyrics_results(self, results):
         if not results:
-            self.statusBar().showMessage('Keine Texte gefunden')
+            self.statusBar().showMessage(tr('Keine Texte gefunden'))
             return
         labels = [f'{i + 1}. {r.get("artistName", "")} - {r.get("trackName", "")} ({r.get("duration", "?")} s)' for i, r in enumerate(results)]
-        label, ok = QInputDialog.getItem(self, 'Suchergebnisse', 'Version', labels, 0, False)
+        label, ok = QInputDialog.getItem(self, tr('Suchergebnisse'), 'Version', labels, 0, False)
         if ok:
-            self.lyrics.setPlainText(results[labels.index(label)]['plainLyrics'])
+            result = results[labels.index(label)]
+            synced = result.get('syncedLyrics')
+            if isinstance(synced, str) and synced.strip():
+                options = [tr('lrc.synchronized'), tr('lrc.plain')]
+                choice, accepted = QInputDialog.getItem(self, tr('Suchergebnisse'), tr('Songtext'), options, 0, False)
+                if not accepted:
+                    return
+                if choice == options[0]:
+                    from studio.lrc import parse_lrc
+                    self.attempt(lambda: self.accept_lrc(parse_lrc(synced), f'LRCLIB:{result.get("id", "")}'))
+                    return
+            self.snapshot()
+            self.lyrics.setPlainText(result.get('plainLyrics') or '')
+
+    def ai_chart_dialog(self):
+        from studio.ai_dialog import AiChartDialog
+        dialog = AiChartDialog(self.project, self)
+        if dialog.exec() and dialog.result_project:
+            result = dialog.result_project
+            self.stop()
+            self.snapshot()
+            self.project.notes = result.notes
+            self.project.source = result.source
+            self.project.warnings = result.warnings
+            if result.lyric_reference:
+                self.project.lyric_reference = result.lyric_reference
+            if result.draft_lyrics:
+                self.project.draft_lyrics = result.draft_lyrics
+            self.project.audio_path = result.audio_path
+            self.lyrics.setPlainText(self.project.draft_lyrics)
+            self.timeline.selected_id = ''
+            self.timeline.origin = 0
+            self.configure_media()
+            self.changed()
 
     def plugins_dialog(self):
         from studio.plugin_dialog import PluginDialog
         dialog = PluginDialog(self.project, self)
         dialog.accepted_project.connect(self.apply_plugin_notes)
+        dialog.accepted_song.connect(self.apply_plugin_song)
         dialog.exec()
+
+    def apply_plugin_song(self, result):
+        result.validate()
+        self.stop()
+        self.snapshot()
+        self.project = copy.deepcopy(result)
+        self.path = None
+        self.project.draft_lyrics = result.draft_lyrics or result.lyric_text()
+        self.loading = True
+        self.lyrics.setPlainText(self.project.draft_lyrics)
+        self.loading = False
+        self.configure_media()
+        self.timeline.selected_id = ''
+        self.timeline.origin = 0
+        self.changed()
 
     def apply_plugin_notes(self, result):
         result.validate()
@@ -345,23 +429,24 @@ class StudioWindow(QMainWindow):
         self.title_edit.setText(self.project.title)
         self.artist_edit.setText(self.project.artist)
         self.bpm_edit.setValue(self.project.bpm)
-        self.key_label.setText(f'Tonart: {self.project.key_signature or "-"}')
+        self.key_label.setText(tr('key.label', key=self.project.key_signature or '-'))
         from studio.media import cover_image
         try:
             self.cover_preview.setPixmap(QPixmap.fromImage(cover_image(self.project)).scaled(
                 48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         except ValueError:
             self.cover_preview.clear()
-        self.cover_preview.setToolTip(self.project.cover_path or 'Generiertes Cover')
+        self.cover_preview.setToolTip(self.project.cover_path or tr('Generiertes Cover'))
         self.reference_edit.setValue(self.project.reference_offset)
         names = [Path(p).name for p in (self.project.audio_path, self.project.video_path) if p]
-        self.reference_label.setText(' / '.join(names) or 'Keine Referenz')
+        self.reference_label.setText(' / '.join(names) or tr('Keine Referenz'))
         self.reference_label.setToolTip('\n'.join(p for p in (self.project.audio_path, self.project.video_path) if p))
         self.timeline.set_project(self.project)
         self.undo_action.setEnabled(bool(self.history))
         self.redo_action.setEnabled(bool(self.future))
         self.select_note(self.timeline.selected_id)
-        self.statusBar().showMessage(f'{len(self.project.notes)} Noten | {self.project.duration:.2f} s | {len(self.project.warnings)} Hinweise | {self.project.source}')
+        self.statusBar().showMessage(tr('notes.summary', count=len(self.project.notes), duration=self.project.duration,
+                                       warnings=len(self.project.warnings), source=self.project.source))
         self.loading = False
 
     def note(self):
@@ -470,7 +555,7 @@ class StudioWindow(QMainWindow):
         self.project.draft_lyrics = self.lyrics.toPlainText()
         count, remaining = assign_lyrics(self.project, self.project.draft_lyrics, index, self.syllables.isChecked())
         self.changed()
-        self.statusBar().showMessage(f'{count} Fragmente zugeordnet; {remaining} ohne Note')
+        self.statusBar().showMessage(tr('notes.assigned', count=count, remaining=remaining))
 
     def suggest_text(self):
         def run():
@@ -484,7 +569,7 @@ class StudioWindow(QMainWindow):
     def confirm_discard(self):
         if not self.dirty:
             return True
-        result = QMessageBox.question(self, 'Ungespeicherte Aenderungen', 'Projekt speichern?',
+        result = QMessageBox.question(self, tr('Ungespeicherte Aenderungen'), tr('Projekt speichern?'),
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
         return self.save() if result == QMessageBox.StandardButton.Save else result == QMessageBox.StandardButton.Discard
 
@@ -512,12 +597,12 @@ class StudioWindow(QMainWindow):
     def open(self):
         if not self.confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, 'Projekt oeffnen', '', 'OpenLips Studio (*.olp *.olips)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Projekt oeffnen'), '', 'OpenLips Studio (*.olp *.olips)')
         if path:
             self.attempt(lambda: self.replace_project(load_project(path), Path(path)))
 
     def save(self):
-        path = str(self.path) if self.path else QFileDialog.getSaveFileName(self, 'Projekt speichern', self.project.title + '.olp', 'OpenLips Studio (*.olp)')[0]
+        path = str(self.path) if self.path else QFileDialog.getSaveFileName(self, tr('Projekt speichern'), self.project.title + '.olp', 'OpenLips Studio (*.olp)')[0]
         if not path:
             return False
         if not Path(path).suffix:
@@ -541,28 +626,56 @@ class StudioWindow(QMainWindow):
     def import_midi(self):
         if not self.confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, 'MIDI importieren', '', 'MIDI (*.mid *.midi)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('MIDI importieren'), '', 'MIDI (*.mid *.midi)')
         if not path:
             return
         def run():
             imported = read_midi(path)
-            labels = [f'Spur {l.track + 1}: {l.name} / Kanal {l.channel + 1} / {len(l.notes)} Noten' for l in imported.lanes]
-            label, ok = QInputDialog.getItem(self, 'Melodiespur', 'Spur / Kanal', labels, 0, False)
+            labels = [tr('midi.track', track=l.track + 1, name=l.name, channel=l.channel + 1,
+                         count=len(l.notes)) for l in imported.lanes]
+            label, ok = QInputDialog.getItem(self, tr('Melodiespur'), tr('Spur / Kanal'), labels, 0, False)
             if ok:
                 self.replace_project(project_from_midi(path, imported, labels.index(label)))
                 if self.project.warnings:
-                    QMessageBox.warning(self, 'Importhinweise', '\n'.join(self.project.warnings))
+                    QMessageBox.warning(self, tr('Importhinweise'), '\n'.join(self.project.warnings))
         self.attempt(run)
 
     def import_txt(self):
         if not self.confirm_discard():
             return
-        path, _ = QFileDialog.getOpenFileName(self, 'UltraStar importieren', '', 'UltraStar (*.txt)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('UltraStar importieren'), '', 'UltraStar (*.txt)')
         if path:
             self.attempt(lambda: self.replace_project(import_ultrastar(path)))
 
+    def import_lrc(self):
+        from studio.lrc import read_lrc
+        path, _ = QFileDialog.getOpenFileName(self, tr('lrc.import'), '', 'LRC (*.lrc)')
+        if path:
+            self.attempt(lambda: self.accept_lrc(read_lrc(path), path))
+
+    def accept_lrc(self, document, source=''):
+        from studio.lrc import attach_lrc
+        from studio.lrc_dialog import LrcDialog
+        if LrcDialog(document, self).exec() != LrcDialog.DialogCode.Accepted:
+            return
+        self.snapshot()
+        attach_lrc(self.project, document, source)
+        self.loading = True
+        self.lyrics.setPlainText(self.project.draft_lyrics)
+        self.loading = False
+        self.changed()
+
+    def review_lrc(self):
+        from studio.lrc import parse_lrc
+        from studio.lrc_dialog import LrcDialog
+        reference = self.project.lyric_reference
+        if not reference:
+            self.statusBar().showMessage(tr('lrc.none'))
+            return
+            self.attempt(lambda: LrcDialog(parse_lrc(reference['raw']), self, importing=False).exec())
+
     def load_audio(self):
-        path, _ = QFileDialog.getOpenFileName(self, 'Audio laden', '', 'Audio (*.mp3 *.wav *.flac *.ogg *.m4a);;Alle Dateien (*)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Audio laden'), '', tr('Audio (*.mp3 *.wav *.flac *.ogg *.m4a);;Alle Dateien (*)'))
         if path:
             self.snapshot()
             self.project.audio_path = path
@@ -570,7 +683,7 @@ class StudioWindow(QMainWindow):
             self.changed()
 
     def load_video(self):
-        path, _ = QFileDialog.getOpenFileName(self, 'Referenzvideo laden', '', 'Video (*.mp4 *.mkv *.wmv *.mov *.webm);;Alle Dateien (*)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Referenzvideo laden'), '', tr('Video (*.mp4 *.mkv *.wmv *.mov *.webm);;Alle Dateien (*)'))
         if path:
             self.snapshot()
             self.project.video_path = path
@@ -580,7 +693,7 @@ class StudioWindow(QMainWindow):
             self.changed()
 
     def load_cover(self):
-        path, _ = QFileDialog.getOpenFileName(self, 'Cover laden', '', 'Bilder (*.jpg *.jpeg *.png *.webp *.bmp)')
+        path, _ = QFileDialog.getOpenFileName(self, tr('Cover laden'), '', tr('Bilder (*.jpg *.jpeg *.png *.webp *.bmp)'))
         if path:
             from studio.media import cover_image
             candidate = copy.deepcopy(self.project)
@@ -599,8 +712,8 @@ class StudioWindow(QMainWindow):
         MediaDialog(self.project, self).exec()
 
     def shift_all_notes(self):
-        offset, ok = QInputDialog.getDouble(self, 'Chart synchronisieren',
-            'Noten und Seiten verschieben (Sekunden; positiv = spaeter)', 0, -900, 900, 3)
+        offset, ok = QInputDialog.getDouble(self, tr('Chart synchronisieren'),
+            tr('Noten und Seiten verschieben (Sekunden; positiv = spaeter)'), 0, -900, 900, 3)
         if not ok or not offset or not self.project.notes:
             return
         shifted = copy.deepcopy(self.project)
@@ -616,7 +729,7 @@ class StudioWindow(QMainWindow):
         self.snapshot()
         self.project = shifted
         self.changed()
-        self.statusBar().showMessage(f'{len(shifted.notes)} Noten um {offset:+.3f} s verschoben; Export uebernimmt die Zeiten')
+        self.statusBar().showMessage(tr('notes.shifted', count=len(shifted.notes), offset=offset))
 
     def configure_media(self):
         self.stop()
@@ -645,18 +758,18 @@ class StudioWindow(QMainWindow):
         return max(self.player.duration(), self.video_player.duration()) / 1000 - self.project.reference_offset
 
     def export_json(self):
-        path, _ = QFileDialog.getSaveFileName(self, 'Debug-JSON exportieren', self.project.title + '.json', 'JSON (*.json)')
+        path, _ = QFileDialog.getSaveFileName(self, tr('Debug-JSON exportieren'), self.project.title + '.json', 'JSON (*.json)')
         if path:
             self.attempt(lambda: export_debug_json(self.project, path))
 
     def export_pair(self):
-        directory = QFileDialog.getExistingDirectory(self, 'Ausgabe uebergeordnetes Verzeichnis')
+        directory = QFileDialog.getExistingDirectory(self, tr('Ausgabe uebergeordnetes Verzeichnis'))
         if not directory:
             return
-        name, ok = QInputDialog.getText(self, 'Dateiname', 'Asset-Basisname', text='custom_song')
+        name, ok = QInputDialog.getText(self, tr('Dateiname'), tr('Asset-Basisname'), text='custom_song')
         if not ok or not name:
             return
-        audio, ok = QInputDialog.getText(self, 'Audio-Referenz', 'Name der bereits konvertierten xWMA-Datei', text=name + '.xWMA')
+        audio, ok = QInputDialog.getText(self, tr('Audio-Referenz'), tr('Name der bereits konvertierten xWMA-Datei'), text=name + '.xWMA')
         if ok:
             self.attempt(lambda: export_owned_pair(self.project, Path(directory) / name, name, audio))
 
@@ -753,7 +866,7 @@ class StudioWindow(QMainWindow):
 
     def closeEvent(self, event):
         if getattr(self, 'search_worker', None) and self.search_worker.isRunning():
-            self.statusBar().showMessage('Bitte Lyrics-Suche abwarten (maximal 15 Sekunden)')
+            self.statusBar().showMessage(tr('Bitte Lyrics-Suche abwarten (maximal 15 Sekunden)'))
             event.ignore()
             return
         if self.confirm_discard():

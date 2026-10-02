@@ -19,6 +19,21 @@ The goal is to understand the internal Lips file formats well enough to build sa
 
 ## Current Status
 
+- [AI chart creation review](studio_ai_chart_creation.md) evaluates UltraSinger,
+  optional built-in Studio integration, model/backend selection, LRC limitations
+  and runtime scoring. This is a proposal, not a completed AI/LRC release.
+
+- [Alternative decoder feasibility](lips_codec_patch_feasibility.md) records
+  Xbox 360 FFmpeg port precedents and OG native video selector cases beyond
+  the observed media corpus. No new decoder patch or codec gameplay acceptance
+  is claimed; the working encoder remains unchanged.
+
+- The [media codec census](media_codec_corpus.md) distinguishes WMA Standard
+  RIFF/xWMA song audio from WMA Pro ASF movie audio, with native OG parser
+  evidence. [Large-library performance research](large_song_library_performance.md)
+  records a possible repeated-list-rebuild bottleneck and a measurement plan;
+  no performance patch or fresh codec gameplay acceptance is claimed.
+
 - A new song now appears under its own title/artist and loads from independent paths with a fresh offline profile. Existing profiles do not reimport the edited disc catalog, so DLC discovery is the intended installation route, not profile resets. See [registration and timing](custom_song_registration.md). A constant `--note-offset` is available for controlled synchronization tests; durations remain source-exact.
 
 - A fresh 770-note UltraStar chart and newly encoded VC-1/WMA Pro video now play in the isolated OG test slot and reach results. A one-byte ASF bitmap-header correction reproduces acceptance; audio was user-confirmed. Synchronization and independent catalog registration remain unfinished. See [controlled media tests](custom_media_runtime_tests.md).

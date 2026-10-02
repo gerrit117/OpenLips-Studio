@@ -1,12 +1,15 @@
 """Optional adapter for the existing experimental STFS backend."""
 from pathlib import Path
+import sys
 import tempfile
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QPushButton,
-                               QFileDialog, QDialogButtonBox, QMessageBox)
+                               QFileDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit)
 
 from studio.exporters import export_owned_pair
+from studio.i18n import tr
+from studio.media_requirements import media_requirements, portable_media_notice
 
 
 class PackageWorker(QThread):
@@ -59,21 +62,27 @@ class PackageWorker(QThread):
 class DlcDialog(QDialog):
     def __init__(self, project, parent):
         super().__init__(parent)
-        self.setWindowTitle('DLC exportieren (experimentell)')
+        self.setWindowTitle(tr('DLC exportieren (experimentell)'))
         self.resize(620, 380)
         self.project = project
         self.worker = None
         self.fields = {}
         layout = QFormLayout(self)
+        self.media_notice = QPlainTextEdit()
+        self.media_notice.setReadOnly(True)
+        self.media_notice.setPlainText(portable_media_notice() if sys.platform != 'win32'
+                                      else media_requirements())
+        self.media_notice.setMaximumHeight(180)
+        layout.addRow(self.media_notice)
         self.id = QLineEdit('0x73000001')
-        layout.addRow('Eigene freie Song-ID', self.id)
+        layout.addRow(tr('Eigene freie Song-ID'), self.id)
         for key, label in [('backend', 'STFS-Backend'), ('audio', 'Audio (xWMA)'),
-                           ('preview_audio', 'Vorschau (xWMA)'), ('jacket', 'Cover (optional)'),
-                           ('video', 'Video (optional)'), ('output', 'Ausgabepaket')]:
+                           ('preview_audio', tr('Vorschau (xWMA)')), ('jacket', 'Cover (optional)'),
+                           ('video', 'Video (optional)'), ('output', tr('Ausgabepaket'))]:
             edit = QLineEdit()
             self.fields[key] = edit
             button = QPushButton('...')
-            button.setToolTip(label + ' auswaehlen')
+            button.setToolTip(label + tr(' auswaehlen'))
             button.clicked.connect(lambda checked=False, k=key: self.choose(k))
             from PySide6.QtWidgets import QWidget, QHBoxLayout
             row = QWidget()
@@ -89,7 +98,7 @@ class DlcDialog(QDialog):
 
     def choose(self, key):
         if key == 'output':
-            path, _ = QFileDialog.getSaveFileName(self, 'Neues Paket', 'custom.LIVE', 'LIVE (*.LIVE)')
+            path, _ = QFileDialog.getSaveFileName(self, tr('Neues Paket'), 'custom.LIVE', 'LIVE (*.LIVE)')
         else:
             path, _ = QFileDialog.getOpenFileName(self, key)
         if path:
@@ -97,8 +106,8 @@ class DlcDialog(QDialog):
 
     def build(self):
         import copy
-        if QMessageBox.question(self, 'Experimenteller Export',
-            'Der STFS-Container wird geprueft, die DLC-Erkennung im Spiel ist noch nicht bestaetigt. Fortfahren?') != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, tr('Experimenteller Export'),
+            tr('Der STFS-Container wird geprueft, die DLC-Erkennung im Spiel ist noch nicht bestaetigt. Fortfahren?')) != QMessageBox.StandardButton.Yes:
             return
         values = {k: w.text() for k, w in self.fields.items()}
         values['id'] = self.id.text()
@@ -109,11 +118,11 @@ class DlcDialog(QDialog):
         self.worker.start()
 
     def success(self, result):
-        QMessageBox.information(self, 'Paket validiert', result)
+        QMessageBox.information(self, tr('Paket validiert'), result)
         self.buttons.setEnabled(True)
 
     def failure(self, message):
-        QMessageBox.critical(self, 'Export fehlgeschlagen', message)
+        QMessageBox.critical(self, tr('Export fehlgeschlagen'), message)
         self.buttons.setEnabled(True)
 
     def reject(self):

@@ -1,0 +1,3 @@
+# Upstream bridge API is pinned. Keep dependencies isolated from Studio/Basic Pitch.
+usdb_syncer @ git+https://github.com/bohning/usdb_syncer.git@c8f9157bed4d45fc646e5d4c4450074ef0925aae
+pyinstaller>=6,<7
