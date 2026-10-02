@@ -27,7 +27,9 @@ Metadata keys: `title`, `artist`, `album`, `genre`, `language`, `family`.
 Media keys: `reference_video`, `duration_seconds`, `offset_seconds`.
 Limits: 18 MiB bundle, 8 MiB per IXB, 16 KiB manifest, 17 MiB expanded members,
 compression ratio at most 150. Only stored/Deflate members; no passwords, extra
-files, directories or symlinks. Native file bytes are preserved without rebuilding.
+files, directories or symlinks. ZIP extra fields, comments and trailing payloads
+are rejected. Native file bytes are preserved without rebuilding. A hosting
+service may normalize the cover when creating its canonical downloadable copy.
 
 `tools.song_bundle.decode_bundle` verifies container inventory, hashes, cover and
 IXB chart/sequence ownership and lyric WordData coverage. This does **not** prove

@@ -127,6 +127,8 @@ def decode_bundle(data: bytes) -> SongBundle:
     if len(data) > MAX_BUNDLE or not data.startswith(MAGIC) or data[len(MAGIC) + 32:len(MAGIC) + 36] != b"PK\x03\x04":
         raise ValueError("Not an OpenLips Song v1 bundle, or bundle exceeds 18 MiB.")
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        if archive.comment or data[-22:-18] != b'PK\x05\x06':
+            raise ValueError('Archive comments and trailing payloads are not accepted.')
         infos = archive.infolist()
         if len(infos) != 4 or {item.filename for item in infos} != MEMBERS or sum(i.file_size for i in infos) > 17 * 1024 * 1024:
             raise ValueError("A song bundle must contain exactly manifest, chart, lyrics and cover.")
@@ -134,7 +136,7 @@ def decode_bundle(data: bytes) -> SongBundle:
         for info in infos:
             maximum = 16384 if info.filename == "manifest.json" else (512 * 1024 if info.filename == "cover.jpg" else MAX_MEMBER)
             mode = info.external_attr >> 16
-            if (info.file_size > maximum or info.flag_bits & 1 or info.is_dir()
+            if (info.extra or info.comment or info.file_size > maximum or info.flag_bits & 1 or info.is_dir()
                 or stat.S_IFMT(mode) not in (0, stat.S_IFREG)
                 or info.compress_type not in (zipfile.ZIP_DEFLATED, zipfile.ZIP_STORED)
                 or info.file_size / max(info.compress_size, 1) > 150):

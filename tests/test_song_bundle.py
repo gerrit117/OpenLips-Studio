@@ -1,6 +1,7 @@
 """Native sharing bundles, using only tiny generated charts and solid-color covers."""
 import io
 import unittest
+import zipfile
 from PIL import Image
 from tools.build_owned_chart import build_owned_pair
 from tools.write_template_chart import Note, SongChart
@@ -33,6 +34,16 @@ class SongBundleTests(unittest.TestCase):
     def test_plain_zip_is_not_a_bundle(self):
         with self.assertRaises(ValueError):
             decode_bundle(b"PK\x03\x04not a song")
+
+    def test_trailing_bytes_and_extra_members_are_rejected(self):
+        _, _, raw = self.bundle()
+        with self.assertRaises(ValueError):
+            decode_bundle(raw + b'synthetic trailing bytes')
+        output = io.BytesIO(raw)
+        with zipfile.ZipFile(output, 'a') as archive:
+            archive.writestr('video.mp4', b'synthetic forbidden member')
+        with self.assertRaises(ValueError):
+            decode_bundle(output.getvalue())
 
     def test_duration_required_without_reference(self):
         with self.assertRaises(ValueError):
