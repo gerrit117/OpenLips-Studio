@@ -2,6 +2,7 @@
 import io
 import unittest
 import zipfile
+import json
 from PIL import Image
 from tools.build_owned_chart import build_owned_pair
 from tools.write_template_chart import Note, SongChart
@@ -30,6 +31,12 @@ class SongBundleTests(unittest.TestCase):
         bad[20] ^= 1
         with self.assertRaises(ValueError):
             decode_bundle(bad)
+
+    def test_new_manifest_stores_only_video_id_and_reader_normalizes_it(self):
+        _, _, raw = self.bundle(youtube='abcdefghijk')
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            self.assertEqual(json.loads(archive.read('manifest.json'))['media']['reference_video'], 'abcdefghijk')
+        self.assertEqual(decode_bundle(raw).manifest['media']['reference_video'], 'https://www.youtube.com/watch?v=abcdefghijk')
 
     def test_plain_zip_is_not_a_bundle(self):
         with self.assertRaises(ValueError):

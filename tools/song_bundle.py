@@ -37,6 +37,8 @@ def youtube_reference(value):
         return None
     if not isinstance(value, str) or len(value) > 1000:
         raise ValueError("Invalid YouTube reference.")
+    if re.fullmatch(r'[A-Za-z0-9_-]{11}', value):
+        return 'https://www.youtube.com/watch?v=' + value
     url = urlparse(value)
     if url.scheme != "https" or url.username or url.password or url.port:
         raise ValueError("YouTube references must be public HTTPS URLs without credentials or a port.")
@@ -101,6 +103,9 @@ def encode_bundle(chart, lyric, cover, *, metadata, duration=None, youtube=None,
                 "metadata": metadata_checked(metadata),
                 "media": media_checked({"reference_video": youtube, "duration_seconds": duration, "offset_seconds": offset}),
                 "files": {name: {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} for name, data in files.items()}}
+    reference = manifest['media']['reference_video']
+    if reference:
+        manifest['media']['reference_video'] = reference.rsplit('=', 1)[1]
     serialized = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     output = io.BytesIO()
     output.write(MAGIC + hashlib.sha256(serialized).digest())

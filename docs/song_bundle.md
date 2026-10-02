@@ -25,6 +25,9 @@ manifest. The remainder is a ZIP with exactly four members:
 
 Metadata keys: `title`, `artist`, `album`, `genre`, `language`, `family`.
 Media keys: `reference_video`, `duration_seconds`, `offset_seconds`.
+New writers store `reference_video` as an11-character YouTube video ID. The
+reader accepts IDs and legacy supported HTTPS URLs and normalizes them to the
+address used by local media retrieval. An ID is not a usage-rights exemption.
 Limits: 18 MiB bundle, 8 MiB per IXB, 16 KiB manifest, 17 MiB expanded members,
 compression ratio at most 150. Only stored/Deflate members; no passwords, extra
 files, directories or symlinks. ZIP extra fields, comments and trailing payloads
