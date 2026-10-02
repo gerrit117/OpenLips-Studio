@@ -12,6 +12,7 @@ The desktop application uses these separately licensed dependencies:
 | Pyphen | GPL/LGPL/MPL alternatives; dictionaries have their own notices; [repository](https://github.com/Kozea/Pyphen) |
 | QtAwesome | MIT; bundled icon fonts have their own licenses; [repository](https://github.com/spyder-ide/qtawesome) |
 | PyInstaller bootloader | GPL with bootloader exception; [license](https://pyinstaller.org/en/stable/license.html) |
+| Inno Setup (Windows installer) | Inno Setup license; Jordan Russell, Martijn Laan and contributors; [source and license](https://github.com/jrsoftware/issrc) |
 | Python | PSF license; [license](https://docs.python.org/3/license.html) |
 | Basic Pitch / model | Apache-2.0; Copyright 2022 Spotify AB; [repository, authors and license](https://github.com/spotify/basic-pitch) |
 | ONNX Runtime | MIT; [repository](https://github.com/microsoft/onnxruntime) |

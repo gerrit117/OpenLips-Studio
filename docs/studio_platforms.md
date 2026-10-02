@@ -21,6 +21,8 @@ actually complete. Apple signing/notarization remains pending. Version 0.3.0 add
 a Windows per-user Inno Setup wizard and native macOS DMG with an Applications
 shortcut; neither requires users to install Python. Linux retains the portable
 archive and desktop-entry installer.
+The 0.3.0 native matrix and actual download publication completed successfully:
+see [verification and remaining user checks](studio_release_verification_030.md).
 Run `36818350412` completed successfully on all four native targets for 0.1.1 Beta.
 From 0.1.3 Beta, successful main-branch builds publish versioned prereleases
 with all four native archives and SHA-256 checksums. Windows/macOS use ZIP;

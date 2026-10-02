@@ -71,9 +71,9 @@ Whisper-small transcription and pitch analysis (first 60 seconds, 42.015 s,
 
 Read-only corpus analysis covers 211 physical charts / 130 distinct contents;
 129 plain IXB charts parse without graph errors. See [LS2 findings](ls2_song_variants.md).
-Installer/frozen-engine results are recorded in the release verification notes;
-macOS/Linux native CI builds and physical Xbox tests are not replaced by Windows
-success. Do not interpret configured CI as an already-published release.
+All four native CI targets and the download publication completed successfully;
+see [release verification](studio_release_verification_030.md) for exact checks.
+These native smoke tests do not replace physical Xbox or full gameplay tests.
 
 Local suite: **328 passed, 6 skipped, 11 subtests passed**. The skips are
 explicit platform/optional-integration checks, not passing results. The private
