@@ -2,6 +2,7 @@
 from pathlib import Path
 import tempfile
 import os
+import struct
 from PySide6.QtCore import QStandardPaths
 from studio.model import StudioProject, EditorNote
 from tools.song_bundle import decode_bundle, MAX_BUNDLE
@@ -36,14 +37,37 @@ def import_community(path):
         raise ValueError('Could not resolve community lyrics')
     notes = []
     for record in chart.records:
-        if chart.is_a(record, 'lpsMelodyMarker') and not chart.is_a(record, 'lpsPhraseMarker'):
+        if chart.is_a(record, 'lpsMelodyMarker'):
             values = chart.melody_values(record)
-            ranges, end_word = mappings.get(record.key, ([], True))
-            notes.append(EditorNote(values['time'], values['length'], values['track_index'],
-                                    ''.join(text[start:start + size] for start, size in ranges), end_word))
+            ranges, end_word = mappings.get(record.key, ([], False))
+            fragment = ''.join(text[start:start + size] for start, size in ranges)
+            notes.append(EditorNote(values['time'], values['length'], 127 - values['track_index'],
+                                    fragment or '~', end_word))
+    notes.sort(key=lambda note: note.time)
+    # One native lyric marker can own a whole melisma. Move its word-ending
+    # flag to the final continuation while preserving every pitch and duration.
+    for index in range(1, len(notes)):
+        if notes[index].text == '~':
+            notes[index].end_word = notes[index-1].end_word
+            notes[index-1].end_word = False
+    def float_member(record, member):
+        return struct.unpack('>f', struct.pack('>I', chart.u32(record, chart.members(record)[member])))[0]
+    cuts = sorted(float_member(record, 'm_fTriggerTiming') for record in chart.records
+                  if chart.is_a(record, 'lpsPageBreakMarker'))
+    for previous, following in zip(notes, notes[1:]):
+        boundary = next((cut for cut in cuts if previous.time < cut <= following.time), None)
+        if boundary is not None:
+            previous.line_break_after = True
+            previous.page_break_time = boundary
+    if notes:
+        notes[-1].line_break_after = True
+    tempos = [float_member(record, 'm_Tempo') for record in chart.records
+              if chart.is_a(record, 'ixSeqTempoCode') and 'm_Tempo' in chart.members(record)]
     metadata = bundle.manifest['metadata']
     project = StudioProject(title=metadata['title'], artist=metadata['artist'], notes=notes,
-                            source='OpenLips Song', video_reference=bundle.manifest['media']['reference_video'] or '')
+                            source='OpenLips Song', video_reference=bundle.manifest['media']['reference_video'] or '',
+                            reference_offset=bundle.manifest['media']['offset_seconds'],
+                            bpm=tempos[0] if tempos else 120)
     project.validate()
     root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'community-imports'
     root.mkdir(parents=True, exist_ok=True)

@@ -74,6 +74,7 @@ Some foundations are already in place:
 - **Prepare the presentation.** Choose a cover or generate a simple one. On Windows, DLC export converts the selected video or audio and creates full xWMA audio plus a 15-second preview starting at the first lyric. Video songs also get a small menu preview video. The media tools and STFS backend are included.
 - **Export and experiment.** Save a media-free `.ols` Community song or a DLC package. Custom DLC has been recognized and played in Number One Hits on a modified Xbox 360 in user testing; DLC discovery in Xenia remains under investigation.
 - **Group songs and transfer them.** Export a named song pack from saved projects, or copy a verified DLC directly to an Xbox USB drive with a visible `Content` folder. See the [pack and USB guide](docs/song_packs_usb.md) for current limits and testing status.
+- **Use the community.** Sign in to OpenLips in the Community tab, browse and download songs, see comments and ratings, and upload an .ols song or the current chart for moderation. The website is still in staff-only testing; registration opens with the public launch.
 
 ![The OpenLips Studio chart editor](assets/screenshots/studio-editor.png)
 
@@ -82,6 +83,10 @@ Some foundations are already in place:
 ![Editing a note's timing, pitch, syllable and phrase boundary](assets/screenshots/studio-note-details.png)
 
 *Each note has editable timing, pitch and lyric settings.*
+
+![OpenLips Community sign-in inside Studio](assets/screenshots/studio-community.png)
+
+*The Community tab. A confirmed account is required; staff also use their authenticator.*
 
 ![Basic Pitch parameters and a synthetic note draft](assets/screenshots/studio-plugins.png)
 
@@ -117,6 +122,7 @@ The technical material lives in [`docs/`](docs/). Start with:
 - [Media, covers and synchronization](docs/studio_media.md).
 - [Song-file structures](docs/structures.md) and the [structural reader](docs/og_ixb_reader.md).
 - [Page timing and projects](docs/studio_pages_and_community.md).
+- [Community sign-in, downloads and uploads](docs/studio_community.md).
 - [Research and command-line tools](docs/research_overview.md).
 
 The research records both findings and open questions. Reading a format is not the same as safely writing every variant of it.

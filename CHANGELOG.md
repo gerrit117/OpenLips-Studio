@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3.4 Beta
+
+- Add a native Community tab with account sign-in, staff two-factor verification,
+  song search, pagination, ratings, comments and personal upload status.
+- Download validated .ols songs and open them in the editor, without overwriting files.
+- Upload .ols files or the current song directly; sharing rights and moderation remain required.
+- Keep community passwords and session cookies in memory only; preserve server maintenance and session policies.
+- Restore pitches, melisma continuations, tempo, reference offset and page changes when importing community songs.
+- Refresh the English and German description and fix a Windows build-test path comparison.
+
+## 0.3.3 Beta
 ### Changed
 - Add an undoable Intelligent Page Breaks toolbar action that balances whole
   lyric passages using vocal pauses, punctuation, existing breaks and soft
@@ -48,8 +58,6 @@
   after export, with progress, read-back checking and no overwriting.
 - Preserve melisma notes without repeating their lyric fragments; correct
   Studio MIDI-to-Lips pitch conversion.
-
-## 0.3.3 Beta
 
 - Choose a destination folder for DLC export; generate an extensionless package
   filename from its finalized STFS header content ID, following the observed

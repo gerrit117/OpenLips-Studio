@@ -66,6 +66,7 @@ Einige Grundlagen sind bereits vorhanden:
 - **Platz für den Text schaffen.** Die importierten Seitenwechsel behalten oder den rückgängig machbaren intelligenten Seitenumbruch anwenden. Er berücksichtigt ganze Wörter, Gesangspausen und Satzzeichen, statt nach einer festen Wortanzahl zu trennen.
 - **Mit einer Aufnahme anfangen.** Basic Pitch in der Plugin-Verwaltung aktivieren, eine Audiodatei auswählen und Erkennungsschwellen, Notendauer sowie Tonumfang einstellen. Den lokal erzeugten Entwurf prüfen, als MIDI speichern oder die Noten in den Editor übernehmen. Die Analyse lässt sich abbrechen; die Notenübernahme lässt sich rückgängig machen. Eine isolierte Gesangsspur eignet sich besser als ein vollständiger Mix. Gesangstrennung und Songtexterkennung übernimmt das Plugin nicht.
 - **Den Chart bearbeiten.** Noten erstellen, löschen, verschieben oder in ihrer Länge ändern, die Tonhöhe anpassen, Textfragmente zuordnen sowie Wortenden, Phrasen und Seitenwechsel festlegen. Änderungen lassen sich rückgängig machen und wiederholen.
+- **Einen Entwurf aus Audio erstellen.** Die optionale lokale KI-Analyse kann Gesang trennen, Tonhöhen erkennen und Wörter zuordnen. Das Ergebnis bleibt bearbeitbar und muss geprüft werden. Fehlende KI-Komponenten werden bei Bedarf heruntergeladen; unterstützte AMD-Grafikkarten können die Windows-ROCm-Engine nutzen.
 - **Synchronisierte Songtexte behalten.** Die Entwicklungsversion importiert LRC-Dateien und synchronisierte LRCLIB-Ergebnisse, zeigt Zeilen- und Wort-Zeitmarken zur Prüfung an und speichert sie im Projekt. Die automatische KI-Zuordnung ist noch in Arbeit.
 - **Das Timing prüfen.** Referenzaudio oder ein Video zusammen mit dem Chart abspielen. Die Wiedergabegeschwindigkeit ändern, hineinzoomen und bei Bedarf alle Noten samt Seitenwechseln zeitlich verschieben.
 - **Den Zwischenstand speichern.** Mit einem `.olp`-Projekt kannst du einen Song unfertig lassen und später daran weiterarbeiten. Verknüpfte Medien bleiben separate Dateien.
@@ -73,6 +74,7 @@ Einige Grundlagen sind bereits vorhanden:
 - **Die Tonhöhe prüfen.** Ausgewählte Noten mit einem Referenzton abhören oder die Notentöne während der Wiedergabe einschalten. Fehlende optionale KI-Komponenten werden beim ersten Einsatz automatisch heruntergeladen und geprüft.
 - **Exportieren und ausprobieren.** Einen medienfreien `.ols`-Community-Song oder ein DLC-Paket speichern. Eigene DLCs wurden im Nutzertest von Number One Hits auf einer modifizierten Xbox 360 erkannt und abgespielt. Die DLC-Erkennung in Xenia wird weiterhin untersucht.
 - **Songs bündeln und übertragen.** Gespeicherte Projekte als benanntes Song-Pack exportieren oder ein geprüftes DLC direkt auf einen Xbox-USB-Stick mit sichtbarem `Content`-Ordner kopieren. Aktuelle Grenzen und Teststand stehen im [Pack- und USB-Leitfaden](docs/song_packs_usb.md).
+- **Die Community nutzen.** Im Community-Reiter bei OpenLips anmelden, Songs durchsuchen und herunterladen, Kommentare und Bewertungen ansehen oder einen .ols-Song beziehungsweise den aktuellen Chart zur Prüfung hochladen. Die Webseite wird noch mit Admins und Moderatoren getestet; die Registrierung öffnet zum öffentlichen Start.
 
 ![Der Charteditor von OpenLips Studio](assets/screenshots/studio-editor.png)
 
@@ -81,6 +83,10 @@ Einige Grundlagen sind bereits vorhanden:
 ![Startzeit, Länge, Tonhöhe, Silbe und Phrasengrenze einer Note bearbeiten](assets/screenshots/studio-note-details.png)
 
 *Für jede Note lassen sich Timing, Tonhöhe und Textzuordnung bearbeiten.*
+
+![Community-Anmeldung in OpenLips Studio](assets/screenshots/studio-community-de.png)
+
+*Der Community-Reiter. Ein bestätigtes Konto ist erforderlich; Admins und Moderatoren nutzen zusätzlich ihren Authenticator.*
 
 ![Basic-Pitch-Einstellungen und ein synthetischer Notenentwurf](assets/screenshots/studio-plugins.png)
 
@@ -118,6 +124,7 @@ Die technischen Informationen liegen in [`docs/`](docs/). Gute Einstiegspunkte s
 - [Medien, Cover und Synchronisierung](docs/studio_media.md).
 - [Aufbau der Songdateien](docs/structures.md) und der [strukturelle Reader](docs/og_ixb_reader.md).
 - [Seitenwechsel und Projekte](docs/studio_pages_and_community.md).
+- [Community-Anmeldung, Downloads und Uploads](docs/studio_community.md).
 - [Recherche und Kommandozeilenwerkzeuge](docs/research_overview.md).
 
 Die Recherche hält sowohl Erkenntnisse als auch offene Fragen fest. Ein Format lesen zu können bedeutet noch nicht, jede Variante davon sicher schreiben zu können.

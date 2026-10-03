@@ -12,7 +12,7 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QSplitter, QLineEdit, QDoubleSpinBox, QSpinBox,
     QCheckBox, QLabel, QTextEdit, QPushButton, QToolBar, QFileDialog, QMessageBox,
-    QInputDialog, QSlider, QComboBox, QGroupBox, QScrollArea, QLayout, QSizePolicy, QStackedWidget)
+    QInputDialog, QSlider, QComboBox, QGroupBox, QScrollArea, QLayout, QSizePolicy, QStackedWidget, QTabWidget)
 import qtawesome as qta
 from studio.i18n import tr, language as ui_language, set_language
 
@@ -90,6 +90,7 @@ class StudioWindow(QMainWindow):
         file.addAction(tr('wizard.title'), self.create_song)
         file.addAction(tr('batch.title'), self.import_ultrastar_batch)
         file.addAction(tr('welcome.community'), self.open_community)
+        file.addAction(tr('community.title'), self.show_community)
         exports = file.addMenu(tr('export.menu'))
         exports.addAction(tr('export.community'), self.export_community)
         exports.addAction(tr('DLC exportieren (experimentell)'), self.export_dlc)
@@ -152,7 +153,13 @@ class StudioWindow(QMainWindow):
 
         root = QWidget()
         self.screens = QStackedWidget()
-        self.setCentralWidget(self.screens)
+        self.workspace_tabs = QTabWidget()
+        self.workspace_tabs.addTab(self.screens, tr('community.editor'))
+        from studio.community_page import CommunityPage
+        self.community_page = CommunityPage(lambda: self.project, self)
+        self.community_page.song_opened.connect(self.open_downloaded_song)
+        self.workspace_tabs.addTab(self.community_page, tr('community.title'))
+        self.setCentralWidget(self.workspace_tabs)
         welcome = QWidget()
         welcome_layout = QVBoxLayout(welcome)
         welcome_layout.addStretch()
@@ -164,7 +171,7 @@ class StudioWindow(QMainWindow):
         for label, icon, callback in [('welcome.create', 'fa5s.plus', self.create_song),
                                        ('batch.title', 'fa5s.file-import', self.import_ultrastar_batch),
                                        ('Projekt oeffnen', 'fa5s.folder-open', self.open),
-                                       ('welcome.community', 'fa5s.users', self.open_community)]:
+                                       ('community.title', 'fa5s.users', self.show_community)]:
             button = QPushButton(qta.icon(icon, color='#cdd3d9'), tr(label))
             button.setMinimumHeight(52)
             button.setFixedWidth(360)
@@ -392,6 +399,9 @@ class StudioWindow(QMainWindow):
 
     def change_language(self, value):
         if value == ui_language():
+            return
+        if self.community_page.worker:
+            self.statusBar().showMessage(tr('community.wait'))
             return
         position, selected = self.position, self.timeline.selected_id
         draft = self.lyrics.toPlainText()
@@ -850,6 +860,16 @@ class StudioWindow(QMainWindow):
             from studio.community_import import import_community
             self.attempt(lambda: self.replace_project(import_community(path)))
 
+    def show_community(self):
+        self.stop()
+        self.workspace_tabs.setCurrentWidget(self.community_page)
+
+    def open_downloaded_song(self, path):
+        if self.confirm_discard():
+            from studio.community_import import import_community
+            self.attempt(lambda: self.replace_project(import_community(path)))
+            self.workspace_tabs.setCurrentWidget(self.screens)
+
     def load_song_media(self):
         path, _ = QFileDialog.getOpenFileName(self, tr('wizard.media'), '',
             'Media (*.mp4 *.mkv *.mov *.wmv *.webm *.mp3 *.wav *.flac *.m4a *.wma *.xWMA);;All files (*)')
@@ -1211,11 +1231,16 @@ class StudioWindow(QMainWindow):
         QMessageBox.critical(self, 'OpenLips Studio', str(exc))
 
     def closeEvent(self, event):
+        if self.community_page.worker:
+            self.statusBar().showMessage(tr('community.wait'))
+            event.ignore()
+            return
         if getattr(self, 'search_worker', None) and self.search_worker.isRunning():
             self.statusBar().showMessage(tr('Bitte Lyrics-Suche abwarten (maximal 15 Sekunden)'))
             event.ignore()
             return
         if self.confirm_discard():
+            self.community_page.client.clear_session()
             self.tones.stop()
             self.player.stop()
             self.video_player.stop()
@@ -1231,6 +1256,7 @@ def main():
     parser.add_argument('--smoke-test', type=Path, help='Write a synthetic UI screenshot and exit')
     parser.add_argument('--smoke-plugin', type=Path, help='Test bundled Basic Pitch and GUI acceptance with generated tones')
     parser.add_argument('--smoke-dlc', type=Path, help='Test bundled Windows encoders and STFS with synthetic media')
+    parser.add_argument('--smoke-community', action='store_true', help='Capture the community sign-in tab without network requests')
     parser.add_argument('--smoke-width', type=int, default=1260)
     parser.add_argument('--smoke-height', type=int, default=790)
     args = parser.parse_args()
@@ -1270,6 +1296,8 @@ def main():
         QTimer.singleShot(150, lambda: run(app, window, args.smoke_plugin))
     elif args.smoke_test:
         window.resize(args.smoke_width, args.smoke_height)
+        if args.smoke_community:
+            window.show_community()
         def capture():
             args.smoke_test.parent.mkdir(parents=True, exist_ok=True)
             if not window.grab().save(str(args.smoke_test)):
