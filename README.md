@@ -67,9 +67,11 @@ Some foundations are already in place:
 - **Create a draft from audio.** Optional local vocal separation, pitch detection and lyric recognition produce an editable chart. Review the result before using it: singing recognition still makes substantial mistakes. Small-model pitch analysis is bundled; the heavier AI engine is a separate download.
 - **Keep synchronized lyrics.** Import LRC files and synchronized LRCLIB results, preview line/word timestamps and save them with the project. Exact automatic syllable alignment is still in progress.
 - **Check the timing.** Play reference audio or video alongside the chart. Adjust playback speed, zoom in and shift notes and page changes together when the chart needs a timing correction.
+- **Check the pitch.** Audition selected notes with a reference tone or enable note tones during playback. Missing optional AI components are downloaded and verified automatically on first use.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
-- **Prepare the presentation.** Choose a cover or generate a simple one. Windows can prepare media for the original Lips, including an optional static cover video. That option currently needs an external FFmpeg installation.
-- **Export and experiment.** Export new chart and lyric files. DLC packaging is available experimentally, but reliable in-game discovery is not finished.
+- **Prepare the presentation.** Choose a cover or generate a simple one. On Windows, DLC export converts the selected video or audio and creates full xWMA audio plus a 15-second preview starting at the first lyric. Video songs also get a small menu preview video. The media tools and STFS backend are included.
+- **Export and experiment.** Save a media-free `.ols` Community song or an experimental DLC package. Reliable in-game DLC discovery is still being investigated.
+- **Group songs and transfer them.** Export a named song pack from saved projects, or copy a verified DLC directly to an Xbox USB drive with a visible `Content` folder. See the [pack and USB guide](docs/song_packs_usb.md) for current limits and testing status.
 
 ![The OpenLips Studio chart editor](assets/screenshots/studio-editor.png)
 

@@ -45,3 +45,26 @@ def test_invalid_page_and_duration_rejected():
     assert phrase_page_starts(notes) == [(None, 0), (0, 1.5)]
     notes[0].length = .75
     assert internal_chart(StudioProject(notes=notes)).notes[0].length == .75
+
+
+def test_ultrastar_terminal_break_does_not_block_export(tmp_path):
+    path = tmp_path / 'synthetic.txt'
+    path.write_text('#TITLE:Ending\n#ARTIST:Test\n#BPM:120\n#GAP:1000\n: 0 4 0 One \n: 4 4 2 two \n- 12\nE\n', encoding='utf-8')
+    project = import_ultrastar(path)
+    last = project.ordered()[-1]
+    assert last.line_break_after
+    assert last.page_break_time == 2.5
+    chart = internal_chart(project)
+    assert phrase_page_starts(chart.notes) == [(None, pytest.approx(.2))]
+    data, _ = build_owned_pair(chart, 'Ending', 'Audio/Ending', song_duration=6)
+    graph = Graph(data)
+    assert len([r for r in graph.records if graph.is_a(r, 'lpsPageBreakMarker')]) == 2
+    assert last.page_break_time == 2.5
+
+
+def test_terminal_break_in_existing_project_is_ignored_but_invalid_time_is_rejected():
+    notes = [EditorNote(1, 1, 60, 'One', line_break_after=True, page_break_time=3)]
+    assert phrase_page_starts(notes) == [(None, pytest.approx(.2))]
+    notes[0].page_break_time = float('nan')
+    with pytest.raises(ValueError, match='finite'):
+        phrase_page_starts(notes)

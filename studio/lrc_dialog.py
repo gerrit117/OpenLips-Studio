@@ -1,11 +1,11 @@
 """Review supplied lyric anchors before attaching them to a Studio project."""
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QTableWidget,
-                              QTableWidgetItem, QDialogButtonBox, QHeaderView)
+                              QTableWidgetItem, QDialogButtonBox, QHeaderView, QCheckBox)
 from studio.i18n import tr
 
 
 class LrcDialog(QDialog):
-    def __init__(self, document, parent=None, *, importing=True):
+    def __init__(self, document, parent=None, *, importing=True, project=None):
         super().__init__(parent)
         self.setWindowTitle(tr('lrc.title'))
         self.resize(700, 460)
@@ -26,6 +26,11 @@ class LrcDialog(QDialog):
                 table.setItem(row, column, item)
         table.resizeRowsToContents()
         layout.addWidget(table)
+        self.assign_notes = QCheckBox(tr('lrc.assign_notes'))
+        self.assign_notes.setVisible(importing and project is not None and bool(project.notes))
+        self.assign_notes.setChecked(project is not None and bool(project.notes)
+            and not any(note.text.strip() for note in project.notes))
+        layout.addWidget(self.assign_notes)
         if document.warnings:
             warning = QLabel('\n'.join(document.warnings))
             warning.setWordWrap(True)

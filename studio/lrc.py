@@ -112,3 +112,50 @@ def attach_lrc(project, document, source=''):
     """Attach source/anchors only. Never invent notes, pitches or word durations."""
     project.lyric_reference = dict(format='lrc', raw=document.raw, source=str(source))
     project.draft_lyrics = document.plain_text()
+
+
+def assign_lrc_notes(project, document):
+    """Distribute supplied text over existing notes, never alter their music.
+
+    Plain LRC has line times only: distribute words over note onsets within
+    each line window as an editable estimate, not claimed forced alignment.
+    """
+    notes = project.ordered()
+    windows = []
+    for index, cue in enumerate(document.cues):
+        end = document.cues[index + 1].time if index + 1 < len(document.cues) else float('inf')
+        anchors = cue.words or [cue]
+        for position, anchor in enumerate(anchors):
+            stop = anchors[position + 1].time if position + 1 < len(anchors) else end
+            if anchor.text.strip() and stop > anchor.time:
+                windows.append((anchor.time, stop, anchor.text, position == len(anchors) - 1))
+    # LRC line times are often coarser than MIDI onsets. Allow a note that
+    # starts just before a lyric anchor but still overlaps it to belong to
+    # that line. Choose one owner only; never stretch notes across large gaps.
+    owners = {}
+    for note in notes:
+        candidates = [i for i, (start, end, _, _) in enumerate(windows)
+                      if start - min(.2, note.length) <= note.time < end]
+        if candidates:
+            owners[note.id] = candidates[-1]
+    assigned = 0
+    for index, (start, end, text, phrase_end) in enumerate(windows):
+        group = [note for note in notes if owners.get(note.id) == index]
+        words = text.split()
+        if not group or not words:
+            continue
+        for i, note in enumerate(group):
+            left = (i * len(words) + len(group) - 1) // len(group)
+            right = ((i + 1) * len(words) + len(group) - 1) // len(group)
+            note.text = ' '.join(words[left:right]) or '~'
+            note.end_word = right > left
+            note.line_break_after = False
+            note.page_break_time = None
+            assigned += 1
+        group[-1].end_word = True
+        group[-1].line_break_after = phrase_end
+    if assigned:
+        message = 'LRC text assigned to existing notes as an estimate; review word/syllable placement.'
+        if message not in project.warnings:
+            project.warnings.append(message)
+    return assigned

@@ -3,11 +3,13 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from studio.app import StudioWindow
+from studio.model import demo_project
 
 
 def test_drag_and_resize_and_follow():
     app = QApplication.instance() or QApplication([])
     window = StudioWindow()
+    window.replace_project(demo_project())
     window.show()
     app.processEvents()
     timeline = window.timeline
@@ -35,6 +37,7 @@ def test_drag_and_resize_and_follow():
 def test_inline_lyric_field_commits_with_undo():
     app = QApplication.instance() or QApplication([])
     window = StudioWindow()
+    window.replace_project(demo_project())
     window.show()
     app.processEvents()
     note = window.project.notes[0]

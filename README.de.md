@@ -67,8 +67,10 @@ Einige Grundlagen sind bereits vorhanden:
 - **Synchronisierte Songtexte behalten.** Die Entwicklungsversion importiert LRC-Dateien und synchronisierte LRCLIB-Ergebnisse, zeigt Zeilen- und Wort-Zeitmarken zur Prüfung an und speichert sie im Projekt. Die automatische KI-Zuordnung ist noch in Arbeit.
 - **Das Timing prüfen.** Referenzaudio oder ein Video zusammen mit dem Chart abspielen. Die Wiedergabegeschwindigkeit ändern, hineinzoomen und bei Bedarf alle Noten samt Seitenwechseln zeitlich verschieben.
 - **Den Zwischenstand speichern.** Mit einem `.olp`-Projekt kannst du einen Song unfertig lassen und später daran weiterarbeiten. Verknüpfte Medien bleiben separate Dateien.
-- **Die Darstellung vorbereiten.** Ein Cover auswählen oder ein einfaches Cover erzeugen lassen. Unter Windows lassen sich Medien für das originale Lips vorbereiten, auf Wunsch auch als statisches Covervideo. Dafür wird derzeit eine separate FFmpeg-Installation benötigt.
-- **Exportieren und ausprobieren.** Neue Chart- und Lyric-Dateien exportieren. Das Erstellen von DLC-Paketen ist experimentell vorhanden; die zuverlässige Erkennung im Spiel ist noch nicht fertig.
+- **Die Darstellung vorbereiten.** Ein Cover auswählen oder ein einfaches Cover erzeugen lassen. Unter Windows wandelt der DLC-Export das ausgewählte Video oder Audio um und erzeugt vollständiges xWMA-Audio sowie eine 15-Sekunden-Vorschau ab dem ersten Texteinsatz. Songs mit Video erhalten zusätzlich ein kleines Vorschauvideo für das Menü. Medienwerkzeuge und STFS-Backend sind enthalten.
+- **Die Tonhöhe prüfen.** Ausgewählte Noten mit einem Referenzton abhören oder die Notentöne während der Wiedergabe einschalten. Fehlende optionale KI-Komponenten werden beim ersten Einsatz automatisch heruntergeladen und geprüft.
+- **Exportieren und ausprobieren.** Einen medienfreien `.ols`-Community-Song oder ein experimentelles DLC-Paket speichern. Die zuverlässige Erkennung von DLCs im Spiel wird weiterhin untersucht.
+- **Songs bündeln und übertragen.** Gespeicherte Projekte als benanntes Song-Pack exportieren oder ein geprüftes DLC direkt auf einen Xbox-USB-Stick mit sichtbarem `Content`-Ordner kopieren. Aktuelle Grenzen und Teststand stehen im [Pack- und USB-Leitfaden](docs/song_packs_usb.md).
 
 ![Der Charteditor von OpenLips Studio](assets/screenshots/studio-editor.png)
 

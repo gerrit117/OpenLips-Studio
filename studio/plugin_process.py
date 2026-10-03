@@ -60,6 +60,18 @@ def validate_manifest(data):
     if not isinstance(extensions, list) or not all(isinstance(x, str) and re.fullmatch(r'\.[a-zA-Z0-9]+', x) for x in extensions):
         raise ValueError('Invalid input extensions')
     parameters = data.get('parameters', [])
+    actions = data.get('ui_actions', [])
+    if not isinstance(actions, list) or len(actions) > 16:
+        raise ValueError('Invalid plugin UI actions')
+    action_ids = set()
+    for action in actions:
+        if (not isinstance(action, dict) or not isinstance(action.get('id'), str)
+                or not re.fullmatch(r'[a-zA-Z0-9_-]+', action['id'])
+                or action['id'] in action_ids or not isinstance(action.get('label'), str)
+                or not action['label'] or action.get('view') not in
+                ('parameters', 'usdb-browser', 'media-download')):
+            raise ValueError('Invalid plugin UI action')
+        action_ids.add(action['id'])
     if not isinstance(parameters, list) or len(parameters) > 64:
         raise ValueError('Invalid plugin parameters')
     keys = set()
@@ -119,4 +131,5 @@ def load_process_plugin(folder, data):
                         parameters=parameters, create_command=command, process_plugin=True,
                         permissions=tuple(data.get('permissions', [])),
                         result_type=data['result_type'], input_required=data.get('input_required', True),
-                        interactive=data.get('interactive', False))
+                        interactive=data.get('interactive', False),
+                        ui_actions=tuple(data.get('ui_actions', [])))

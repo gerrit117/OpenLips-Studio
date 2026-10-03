@@ -64,13 +64,13 @@ def test_media_paths_not_required_and_macos_limit_explained(monkeypatch, platfor
     dialog.close()
 
 
-def test_dlc_dialog_explains_preencoded_media(monkeypatch):
+def test_dlc_dialog_only_asks_for_export_destination():
     from studio.dlc_dialog import DlcDialog
     from studio.model import demo_project
     app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr('studio.dlc_dialog.sys.platform', 'linux')
     set_language('en', persist=False)
     dialog = DlcDialog(demo_project(), None)
-    assert 'already-compatible' in dialog.media_notice.toPlainText()
-    assert 'full audio AND preview' in dialog.media_notice.toPlainText()
+    assert not hasattr(dialog, 'fields')
+    assert 'WVC1' not in dialog.status.text()
+    assert dialog.save_button.isEnabled()
     dialog.close()

@@ -19,12 +19,14 @@ The desktop application uses these separately licensed dependencies:
 | SwiftF0 0.3.0 / bundled ONNX model | MIT; [repository and license](https://github.com/lars76/swift-f0) |
 | Demucs 4.0.1 (optional engine) | MIT; Meta and contributors; [repository](https://github.com/facebookresearch/demucs) |
 | Whisper / optional models | MIT; OpenAI; [repository and license](https://github.com/openai/whisper) |
+| AMD ROCm / optional Radeon runtime | AMD and contributors; component-specific licenses, including bundled third-party libraries; [ROCm licensing](https://rocm.docs.amd.com/en/latest/about/license.html). Applicable license files must accompany distributed runtimes. |
 | faster-whisper 1.2.1 | MIT; SYSTRAN and contributors; [repository](https://github.com/SYSTRAN/faster-whisper) |
 | CTranslate2 | MIT; [repository](https://github.com/OpenNMT/CTranslate2) |
 | PyTorch / TorchAudio | BSD-style licenses and dependency notices; [PyTorch](https://github.com/pytorch/pytorch), [TorchAudio](https://github.com/pytorch/audio) |
 | imageio-ffmpeg | BSD-2-Clause wrapper; bundled FFmpeg binary has its own license/build configuration; [repository](https://github.com/imageio/imageio-ffmpeg) |
-| USDB Syncer (development plugin) | GPL-3.0-only; Markus Böhning and contributors; [repository](https://github.com/bohning/usdb_syncer) |
-| yt-dlp (USDB plugin) | Upstream source Unlicense; packaged dependency notices must also be preserved; [repository](https://github.com/yt-dlp/yt-dlp) |
+| USDB Syncer (optional plugin) | GPL-3.0-only; Markus Böhning and contributors; [repository](https://github.com/bohning/usdb_syncer) |
+| yt-dlp (integrated downloader and USDB plugin) | Upstream source Unlicense; packaged dependency notices must also be preserved; [repository](https://github.com/yt-dlp/yt-dlp) |
+| Deno (integrated downloader) | MIT; [repository](https://github.com/denoland/deno) |
 
 The isolated Basic Pitch worker also uses NumPy, SciPy, Librosa, Pretty MIDI,
 Mir Eval, Resampy, scikit-learn, Numba/LLVM, SoundFile/libsndfile, SoXR and their
@@ -44,17 +46,20 @@ and Whisper weights download from their named upstream registries to a local
 cache, not from arbitrary user-provided model code. No game songs, vocal stems,
 lyrics or original game executables are included in any release artifact.
 
-The optional native STFS backend is separate and uses Velocity/Botan; see
-[backend documentation](docs/dlc_builder.md). It is not bundled in the desktop
-artifact. No Xbox SDK components or game executables are distributed.
+The Windows desktop bundles the GPLv3 Velocity-based STFS adapter and Botan
+(BSD-2-Clause). See [backend documentation](docs/dlc_builder.md) for exact
+source revisions, build instructions and the full-table boundary patch.
+FFprobe is bundled from Gyan's FFmpeg 8.1.2 essentials build; its GPL license,
+build configuration and source references are included in the notices.
+No Xbox SDK components or game executables are distributed.
 
 Before distributing binaries publicly, inventory the exact bundled dependency
 versions and preserve their complete notices/font licenses and source-offer
 requirements as applicable. This summary is not a substitute for those files.
 
-The developing USDB plugin uses the upstream GUI and downloader in an isolated
-process. Its dependency runtime and authenticated download flow are not yet
-released/validated. Before publishing a native plugin, preserve upstream source,
+The optional USDB plugin uses upstream download functions in an isolated
+process. The Windows native runtime is tested offline; authenticated downloads
+still require user validation. Before publishing a native plugin, preserve upstream source,
 licenses and notices, as well as the FFmpeg build's complete notices and source
 requirements. Adding a Python package's license inventory alone is not enough
 for the third-party FFmpeg executable contained in its wheel.

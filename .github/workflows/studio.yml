@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['studio/**', 'plugins/**', 'tests/**', 'tools/media/**', 'tools/*ai*.py', 'tools/build_studio_installer.py', 'packaging/**', 'requirements-ai.txt', 'tools/package_studio_release.py', 'tools/package_basic_pitch_plugin.py', 'tools/basic_pitch_requirements.txt', 'tools/collect_runtime_notices.py', 'pyproject.toml', 'OpenLipsStudio.spec', 'BasicPitchWorker.spec', 'AIWorker.spec', '.github/workflows/studio.yml']
+    paths: ['studio/**', 'plugins/**', 'tests/**', 'tools/media/**', 'tools/*ai*.py', 'tools/youtube_download.py', 'tools/build_studio_installer.py', 'packaging/**', 'requirements-ai.txt', 'requirements-ai-amd-windows.txt', 'tools/package_studio_release.py', 'tools/package_basic_pitch_plugin.py', 'tools/basic_pitch_requirements.txt', 'tools/collect_runtime_notices.py', 'pyproject.toml', 'OpenLipsStudio.spec', 'DownloadWorker.spec', 'BasicPitchWorker.spec', 'AIWorker.spec', '.github/workflows/studio.yml']
 jobs:
   desktop:
     strategy:
@@ -64,7 +64,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - name: Package standalone Basic Pitch plugin
         run: python -m tools.package_basic_pitch_plugin
-      - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py tests/test_studio_media.py tests/test_studio_release.py tests/test_studio_plugins.py tests/test_ai_chart.py tests/test_ai_packaging.py tests/test_xenia_test_launcher.py -q
+      - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py tests/test_studio_media.py tests/test_studio_release.py tests/test_studio_plugins.py tests/test_studio_tones.py tests/test_ai_runtime.py tests/test_ai_chart.py tests/test_ai_packaging.py tests/test_xenia_test_launcher.py tests/test_smart_pages.py tests/test_ultrastar_batch.py -q
         env:
           QT_QPA_PLATFORM: offscreen
           OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ runner.os == 'Linux' && 'linux-x64' || runner.os == 'Windows' && 'windows-x64' || matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
@@ -77,6 +77,53 @@ jobs:
           cl /EHsc /std:c++17 tools\media\transcode_windows.cpp /Fo:private\runtime\og-framing-test\transcode_windows.obj /Fe:private\runtime\og-framing-test\transcode_windows.exe
       - name: Prepare desktop notices before app-bundle signing
         run: python tools/collect_runtime_notices.py --out build/studio-licenses
+      - name: Fetch pinned Windows DLC dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          git clone https://github.com/hetelek/Velocity.git private/runtime/Velocity
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C private/runtime/Velocity checkout cf0b84cc8bbfad09c655476c6a3c762836ce1246
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C private/runtime/Velocity apply "$PWD/tools/dlc_backend/velocity-full-table.patch"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git clone https://github.com/randombit/botan.git private/runtime/botan
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C private/runtime/botan checkout 07e1cfe0a06b224bbb37ad534736924931184246
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-8.1.2-essentials_build.zip -OutFile private/runtime/ffmpeg.zip
+          if ((Get-FileHash private/runtime/ffmpeg.zip -Algorithm SHA256).Hash.ToLower() -ne 'db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec') { throw 'FFmpeg archive checksum mismatch' }
+          Expand-Archive private/runtime/ffmpeg.zip private/runtime/usdb-media/extracted
+          Copy-Item private/runtime/usdb-media/extracted/ffmpeg-8.1.2-essentials_build/LICENSE build/studio-licenses/FFmpeg-Gyan-LICENSE.txt
+          Copy-Item private/runtime/usdb-media/extracted/ffmpeg-8.1.2-essentials_build/README.txt build/studio-licenses/FFmpeg-Gyan-README.txt
+          Copy-Item private/runtime/Velocity/COPYING build/studio-licenses/Velocity-COPYING.txt
+          Copy-Item private/runtime/botan/license.txt build/studio-licenses/Botan-LICENSE.txt
+      - name: Build integrated Windows STFS backend
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          pushd private\runtime\botan
+          python configure.py --cc=msvc --cpu=x86_64 --os=windows --build-targets=static --minimized-build --enable-modules=sha1,rsa,auto_rng --disable-shared-library
+          if errorlevel 1 exit /b 1
+          nmake
+          if errorlevel 1 exit /b 1
+          popd
+          cmake -S tools/dlc_backend -B private/runtime/dlc-backend-build -DVELOCITY_ROOT="%CD%/private/runtime/Velocity" -DBOTAN_ROOT="%CD%/private/runtime/botan"
+          if errorlevel 1 exit /b 1
+          cmake --build private/runtime/dlc-backend-build --config Release
+          if errorlevel 1 exit /b 1
+      - name: Test automatic audio and video DLC export
+        if: runner.os == 'Windows'
+        run: python -m pytest tests/test_studio_dlc_media.py tests/test_build_dlc.py -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OPENLIPS_TEST_NATIVE_DLC: '1'
+          OPENLIPS_STFS_BACKEND: private/runtime/dlc-backend-build/Release/openlips_stfs.exe
+      - name: Inventory integrated downloader notices
+        run: python -m tools.collect_runtime_notices --out build/download-licenses
+      - name: Build integrated yt-dlp worker
+        run: python -m PyInstaller --noconfirm DownloadWorker.spec
       - run: python -m PyInstaller --noconfirm OpenLipsStudio.spec
       - name: Test bundled pitch model in frozen Studio
         run: python -m tools.smoke_ai_worker dist/OpenLipsStudio/OpenLipsStudio${{ runner.os == 'Windows' && '.exe' || '' }} --embedded --out private/ai-studio-smoke
@@ -122,6 +169,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-windows-x64.opl
+      - name: Test automatic DLC export in frozen Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/OpenLipsStudio/OpenLipsStudio.exe -ArgumentList '--smoke-dlc','private/frozen-dlc-smoke' -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { Get-Content private/frozen-dlc-smoke/failure.txt; exit $process.ExitCode }
+        env:
+          QT_QPA_PLATFORM: offscreen
       - run: python -m tools.package_studio_release --target ${{ matrix.os }}
       - name: Build Windows installer wizard
         if: runner.os == 'Windows'
@@ -148,8 +203,24 @@ jobs:
             private/gui-plugin-smoke/*.log
             private/gui-plugin-app-bundle-smoke/*.txt
             private/gui-plugin-app-bundle-smoke/*.log
+  amd-ai:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-ai-amd-windows.txt pyinstaller
+      - run: python -m tools.collect_runtime_notices --out build/amd-ai-licenses
+      - run: python -m PyInstaller --noconfirm AIWorker.spec
+      - run: python -m tools.package_ai_runtime --target windows-2022 --flavor amd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-release-amd-ai
+          path: release_assets/*
+          retention-days: 14
   release:
-    needs: desktop
+    needs: [desktop, amd-ai]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -184,13 +255,13 @@ jobs:
                 target_commitish: context.sha, name: 'OpenLips Studio ' + version.replace(/b\d+$/, ' Beta'),
                 prerelease: /b\d+$/.test(version), draft: false,
                 body: fs.readFileSync('CHANGELOG.md', 'utf8').split(/^## /m)[1].split(/^## /m)[0].replace(/^[^\n]*\n/, '').trim() + '\n\n' +
-                      'Native Windows installer, macOS DMGs (Apple Silicon / Intel), and portable archives. Basic Pitch remains a separate .opl plugin. Optional OpenLips-AI archives contain the independent inference engine; select OpenLipsAI in the audio-chart dialog. No separate Python installation is needed. SwiftF0 and FFmpeg are bundled; larger separation/transcription models download on first use.\n\n' +
+                      'Native Windows installer, macOS DMGs (Apple Silicon / Intel), and portable archives. Basic Pitch remains a separate .opl plugin. Optional OpenLips-AI archives contain the independent inference engine, installed automatically when needed. A separate Windows AMD ROCm engine accelerates separation and transcription on supported Radeon GPUs. No separate Python installation is needed. SwiftF0 and FFmpeg are bundled; larger separation/transcription models download on first use.\n\n' +
                       'AI drafts require manual review, especially sung lyrics. Beta: DLC discovery is experimental; final OG media encoding currently requires Windows. macOS/Linux game export needs already-compatible media.\n\n' +
                       'Technical documentation: https://github.com/' + owner + '/' + repo + '/tree/' + tag + '/docs'
               })).data;
             }
             const files = fs.readdirSync('release_assets').filter(name => /\.(zip|tar\.gz|opl|exe|dmg|sha256)$/.test(name));
-            if (files.length !== 30) throw new Error('Expected 15 binaries/archives and 15 checksum files (Studio, plugins, AI engines, installers)');
+            if (files.length !== 32) throw new Error('Expected 16 binaries/archives and 16 checksum files (Studio, plugins, CPU/AMD AI engines, installers)');
             const existing = (await github.rest.repos.listReleaseAssets({owner, repo, release_id: release.id})).data;
             for (const name of files) {
               const old = existing.find(asset => asset.name === name);

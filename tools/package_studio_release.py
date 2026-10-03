@@ -28,7 +28,8 @@ def package(target, dist=Path('dist'), output=Path('release_assets')):
         raise ValueError(f'Missing frozen application: {source}')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    paths = sorted(source.rglob('*'))
+    paths = sorted(path for path in source.rglob('*')
+                   if path.relative_to(source).parts[0] not in ('ai', 'ai-amd'))
     for path in paths:
         if path.is_symlink():
             path.resolve(strict=True).relative_to(source.resolve())
@@ -38,7 +39,10 @@ def package(target, dist=Path('dist'), output=Path('release_assets')):
         raise FileExistsError(archive)
     if extension == '.tar.gz':
         with tarfile.open(archive, 'w:gz', dereference=False) as stream:
-            stream.add(source, arcname=source.name)
+            stream.add(source, arcname=source.name,
+                       filter=lambda entry: None if any(entry.name == source.name + '/' + name or
+                           entry.name.startswith(source.name + '/' + name + '/')
+                           for name in ('ai', 'ai-amd')) else entry)
     else:
         with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED) as stream:
             for path in paths:

@@ -13,6 +13,42 @@ FORMAT = "openlips-studio-project"
 SCHEMA_VERSION = 1
 
 
+def merge_selection(project, identifiers, validate_only=False):
+    """Merge consecutive, same-pitch notes without crossing a page boundary."""
+    ordered = project.ordered()
+    identifiers = set(identifiers)
+    indices = [i for i, note in enumerate(ordered) if note.id in identifiers]
+    if len(indices) < 2 or len(indices) != len(identifiers):
+        raise ValueError('Select at least two existing notes')
+    if indices != list(range(indices[0], indices[-1] + 1)):
+        raise ValueError('Only consecutive notes can be merged')
+    notes = [ordered[i] for i in indices]
+    if len({note.pitch for note in notes}) != 1:
+        raise ValueError('Merged notes must have the same pitch')
+    if any(note.line_break_after for note in notes[:-1]):
+        raise ValueError('Notes on different lyric pages cannot be merged')
+    if validate_only:
+        return notes
+    selected, last = notes[0], notes[-1]
+    end = max(note.time + note.length for note in notes)
+    fragments = []
+    previous = None
+    for note in notes:
+        text = note.text.strip()
+        if text and text != '~':
+            if fragments and previous and previous.end_word:
+                fragments.append(' ')
+            fragments.append(text)
+        previous = note
+    selected.length = end - selected.time
+    selected.text = ''.join(fragments)
+    selected.end_word = last.end_word
+    selected.line_break_after = last.line_break_after
+    selected.page_break_time = last.page_break_time
+    project.notes[:] = [note for note in project.notes if note.id not in identifiers or note is selected]
+    return selected
+
+
 @dataclass
 class EditorNote:
     time: float
@@ -56,13 +92,20 @@ class StudioProject:
     draft_lyrics: str = ""
     warnings: list[str] = field(default_factory=list)
     lyric_reference: dict = field(default_factory=dict)
+    video_reference: str = ''
+    preview_start: float | None = None
+    preview_length: float = 15.0
 
     def validate(self):
         if not math.isfinite(self.bpm) or not 1 <= self.bpm <= 1000:
             raise ValueError("BPM must be in 1..1000")
         if not math.isfinite(self.reference_offset) or abs(self.reference_offset) > 86400:
             raise ValueError('Invalid reference offset')
-        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'cover_path', 'source', 'draft_lyrics'):
+        if self.preview_start is not None and (not math.isfinite(self.preview_start) or self.preview_start < 0):
+            raise ValueError('Preview start must be finite and nonnegative')
+        if not math.isfinite(self.preview_length) or not 0 < self.preview_length <= 3600:
+            raise ValueError('Preview length must be in 0..3600 seconds')
+        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'cover_path', 'source', 'draft_lyrics', 'video_reference'):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"Project {name} must be text")
         if len(self.notes) > 100000:

@@ -9,7 +9,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 from tools.build_dlc import (asset_name, build_package, make_manifest,
-                             upload_package, verify_stfs, xbox_path)
+                             marketplace_filename, upload_package, verify_stfs, xbox_path)
 
 
 class FakeFTP:
@@ -37,6 +37,30 @@ class FakeFTP:
 
 
 class DLC(unittest.TestCase):
+    def test_marketplace_name_uses_header_id_not_whole_file_or_song_id(self):
+        header = bytearray(0x364)
+        header[:4] = b'LIVE'
+        header[0x344:0x348] = (2).to_bytes(4, 'big')
+        header[0x360:0x364] = (0x4D530888).to_bytes(4, 'big')
+        content_id = bytes(range(20))
+        header[0x32C:0x340] = content_id
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp) / 'custom.LIVE'
+            package.write_bytes(header + b'synthetic payload')
+            expected = content_id.hex().upper() + '4D'
+            self.assertEqual(marketplace_filename(package), expected)
+            self.assertEqual(len(expected), 42)
+            self.assertEqual(xbox_path(expected).split('/')[-1], expected)
+            for offset in (0, 0x344, 0x360):
+                invalid = bytearray(header)
+                invalid[offset] ^= 1
+                package.write_bytes(invalid)
+                with self.assertRaises(ValueError):
+                    marketplace_filename(package)
+            package.write_bytes(header[:100])
+            with self.assertRaises(ValueError):
+                marketplace_filename(package)
+
     def test_independent_hash_validation_and_damage(self):
         # One synthetic allocated block and its hash table, no real game data.
         data = bytearray(0xD000)
@@ -122,13 +146,31 @@ class DLC(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             for size in (1, 167 * 4096, 168 * 4096, 169 * 4096,
-                         170 * 4096, 171 * 4096, 1024 * 1024):
+                         170 * 4096, 171 * 4096, 338 * 4096,
+                         1358 * 4096, 1024 * 1024):
                 source = tmp / 'synthetic.dat'
                 source.write_bytes(b'S' * size)
                 package = tmp / f'{size}.LIVE'
                 report = build_package(backend, {'synthetic.dat': source}, b'<DLCContents/>', package, 'Test \u00e4')
                 self.assertEqual(report['allocated_blocks'], 2 + (size + 4095) // 4096)
                 self.assertEqual(report['sha256'], hashlib.sha256(package.read_bytes()).hexdigest())
+                if size == 1:
+                    automatic = tmp / 'automatic'
+                    automatic.mkdir()
+                    named = build_package(backend, {'synthetic.dat': source}, b'<DLCContents/>',
+                                          automatic, 'Test', canonical_name=True)
+                    emitted = Path(named['output_path'])
+                    self.assertEqual(emitted.name, marketplace_filename(emitted))
+                    self.assertEqual(len(emitted.name), 42)
+                    self.assertEqual(named['sha256'], hashlib.sha256(emitted.read_bytes()).hexdigest())
+                    before = emitted.read_bytes()
+                    # Backend timestamps can change the header ID between builds.
+                    # Force the existing final name to exercise no-replace publication.
+                    with patch('tools.build_dlc.marketplace_filename', return_value=emitted.name), self.assertRaises(FileExistsError):
+                        build_package(backend, {'synthetic.dat': source}, b'<DLCContents/>',
+                                      automatic, 'Test', canonical_name=True)
+                    self.assertEqual(emitted.read_bytes(), before)
+                    self.assertEqual(list(automatic.iterdir()), [emitted])
                 original = package.read_bytes()
                 corrupt = bytearray(original)
                 corrupt[-1] ^= 1

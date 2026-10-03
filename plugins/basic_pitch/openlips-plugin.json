@@ -5,6 +5,7 @@
   "type": "process",
   "protocol": 1,
   "result_type": "note-draft",
+  "ui_actions": [{"id": "analyse", "label": "Basic Pitch: Audio to notes", "view": "parameters"}],
   "author": "Spotify Audio Intelligence Lab; OpenLips integration",
   "version": "0.4.0-2",
   "homepage": "https://github.com/spotify/basic-pitch",

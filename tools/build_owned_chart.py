@@ -19,17 +19,66 @@ try:
     from tools.build_minimal_ixb_pair import _frame_chunks, _join_ixb, _object, _payload
     from tools.patch_melody_timing import _tone_octave_for_raw_pitch
     from tools.walk_ixb_graph import Graph, GraphError
-    from tools.write_template_chart import SongChart, load_json_chart, _build_visible_lyric_payload
+    from tools.write_template_chart import SongChart, TextPlacement, load_json_chart
 except ModuleNotFoundError:
     from build_lyric_resource import _schema, build_lyric_ixb
     from build_minimal_ixb_pair import _frame_chunks, _join_ixb, _object, _payload
     from patch_melody_timing import _tone_octave_for_raw_pitch
     from walk_ixb_graph import Graph, GraphError
-    from write_template_chart import SongChart, load_json_chart, _build_visible_lyric_payload
+    from write_template_chart import SongChart, TextPlacement, load_json_chart
 
 
 TRACKS = ("Time", "Conductor", "Audio", "Lyric", "Melody", "Group", "Section",
           "CallAndResponse", "Movie", "AudioEffect", "Led")
+
+
+def midi_to_lips_pitch(pitch: int) -> tuple[int, float, int]:
+    """Convert Studio MIDI to the descending file index and ascending Tone.
+
+    The legacy raw-index helper is not a MIDI converter. In the observed
+    layout raw_index + fIdx + 12 * octave = 127.
+    """
+    raw_index = 127 - pitch
+    tone, octave = _tone_octave_for_raw_pitch(raw_index)
+    return raw_index, tone, octave
+
+
+def owned_lyric_payload(chart: SongChart):
+    """Emit text placements only for syllables, not bare '~' continuations."""
+    text = "\ufeff\r\n"
+    placements = {}
+    previous = None
+    for index, note in enumerate(chart.notes):
+        fragment = note.text.replace("~", "")
+        if fragment:
+            place = TextPlacement(len(text), len(fragment))
+            text += fragment
+            previous = place
+            placements[index] = place
+        elif previous is not None:
+            pass
+        else:
+            raise ValueError("A melisma continuation needs a preceding lyric fragment")
+        if note.line_break_after:
+            text += "\r\n"
+            previous = None
+        elif note.end_word:
+            text += " "
+    return (text.rstrip(" ") + "\r\n").encode("utf-8"), placements
+
+
+def owned_lyric_word_ends(chart, placements):
+    """A final continuation ends the original syllable without repeating it."""
+    ends = {}
+    previous = None
+    for index, note in enumerate(chart.notes):
+        if index in placements:
+            previous = index
+        if previous is not None:
+            ends[previous] = ends.get(previous, False) or note.end_word
+        if note.line_break_after:
+            previous = None
+    return ends
 
 
 def offset_notes(chart: SongChart, seconds: float) -> SongChart:
@@ -72,8 +121,11 @@ def phrase_page_starts(notes):
             phrase_end = following.time + following.length
         else:
             phrase_end = max(phrase_end, following.time + following.length)
-    if getattr(ordered[-1][1], 'page_break_time', None) is not None:
-        raise ValueError('Last note cannot define a next-page switch without a following phrase')
+    # UltraStar may close its final line with a timed break. There is no
+    # following phrase to display, so keep the ending but emit no new page.
+    final_time = getattr(ordered[-1][1], 'page_break_time', None)
+    if final_time is not None and (not math.isfinite(final_time) or final_time < 0):
+        raise ValueError('Page switch timing must be finite and nonnegative')
     return pages
 
 # Stable first-word file-layout tokens in plain OG charts where present.
@@ -222,7 +274,8 @@ def build_owned_pair(chart: SongChart, name: str, audio_name: str, *, bpm=120.0,
             raise ValueError("invalid note timing, pitch or text")
         if any(ord(c) > 0xffff for c in note.text):
             raise ValueError("non-BMP lyric offset semantics are not yet verified")
-    text, placements = _build_visible_lyric_payload(chart)
+    text, placements = owned_lyric_payload(chart)
+    word_ends = owned_lyric_word_ends(chart, placements)
     e = Emitter()
     root, package, chart_key = e.key(), e.key(), e.key()
     sentinel, child, empty = e.key(), e.key(), e.key()
@@ -244,18 +297,21 @@ def build_owned_pair(chart: SongChart, name: str, audio_name: str, *, bpm=120.0,
         return key
 
     for i, note in enumerate(chart.notes):
-        body = e.code(36, note.time, note.length, note.pitch, refs=2)
-        tone, octave = _tone_octave_for_raw_pitch(note.pitch)
+        raw_index, tone, octave = midi_to_lips_pitch(note.pitch)
+        body = e.code(36, note.time, note.length, raw_index,
+                      refs=2 if i in placements else 1)
         struct.pack_into(">fI", body, 24, tone, octave)
         melody = append("Melody", "lpsPhraseMarker", body)
+        if i not in placements:
+            continue
         word = bytearray(32 * 20)
         place = placements[i]
         # Unknown fields are deliberately zero; this requires runtime testing.
         struct.pack_into(">III", word, 4, place.offset, place.length,
-                         int(note.end_word))
-        body = e.code(64, note.time, note.length, note.pitch)
+                         int(word_ends[i]))
+        body = e.code(64, note.time, note.length, raw_index)
         struct.pack_into(">IIIII", body, 24, melody, e.raw(word), 32, 1, 0)
-        struct.pack_into(">I", body, 60, int(note.end_word))
+        struct.pack_into(">I", body, 60, int(word_ends[i]))
         append("Lyric", "lpsLyricMarker", body)
     tags = (("Start", time_start), ("Stop", time_stop)) if movie_name else (
         ("Beat8", 0.0), ("PV Start", time_start), ("PV Stop", time_stop))
@@ -337,13 +393,30 @@ def validate_owned_chart(data, payload, expected):
                     raise GraphError("missing, aliased or incorrectly sized owned string")
                 owners.add(buffer.key)
     markers = [r for r in graph.records if graph.is_a(r, "lpsLyricMarker")]
-    if len(markers) != len(expected.notes):
+    expected_payload, placements = owned_lyric_payload(expected)
+    word_ends = owned_lyric_word_ends(expected, placements)
+    if len(markers) != len(placements):
         raise GraphError("lyric count mismatch")
-    for r, note in zip(markers, expected.notes, strict=True):
+    expected_text = expected_payload.decode("utf-8")
+    melodies = [r for r in graph.records if graph.is_a(r, "lpsMelodyMarker")]
+    for r, index in zip(markers, placements, strict=True):
         info, word = graph.vector(r, "m_vecLyricWordData", 20)
         offset, length = graph.u32(word, 4), graph.u32(word, 8)
-        if info["size"] != 1 or text[offset:offset + length] != note.text:
+        place = placements[index]
+        if (info["size"] != 1 or (offset, length) != (place.offset, place.length)
+                or text[offset:offset + length] != expected_text[place.offset:place.offset + place.length]):
             raise GraphError("generated lyric mapping mismatch")
+        melody = graph.ref(graph.u32(r, 24))
+        if (melody != melodies[index] or graph.u32(r, 60) != int(word_ends[index])
+                or graph.u32(word, 12) != int(word_ends[index])):
+            raise GraphError("generated lyric ownership/word boundary mismatch")
+    for melody, note in zip(melodies, expected.notes, strict=True):
+        raw_index, tone, octave = midi_to_lips_pitch(note.pitch)
+        actual = struct.unpack_from(">ffi4xfI", data, melody.payload + 8)
+        wanted = (note.time, note.length, raw_index, tone, octave)
+        if any(not math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-6)
+               for a, b in zip(actual, wanted)):
+            raise GraphError("generated melody timing/pitch mismatch")
     return summary
 
 

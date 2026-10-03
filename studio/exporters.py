@@ -8,6 +8,39 @@ from tools.write_template_chart import Note, SongChart, _validate_note
 from tools.build_owned_chart import build_owned_pair
 
 
+def export_community_song(project, path, *, duration, youtube=None, album='', genre='', language=''):
+    from tools.song_bundle import encode_bundle
+    from studio.media import write_cover
+    chart = internal_chart(project)
+    chart_bytes, lyric_bytes = build_owned_pair(chart, 'community_song', 'community_song.xWMA',
+                                               bpm=project.bpm, song_duration=duration)
+    with tempfile.TemporaryDirectory(prefix='openlips-cover-') as temp:
+        cover = write_cover(project, Path(temp) / 'cover.jpg').read_bytes()
+    data = encode_bundle(chart_bytes, lyric_bytes, cover,
+                         metadata=dict(title=project.title, artist=project.artist, album=album,
+                                       genre=genre, language=language, family='og'),
+                         duration=duration, youtube=youtube, offset=project.reference_offset)
+    path = Path(path)
+    if path.suffix.lower() != '.ols':
+        raise ValueError('Community export must end in .ols')
+    # Exclusive creation never replaces an existing song or project.
+    created = False
+    try:
+        try:
+            with path.open('xb') as stream:
+                created = True
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except Exception:
+            if created:
+                path.unlink(missing_ok=True)
+            raise
+    except FileExistsError:
+        raise FileExistsError('Choose a new file; existing exports are not overwritten') from None
+    return path
+
+
 def internal_chart(project):
     project.validate()
     notes = [Note(n.time, n.length, n.pitch, n.text, n.end_word, n.line_break_after, n.page_break_time)

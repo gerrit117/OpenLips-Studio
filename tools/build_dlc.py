@@ -17,10 +17,13 @@ import subprocess
 import tempfile
 import uuid
 import math
+import mmap
 from xml.etree import ElementTree as ET
 
 TITLE_ID = 0x4D530888
 BLOCK = 4096
+# Conservative native-backend ceiling, not a Lips or STFS format limit.
+MAX_ASSET_BYTES = 2 * 1024 ** 3 - 32 * 1024 ** 2
 
 
 def sha256(path):
@@ -31,9 +34,34 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def marketplace_filename(package):
+    """Use the observed Lips DLC convention: header content ID + literal 4D.
+
+    The suffix is corpus-derived, not asserted to be universal across Xbox titles.
+    Call after the final rehash; a whole-file digest or Song ID is not this ID.
+    """
+    with Path(package).open('rb') as stream:
+        header = stream.read(0x364)
+    if (len(header) != 0x364 or header[:4] != b'LIVE'
+            or int.from_bytes(header[0x344:0x348], 'big') != 2
+            or int.from_bytes(header[0x360:0x364], 'big') != TITLE_ID):
+        raise ValueError('expected a Lips LIVE marketplace header')
+    content_id = header[0x32C:0x340]
+    if not any(content_id):
+        raise ValueError('missing STFS header content ID')
+    return content_id.hex().upper() + '4D'
+
+
 def verify_stfs(path):
-    """Independently verify single-copy STFS trees (levels 0/1), not signatures."""
-    data = Path(path).read_bytes()
+    """Verify single-copy level 0/1/2 trees without loading the package into RAM."""
+    with Path(path).open('rb') as stream:
+        if os.fstat(stream.fileno()).st_size < 0xA000:
+            raise ValueError('expected unsigned LIVE STFS')
+        with mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
+            return _verify_stfs_data(data)
+
+
+def _verify_stfs_data(data):
     if len(data) < 0xA000 or data[:4] != b'LIVE':
         raise ValueError('expected unsigned LIVE STFS')
     if any(data[4:0x104]):
@@ -51,9 +79,10 @@ def verify_stfs(path):
     if data[0x37B] != 1:
         raise ValueError('only single-copy hash tables supported by this validator')
     count = int.from_bytes(data[0x395:0x399], 'big')
-    if not 0 < count <= 0x70E4:
-        raise ValueError('only level 0/1 STFS trees supported (maximum 28,900 blocks)')
-    top = header_end + (171 * BLOCK if count > 170 else 0)
+    if not 0 < count <= 170 ** 3:
+        raise ValueError('invalid STFS block count')
+    level = 2 if count > 170 ** 2 else 1 if count > 170 else 0
+    top = header_end + (0x718F if level == 2 else 171 if level == 1 else 0) * BLOCK
 
     def block_at(offset):
         value = data[offset:offset + BLOCK]
@@ -64,20 +93,37 @@ def verify_stfs(path):
     if hashlib.sha1(block_at(top)).digest() != data[0x381:0x395]:
         raise ValueError('STFS top table hash mismatch')
     groups = (count + 169) // 170
+    if level == 2:
+        for parent in range((groups + 169) // 170):
+            position = header_end + (171 if parent == 0 else 1 + parent * 0x718F) * BLOCK
+            expected = data[top + parent * 24:top + parent * 24 + 20]
+            if hashlib.sha1(block_at(position)).digest() != expected:
+                raise ValueError(f'STFS level 1 table hash mismatch: group {parent}')
     for group in range(groups):
-        table_offset = header_end + (0 if group == 0 else group * 171 + 1) * BLOCK
+        physical_table = (0 if group == 0 else
+            group * 171 + group // 170 + 1 + (1 if group >= 170 else 0))
+        table_offset = header_end + physical_table * BLOCK
         table = block_at(table_offset)
         if count > 170:
-            entry = top + group * 24
+            parent = group // 170
+            parent_position = (header_end + (171 if parent == 0 else 1 + parent * 0x718F) * BLOCK)
+            entry = parent_position + (group % 170) * 24
             if hashlib.sha1(table).digest() != data[entry:entry + 20]:
                 raise ValueError(f'STFS level 0 table hash mismatch: group {group}')
         for index in range(min(170, count - group * 170)):
             number = group * 170 + index
-            physical = number + (number + 170) // 170 + (1 if number >= 170 else 0)
+            physical = number + (number + 170) // 170
+            if number >= 170:
+                physical += (number + 170 ** 2) // (170 ** 2)
+            if number >= 170 ** 2:
+                physical += 1
             if hashlib.sha1(block_at(header_end + physical * BLOCK)).digest() != table[index * 24:index * 24 + 20]:
                 raise ValueError(f'STFS data hash mismatch: block {number}')
+    digest = hashlib.sha256()
+    for offset in range(0, len(data), 1024 * 1024):
+        digest.update(data[offset:offset + 1024 * 1024])
     return dict(title_id=title_id, allocated_blocks=count, hash_groups=groups,
-                bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+                hash_level=level, bytes=len(data), sha256=digest.hexdigest())
 
 
 def asset_name(name):
@@ -87,7 +133,7 @@ def asset_name(name):
     return name
 
 
-def make_manifest(title, artist, uint_id, duration, assets):
+def make_manifest(title, artist, uint_id, duration, assets, *, preview_lyric=''):
     if not 0 < uint_id <= 0xFFFFFFFF:
         raise ValueError('UintID must be an unused positive 32-bit ID')
     if not title.strip() or not artist.strip() or not math.isfinite(duration) or not 0 < duration < 86400:
@@ -101,7 +147,7 @@ def make_manifest(title, artist, uint_id, duration, assets):
                   LyricUri=assets['lyric'], AlbumJacketUri=assets['jacket'],
                   PreviewAudioUri=assets['preview_audio'], offerID=f'{uint_id:X}',
                   UintID=f'0x{uint_id:08X}', ChartContentID=content_id,
-                  VideoContentID=content_id if 'video' in assets else '0', PreviewLyric='')
+                  VideoContentID=content_id if 'video' in assets else '0', PreviewLyric=preview_lyric)
     for key, value in fields.items():
         ET.SubElement(music, key).text = value
     if 'video' in assets:
@@ -111,26 +157,31 @@ def make_manifest(title, artist, uint_id, duration, assets):
                               PreviewAudioUri=assets['preview_audio'],
                               VideoContentID=content_id, ChartID=content_id + '_00').items():
             ET.SubElement(video, key).text = value
+        if 'preview_video' in assets:
+            ET.SubElement(video, 'PreviewVideoUri').text = assets['preview_video']
     ET.SubElement(root, 'LicenseBits', ValidBits='3').text = '0x7'
     ET.indent(root)
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
 
-def build_package(backend, files, manifest, output, display_name):
+def build_package(backend, files, manifest, output, display_name, *, canonical_name=False):
     if len(display_name.encode('utf-16-be')) > 254:
         raise ValueError('STFS display name must fit in 127 UTF-16 code units')
     output = Path(output).resolve()
     if not str(output).isascii():
         raise ValueError('the current native backend requires an ASCII output directory/path')
-    if output.exists():
+    if canonical_name and not output.is_dir():
+        raise ValueError('automatic package naming requires an existing output directory')
+    if not canonical_name and output.exists():
         raise FileExistsError(f'refusing to overwrite {output}')
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if sum(Path(p).stat().st_size for p in files.values()) > 110 * 1024 * 1024:
-        raise ValueError('initial backend validation limit: 110 MiB total assets')
+    directory = output if canonical_name else output.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    if sum(Path(p).stat().st_size for p in files.values()) > MAX_ASSET_BYTES:
+        raise ValueError('native backend limit: 2016 MiB total assets')
     folded = [asset_name(n).casefold() for n in files]
     if len(set(folded)) != len(folded) or 'dlc.xml' in folded:
         raise ValueError('duplicate or reserved asset filename')
-    with tempfile.TemporaryDirectory(prefix='openlips-dlc-', dir=output.parent) as temp:
+    with tempfile.TemporaryDirectory(prefix='openlips-dlc-', dir=directory) as temp:
         temp = Path(temp)
         staging = temp / 'assets'
         staging.mkdir()
@@ -150,11 +201,53 @@ def build_package(backend, files, manifest, output, display_name):
         actual = {p.name: sha256(p) for p in extracted.iterdir() if p.is_file()}
         if actual != expected or any(not p.is_file() for p in extracted.iterdir()):
             raise ValueError('STFS extraction inventory/content differs from staging')
+        if canonical_name:
+            output = directory / marketplace_filename(package)
         with package.open('r+b') as stream:
             os.fsync(stream.fileno())
         # Same-volume hard link publishes atomically and refuses an existing name.
         os.link(package, output)
+    result['output_path'] = str(output)
     return result
+
+
+def make_pack_manifest(songs, pack_id):
+    """Multiple indices share the package offer/content ID, not the song ID."""
+    if not songs or not 0 < pack_id <= 0xFFFFFFFF:
+        raise ValueError('a song pack needs songs and a positive package ID')
+    root = ET.Element('DLCContents')
+    indices = ET.SubElement(root, 'MusicIndices')
+    videos = ET.SubElement(root, 'MusicVideos')
+    ids, names = set(), set()
+    content_id = f'{TITLE_ID:08X}{pack_id:08X}'
+    for index, song in enumerate(songs):
+        if song['uint_id'] in ids:
+            raise ValueError('duplicate song ID in pack')
+        ids.add(song['uint_id'])
+        for name in song['assets'].values():
+            folded = asset_name(name).casefold()
+            if folded in names:
+                raise ValueError('duplicate asset name in pack')
+            names.add(folded)
+        single = ET.fromstring(make_manifest(song['title'], song['artist'],
+            song['uint_id'], song['duration'], song['assets'],
+            preview_lyric=song.get('preview_lyric', '')))
+        music = single.find('MusicIndices/MusicIndex')
+        music.find('offerID').text = f'{pack_id:X}'
+        music.find('ChartContentID').text = content_id
+        music.find('VideoContentID').text = content_id if 'video' in song['assets'] else '0'
+        indices.append(music)
+        video = single.find('MusicVideos/MusicVideo')
+        if video is not None:
+            video.find('VideoContentID').text = content_id
+            video.remove(video.find('ChartID'))
+            ET.SubElement(video, 'ID').text = f'{content_id}_{index:03d}'
+            videos.append(video)
+    if not len(videos):
+        root.remove(videos)
+    ET.SubElement(root, 'LicenseBits', ValidBits='3').text = '0x7'
+    ET.indent(root)
+    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
 
 def xbox_path(package, root='Hdd1/Content'):
@@ -217,6 +310,7 @@ def main(argv=None):
     p.add_argument('--preview-audio', type=Path, required=True)
     p.add_argument('--jacket', type=Path, required=True)
     p.add_argument('--video', type=Path)
+    p.add_argument('--preview-video', type=Path, help='prepared menu preview WMV, optional with --video')
     p.add_argument('--title', required=True)
     p.add_argument('--artist', required=True)
     p.add_argument('--uint-id', type=lambda s: int(s, 0), required=True)
@@ -233,6 +327,8 @@ def main(argv=None):
         p.error('--upload requires --ftp-host')
     if a.chart and not a.lyric:
         p.error('--chart requires --lyric')
+    if a.preview_video and not a.video:
+        p.error('--preview-video requires --video')
     if a.ultrastar and a.lyric:
         p.error('--lyric cannot be combined with --ultrastar')
     # Keep generated charts private and alive until the container is verified.
@@ -269,7 +365,7 @@ def main(argv=None):
 
 
 def package_cli(a, p):
-    assets = {key: getattr(a, key) for key in ('chart', 'lyric', 'audio', 'preview_audio', 'jacket', 'video')
+    assets = {key: getattr(a, key) for key in ('chart', 'lyric', 'audio', 'preview_audio', 'jacket', 'video', 'preview_video')
               if getattr(a, key) is not None}
     for key in ('chart', 'lyric'):
         with assets[key].open('rb') as stream:

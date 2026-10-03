@@ -142,6 +142,8 @@ class PluginDialog(QDialog):
         self.runtime.textChanged.connect(self.runtime_changed)
         form.addRow('Python (optional)', self.runtime)
         self.runtime_label = form.labelForField(self.runtime)
+        self.source_widget = source
+        self.source_label = form.labelForField(source)
         body.addLayout(form)
         self.parameters = QWidget()
         self.parameter_form = QFormLayout(self.parameters)
@@ -196,6 +198,8 @@ class PluginDialog(QDialog):
             self.log.appendPlainText(error)
         if self.offers:
             self.list.setCurrentRow(0)
+        else:
+            self.select_plugin(-1)
 
     def busy(self):
         return ((self.process is not None and self.process.state() != QProcess.ProcessState.NotRunning)
@@ -372,6 +376,21 @@ class PluginDialog(QDialog):
 
     def update_buttons(self):
         running = self.busy()
+        selected = self.plugin is not None
+        # Installation is independent of an enabled plugin's analysis/result UI.
+        for widget in (self.enable, self.runtime, self.runtime_label, self.parameters,
+                       self.progress, self.run_button, self.cancel_button):
+            widget.setVisible(selected or (widget is self.enable and self.list.currentRow() >= 0))
+        needs_source = selected and self.plugin.input_required
+        self.source_widget.setVisible(needs_source)
+        self.source_label.setVisible(needs_source)
+        self.tabs.setVisible(selected)
+        self.tabs.setTabVisible(0, self.result is not None)
+        self.apply_button.setVisible(self.result is not None or self.song_import is not None)
+        midi = self.temp is not None and (Path(self.temp.name) / 'draft.mid').is_file()
+        self.export_button.setVisible(self.result is not None and midi)
+        if not selected:
+            self.status.setText(tr('plugin.install_hint'))
         self.list.setEnabled(not running)
         self.add_button.setEnabled(not running)
         self.install_button.setEnabled(not running)
@@ -388,10 +407,19 @@ class PluginDialog(QDialog):
         # Legacy in-process importers cannot be forcibly cancelled safely.
         self.cancel_button.setEnabled(running and self.process is not None)
         self.apply_button.setEnabled(self.result is not None and not running)
-        midi = self.temp is not None and (Path(self.temp.name) / 'draft.mid').is_file()
         self.export_button.setEnabled(self.result is not None and not running and midi)
 
     def run_plugin(self):
+        if self.plugin and any(a['view'] == 'usdb-browser' for a in self.plugin.ui_actions):
+            from studio.plugin_download_dialog import PluginDownloadDialog
+            dialog = PluginDownloadDialog(self.plugin, 'usdb-browser', self.project, self)
+            dialog.accepted_song.connect(self.accepted_song.emit)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                parent = self.parent()
+                if parent and hasattr(parent, 'finish_usdb_batch'):
+                    parent.finish_usdb_batch(dialog)
+                self.accept()
+            return
         if self.busy() or not self.plugin:
             return
         self.result = None

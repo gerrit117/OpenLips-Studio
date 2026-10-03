@@ -81,6 +81,7 @@ def test_window_horizontal_follow_and_edit():
     app = QApplication.instance() or QApplication([])
     window = StudioWindow()
     window.resize(1000, 700)
+    window.replace_project(demo_project())
     window.show()
     app.processEvents()
     original = window.project.notes[0]
@@ -107,6 +108,7 @@ def test_ui_save_project_not_export(tmp_path):
     app = QApplication.instance() or QApplication([])
     window = StudioWindow()
     window.path = tmp_path / 'unfinished.olp'
+    window.project = demo_project()
     window.project.notes[0].text = ''
     window.dirty = True
     assert window.save()
@@ -115,6 +117,38 @@ def test_ui_save_project_not_export(tmp_path):
     assert restored.notes[0].text == ''
     assert not list(tmp_path.glob('*.X360'))
     window.close()
+
+
+def test_empty_start_and_new_do_not_prompt(monkeypatch):
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from studio.app import StudioWindow
+    app = QApplication.instance() or QApplication([])
+    window = StudioWindow()
+    assert not window.project.notes and not window.dirty
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: pytest.fail('Empty project prompted'))
+    window.new()
+    window.new()
+    assert not window.project.notes and not window.dirty
+    assert window.confirm_discard()
+    window.close()
+
+
+def test_community_export_contains_no_media_and_preserves_project(tmp_path):
+    from PySide6.QtWidgets import QApplication
+    from studio.exporters import export_community_song
+    from tools.song_bundle import decode_bundle
+    app = QApplication.instance() or QApplication([])
+    project = demo_project()
+    before = project.to_payload()
+    path = export_community_song(project, tmp_path / 'song.ols', duration=30,
+                                 youtube='ABCDEFGHIJK')
+    result = decode_bundle(path.read_bytes())
+    assert result.manifest['metadata']['title'] == project.title
+    assert result.manifest['media']['reference_video'].endswith('ABCDEFGHIJK')
+    assert result.manifest['media']['duration_seconds'] == 30
+    assert project.to_payload() == before
+    with pytest.raises(FileExistsError):
+        export_community_song(project, path, duration=30)
 
 
 def test_syllable_suggestion_changes_only_draft_and_is_undoable():

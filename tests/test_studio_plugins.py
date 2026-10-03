@@ -26,6 +26,21 @@ def qt_app():
     return QApplication.instance() or QApplication([])
 
 
+def test_plugin_installation_hides_note_analysis_controls(tmp_path):
+    from PySide6.QtCore import QSettings
+    from studio.plugin_dialog import PluginDialog
+    app = qt_app()
+    settings = QSettings(str(tmp_path / 'empty.ini'), QSettings.Format.IniFormat)
+    dialog = PluginDialog(StudioProject(), settings=settings)
+    dialog.show()
+    app.processEvents()
+    assert dialog.install_button.isVisible()
+    for widget in (dialog.run_button, dialog.apply_button, dialog.export_button,
+                   dialog.tabs, dialog.source_widget, dialog.runtime):
+        assert not widget.isVisible()
+    dialog.close()
+
+
 def wait_until(app, predicate, timeout=10):
     start = time.monotonic()
     while not predicate():

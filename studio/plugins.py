@@ -43,6 +43,7 @@ class ImportPlugin:
     result_type: str = 'note-draft'
     input_required: bool = True
     interactive: bool = False
+    ui_actions: tuple[dict, ...] = ()
 
     def validate(self):
         if self.api_version != API_VERSION:

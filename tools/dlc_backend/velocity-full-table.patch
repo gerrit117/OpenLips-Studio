@@ -1,0 +1,50 @@
+diff --git a/XboxInternals/Stfs/StfsPackage.cpp b/XboxInternals/Stfs/StfsPackage.cpp
+--- a/XboxInternals/Stfs/StfsPackage.cpp
++++ b/XboxInternals/Stfs/StfsPackage.cpp
+@@ -799,9 +799,11 @@ HashTable StfsPackage::GetLevelNHashTable(DWORD index, Level lvl)
+         baseHashAddress += ((topTable.entries[index].status & 0x40) << 6);
+ 
+         // calculate the number of entries in the requested table
+-        if (index + 1 == tablesPerLevel[lvl])
+-            toReturn.entryCount = (lvl == Zero) ? metaData->stfsVolumeDescriptor.allocatedBlockCount % 0xAA :
+-                    tablesPerLevel[lvl - 1] % 0xAA;
++        if (index + 1 == tablesPerLevel[lvl]) {
++            DWORD count = (lvl == Zero) ? metaData->stfsVolumeDescriptor.allocatedBlockCount :
++                    tablesPerLevel[lvl - 1];
++            toReturn.entryCount = ((count - 1) % 0xAA) + 1;
++        }
+         else
+             toReturn.entryCount = 0xAA;
+     }
+@@ -813,7 +815,7 @@ HashTable StfsPackage::GetLevelNHashTable(DWORD index, Level lvl)
+ 
+         // calculate the number of entries in the requested table
+         if (index + 1 == tablesPerLevel[lvl])
+-            toReturn.entryCount = metaData->stfsVolumeDescriptor.allocatedBlockCount % 0xAA;
++            toReturn.entryCount = ((metaData->stfsVolumeDescriptor.allocatedBlockCount - 1) % 0xAA) + 1;
+         else
+             toReturn.entryCount = 0xAA;
+     }
+@@ -841,16 +843,18 @@ DWORD StfsPackage::GetHashTableEntryCount(DWORD index, Level lvl)
+         return topTable.entryCount;
+     else if (lvl + 1 == topLevel)
+     {
+-        if (index + 1 == tablesPerLevel[lvl])
+-            return (lvl == Zero) ? metaData->stfsVolumeDescriptor.allocatedBlockCount % 0xAA :
+-                   tablesPerLevel[lvl - 1] % 0xAA;
++        if (index + 1 == tablesPerLevel[lvl]) {
++            DWORD count = (lvl == Zero) ? metaData->stfsVolumeDescriptor.allocatedBlockCount :
++                   tablesPerLevel[lvl - 1];
++            return ((count - 1) % 0xAA) + 1;
++        }
+         else
+             return 0xAA;
+     }
+     else
+     {
+         if (index + 1 == tablesPerLevel[lvl])
+-            return metaData->stfsVolumeDescriptor.allocatedBlockCount % 0xAA;
++            return ((metaData->stfsVolumeDescriptor.allocatedBlockCount - 1) % 0xAA) + 1;
+         else
+             return 0xAA;
+     }

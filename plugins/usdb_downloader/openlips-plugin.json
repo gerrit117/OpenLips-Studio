@@ -1,15 +1,19 @@
 {
   "id": "usdb-downloader",
   "label": "USDB Downloader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "api_version": 2,
   "type": "process",
   "protocol": 1,
   "result_type": "song-import",
   "input_required": false,
-  "interactive": true,
+  "interactive": false,
   "author": "Markus Böhning and USDB Syncer contributors; OpenLips integration",
-  "description": "Open USDB Syncer, sign in, download a song and send it to Studio. Includes yt-dlp; downloads require the appropriate rights.",
+  "description": "Search USDB and download song media directly inside Studio using USDB Syncer and yt-dlp.",
+  "ui_actions": [
+    {"id": "usdb", "label": "USDB: Search songs", "view": "usdb-browser"},
+    {"id": "youtube", "label": "Download YouTube media", "view": "media-download"}
+  ],
   "homepage": "https://github.com/bohning/usdb_syncer",
   "extensions": [],
   "permissions": ["network-usdb-and-media-providers", "read-selected-song", "write-plugin-library", "os-credential-store", "write-job-output"],

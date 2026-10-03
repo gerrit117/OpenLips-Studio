@@ -274,8 +274,8 @@ def _validate_note(note: Note, index: int) -> None:
         raise ValueError(f"note {index} time must be between 0 and 899 seconds")
     if note.length <= 0 or note.length > 20:
         raise ValueError(f"note {index} length must be > 0 and <= 20 seconds")
-    if note.pitch < 24 or note.pitch > 84:
-        raise ValueError(f"note {index} pitch must be in the supported vocal range 24..84")
+    if note.pitch < 0 or note.pitch > 127:
+        raise ValueError(f"note {index} pitch must be a MIDI note in 0..127 (got {note.pitch})")
     if not note.text:
         raise ValueError(f"note {index} text must not be empty")
 

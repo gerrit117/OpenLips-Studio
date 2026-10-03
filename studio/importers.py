@@ -137,8 +137,25 @@ def import_ultrastar(path):
     from tools.import_ultrastar import parse_ultrastar_file, chart_to_json_payload
     source = parse_ultrastar_file(Path(path))
     data = chart_to_json_payload(source)
+    root = Path(path).resolve().parent
+    def local_asset(*keys):
+        for key in keys:
+            value = source.metadata.get(key, '').strip()
+            if not value:
+                continue
+            candidate = (root / value).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                continue
+            if candidate.is_file():
+                return str(candidate)
+        return ''
     return StudioProject(title=source.title or Path(path).stem, artist=source.artist or '',
                          bpm=source.bpm, source='UltraStar TXT',
+                         audio_path=local_asset('AUDIO', 'MP3'), video_path=local_asset('VIDEO'),
+                         cover_path=local_asset('COVER'),
+                         video_reference=source.metadata.get('VIDEO', ''),
                          warnings=source.warnings,
                          notes=[EditorNote(**{k: n[k] for k in ('time', 'length', 'pitch', 'text',
                                                'end_word', 'line_break_after')},

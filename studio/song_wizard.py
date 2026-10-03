@@ -1,0 +1,132 @@
+"""Guided song setup; imports finish before replacing the current project."""
+from pathlib import Path
+from PySide6.QtWidgets import (QWizard, QWizardPage, QVBoxLayout, QHBoxLayout,
+    QListWidget, QLabel, QLineEdit, QPushButton, QFormLayout, QWidget, QFileDialog,
+    QComboBox, QMessageBox)
+from studio.i18n import tr
+from studio.model import StudioProject
+from studio.importers import import_ultrastar, read_midi, project_from_midi
+
+
+class SongWizard(QWizard):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr('wizard.title'))
+        self.resize(760, 480)
+        self.project = None
+        self.choice = 'ultrastar'
+        self.modes = ['ultrastar', 'midi-lrc', 'midi', 'scratch']
+        page = QWizardPage()
+        page.setTitle(tr('wizard.start'))
+        row = QHBoxLayout(page)
+        self.choices = QListWidget()
+        self.choices.addItems([tr('wizard.' + mode) for mode in self.modes])
+        self.choices.setFixedWidth(245)
+        self.description = QLabel()
+        self.description.setWordWrap(True)
+        row.addWidget(self.choices)
+        row.addWidget(self.description, 1)
+        self.choices.currentRowChanged.connect(self.choose_mode)
+        self.choices.setCurrentRow(0)
+        self.addPage(page)
+        files = QWizardPage()
+        files.setTitle(tr('wizard.files'))
+        form = QFormLayout(files)
+        self.rows = {}
+        for key, label, filters in (
+            ('chart', 'wizard.chart', 'UltraStar (*.txt);;MIDI (*.mid *.midi)'),
+            ('lrc', 'wizard.lrc', 'LRC (*.lrc)'),
+            ('media', 'wizard.media', 'Media (*.mp4 *.mkv *.wmv *.mov *.webm *.mp3 *.wav *.flac *.m4a *.wma *.xWMA);;All files (*)'),
+            ('cover', 'Cover laden', 'Images (*.jpg *.jpeg *.png *.webp)')):
+            widget = QWidget()
+            layout = QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            edit = QLineEdit()
+            button = QPushButton(tr('wizard.browse'))
+            button.clicked.connect(lambda checked=False, e=edit, f=filters: self.browse(e, f))
+            layout.addWidget(edit, 1)
+            layout.addWidget(button)
+            form.addRow(tr(label), widget)
+            self.rows[key] = (edit, widget, form.labelForField(widget))
+        self.method = QComboBox()
+        self.method.addItem(tr('wizard.manual'), 'manual')
+        self.method.addItem('Basic Pitch (.opl)', 'plugin')
+        self.method.addItem(tr('ai.title'), 'ai')
+        form.addRow(tr('wizard.method'), self.method)
+        self.method_label = form.labelForField(self.method)
+        self.media_kind = QComboBox()
+        self.media_kind.addItem(tr('wizard.video'), 'video')
+        self.media_kind.addItem(tr('wizard.audio'), 'audio')
+        form.addRow(tr('wizard.media_kind'), self.media_kind)
+        self.currentIdChanged.connect(self.update_fields)
+        self.addPage(files)
+
+    def choose_mode(self, index):
+        self.choice = self.modes[index]
+        self.description.setText(tr('wizard.' + self.choice + '.description'))
+
+    def browse(self, field, filters):
+        if field is self.rows['chart'][0]:
+            filters = 'UltraStar (*.txt)' if self.choice == 'ultrastar' else 'MIDI (*.mid *.midi)'
+        path, _ = QFileDialog.getOpenFileName(self, tr('wizard.browse'), '', filters)
+        if path:
+            field.setText(path)
+            if field is self.rows['media'][0]:
+                kind = 'audio' if Path(path).suffix.lower() in ('.mp3', '.wav', '.flac', '.m4a', '.wma', '.xwma', '.ogg', '.aac') else 'video'
+                self.media_kind.setCurrentIndex(self.media_kind.findData(kind))
+
+    def update_fields(self, index):
+        self.rows['chart'][2].setText('UltraStar TXT' if self.choice == 'ultrastar' else 'MIDI')
+        for key in ('chart', 'lrc'):
+            visible = (key == 'chart' and self.choice != 'scratch') or (key == 'lrc' and self.choice == 'midi-lrc')
+            for widget in self.rows[key][1:]:
+                widget.setVisible(visible)
+        self.method.setVisible(self.choice == 'scratch')
+        self.method_label.setVisible(self.choice == 'scratch')
+
+    def validateCurrentPage(self):
+        if self.currentId() == 0:
+            return True
+        try:
+            paths = {key: field[0].text().strip() for key, field in self.rows.items()}
+            if self.choice == 'scratch':
+                paths['chart'] = ''
+            if self.choice != 'midi-lrc':
+                paths['lrc'] = ''
+            required = ['chart'] if self.choice != 'scratch' else []
+            if self.choice == 'midi-lrc':
+                required.append('lrc')
+            for key, value in paths.items():
+                if (key in required or value) and not Path(value).is_file():
+                    raise ValueError(tr('wizard.missing', name=key))
+            if self.choice == 'ultrastar':
+                project = import_ultrastar(paths['chart'])
+            elif self.choice.startswith('midi'):
+                imported = read_midi(paths['chart'])
+                labels = [f'{lane.name} / {lane.channel + 1} ({len(lane.notes)})' for lane in imported.lanes]
+                from PySide6.QtWidgets import QInputDialog
+                label, ok = QInputDialog.getItem(self, tr('Melodiespur'), tr('Spur / Kanal'), labels, 0, False)
+                if not ok:
+                    return False
+                project = project_from_midi(paths['chart'], imported, labels.index(label))
+                if paths['lrc']:
+                    from studio.lrc import read_lrc, attach_lrc, assign_lrc_notes
+                    document = read_lrc(paths['lrc'])
+                    attach_lrc(project, document, paths['lrc'])
+                    if not any(note.text.strip() for note in project.notes):
+                        assign_lrc_notes(project, document)
+            else:
+                project = StudioProject()
+            if paths['media']:
+                setattr(project, self.media_kind.currentData() + '_path', paths['media'])
+            if paths['cover']:
+                project.cover_path = paths['cover']
+            from studio.song_media_check import ensure_song_audio
+            if not ensure_song_audio(project, self):
+                return False
+            project.validate()
+            self.project = project
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, 'OpenLips Studio', str(error))
+            return False

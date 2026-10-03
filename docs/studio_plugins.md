@@ -1,5 +1,30 @@
 # Plugin developer guide
 
+## Native UI contributions
+
+API-2 process manifests can declare `ui_actions`, each containing a unique `id`,
+`label` and supported `view` (`parameters`, `usdb-browser`, `media-download`).
+Enabled plugins contribute these commands to **Tools > Plugin tools**. Older
+plugins without contributions receive a command using their normal parameters.
+The plugin manager handles installation/trust; it is no longer the only entry
+point for running a plugin. Disabled plugins contribute no executable actions.
+
+Studio owns the widgets. Arbitrary plugin code/widgets are not imported into
+the GUI. Parameter views reuse the existing isolated process protocol. Download
+views use a persistent worker started with `--serve --output JOB --state STATE`:
+one JSON request per stdin line, replies on stdout prefixed `OPENLIPS_RPC:`.
+Replies carry `progress`, `result` or `error`. Requests are serialized; account
+passwords travel through the pipe, never in arguments, settings or job files.
+Supported operations are `login`, `search`, `download` and `youtube` for these
+host views. These views are a bounded first API, not an arbitrary widget API.
+
+The built-in manual YouTube downloader is independent of plugins. It contributes
+its own normal Tools action, ships yt-dlp/Deno/FFmpeg, and accepts watch URLs,
+short links, Shorts links, raw IDs and supported UltraStar `v=` references.
+Missing UltraStar media are offered for download after import. This is not a
+claim that every extended Syncer tag or every provider can be downloaded.
+
+
 ## Release policy
 
 New official plugins must be distributed as finished, installable `.opl`

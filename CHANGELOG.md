@@ -1,5 +1,90 @@
 # Changelog
 
+## Unreleased
+### Changed
+- Add an undoable Intelligent Page Breaks toolbar action that balances whole
+  lyric passages using vocal pauses, punctuation, existing breaks and soft
+  original-song layout targets; leave imported UltraStar pages unchanged.
+- Base optional lyric-page defaults on original-song measurements: 30 characters,
+  8 notes and 3 seconds, reducing crowded pages without altering note timing.
+- Import multiple local UltraStar TXT files or recursive song folders with
+  associated audio, video and covers; save projects or export a Song Pack
+  directly from the start screen.
+- Choose the destination folder when saving batch-imported projects.
+- Accept terminal UltraStar line breaks without blocking DLC export or creating
+  an empty next lyric page, including previously saved projects.
+- Keep optional AI runtimes out of Studio installers and portable archives;
+  download the matching runtime on demand, with CPU fallback when no AMD
+  release is available yet.
+- Integrate plugin commands into Studio's Tools menu, separate from plugin installation.
+- Replace the external USDB Syncer window with native search and download controls.
+- Add a built-in manual YouTube downloader and automatic UltraStar video-reference prompts, with bundled yt-dlp, Deno and FFmpeg.
+- Download multiple USDB songs with covers and open direct Song Pack export.
+- Preserve the full MIDI pitch range during export instead of rejecting notes above 84.
+- Detect missing video soundtracks during song creation and offer audio selection;
+  combine silent videos with separate audio automatically during DLC export.
+
+
+- Add automatic GPU selection and AMD ROCm acceleration for vocal separation
+  and PyTorch Whisper transcription, with explicit per-stage device reporting
+  and CPU fallback. Keep pitch analysis on CPU.
+
+- Split long lyric pages at word boundaries with adjustable readability limits,
+  preserving notes, melismas and existing page breaks; retain word endings on
+  continuation notes.
+
+- Start 15-second menu previews at the first lyric entry instead of the media
+  intro; generate and link a separate small video preview for video songs.
+- Customize preview start and duration, saved with the project and shared by
+  audio/video previews; offer MIDI-only file selection in MIDI setup modes.
+- Assign LRC lyrics to existing MIDI notes as an editable timing-based draft,
+  without changing pitches or durations; restore lyric-anchor review.
+- Support larger DLC packs with verified level-2 STFS hash trees and bounded
+  memory use during validation, replacing the initial 110 MiB limit.
+
+- Export named multi-song DLC packs from the current chart and saved projects,
+  with independent media, previews, covers and song entries.
+- Copy verified exported DLCs to Xbox Content USB storage from Tools or directly
+  after export, with progress, read-back checking and no overwriting.
+- Preserve melisma notes without repeating their lyric fragments; correct
+  Studio MIDI-to-Lips pitch conversion.
+
+## 0.3.3 Beta
+
+- Choose a destination folder for DLC export; generate an extensionless package
+  filename from its finalized STFS header content ID, following the observed
+  Lips marketplace naming convention. Existing packages are never overwritten.
+
+## 0.3.2 Beta
+
+- Adjust or mute reference audio independently of chart note tones.
+- Move a selected note up or down one semitone with the arrow keys, with reference
+  tones and undo/redo.
+- Select multiple notes with Ctrl+click and merge consecutive notes of the same
+  pitch from their context menu, combining timing and lyric fragments.
+- Detect silent video sources and use an unambiguous companion audio file for
+  analysis instead of failing with a raw encoder command error.
+
+## 0.3.1 Beta
+
+- Audition selected pitches with reference tones and optionally hear chart notes
+  during playback, with a dedicated volume control.
+- Download and verify missing native AI components automatically on first use,
+  with progress and cancellation instead of a runtime-path setup prompt.
+- Add a step-by-step song creation wizard and a dedicated export button.
+- Prepare DLC media automatically on Windows: video conversion, full xWMA audio,
+  15-second xWMA preview, cover generation and integrated STFS packaging.
+- Generate package identities internally and validate audio decoding and package
+  contents before publishing the output.
+- Start with an empty project; opening or closing untouched new projects no longer
+  asks to save them.
+- Group Community upload (.ols) and DLC exports under File > Export. Community
+  packages contain generated charts, lyrics, cover and metadata, without media.
+- Hide analysis, note and MIDI controls while installing or selecting plugins.
+- Add visible hover states to menus and toolbar buttons.
+- Allow Windows installation for the current user or all users.
+
+
 ## 0.3.0 Beta
 
 - Create editable chart drafts from audio with optional vocal separation,

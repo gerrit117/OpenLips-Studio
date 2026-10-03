@@ -102,6 +102,8 @@ def test_video_cap_and_codec_validation(monkeypatch):
 def test_shift_updates_note_and_page_times_and_undo(monkeypatch, app):
     from studio.app import StudioWindow, QInputDialog
     window = StudioWindow()
+    from studio.model import demo_project
+    window.replace_project(demo_project())
     window.project.notes[0].page_break_time = 2
     original = window.project.notes[0].time
     monkeypatch.setattr(QInputDialog, 'getDouble', lambda *args: (1.5, True))

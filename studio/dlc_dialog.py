@@ -1,129 +1,123 @@
-"""Optional adapter for the existing experimental STFS backend."""
+"""One-step DLC export: prepare project media and atomically package it."""
+import copy
 from pathlib import Path
-import sys
-import tempfile
-
 from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QPushButton,
-                               QFileDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit)
-
-from studio.exporters import export_owned_pair
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QProgressBar, QLabel, QPushButton,
+    QFileDialog, QLineEdit, QListWidget, QHBoxLayout)
+import qtawesome as qta
+from studio.exporters import internal_chart
 from studio.i18n import tr
-from studio.media_requirements import media_requirements, portable_media_notice
 
 
 class PackageWorker(QThread):
     completed = Signal(str)
     failed = Signal(str)
+    progress = Signal(str)
 
-    def __init__(self, project, values, parent):
+    def __init__(self, project, output, parent, *, projects=None, pack_name=None):
         super().__init__(parent)
-        self.project, self.values = project, values
+        self.project, self.output = copy.deepcopy(project), output
+        self.projects = copy.deepcopy(projects) if projects is not None else [self.project]
+        self.pack_name = pack_name
 
     def run(self):
         try:
-            from tools.build_dlc import make_manifest, build_package, asset_name
-            v = self.values
-            media = {key: Path(v[key]) for key in ('audio', 'preview_audio')}
-            if v['video']:
-                media['video'] = Path(v['video'])
-            for path in media.values():
-                if not path.is_file():
-                    raise ValueError(f'Missing media file: {path}')
-                asset_name(path.name)
-            with tempfile.TemporaryDirectory(prefix='openlips-studio-') as temp:
-                import copy
-                from studio.media import write_cover
-                cover_project = copy.deepcopy(self.project)
-                if v['jacket']:
-                    cover_project.cover_path = v['jacket']
-                media['jacket'] = write_cover(cover_project, Path(temp) / 'custom_cover.jpg')
-                name = 'custom'
-                pair = export_owned_pair(self.project, Path(temp) / 'pair', name,
-                                          media['audio'].name,
-                                          media.get('video').name if 'video' in media else None)
-                files = {p.name: p for p in media.values()}
-                if len(files) != len(media):
-                    raise ValueError('Media basenames must be distinct')
-                assets = {key: path.name for key, path in media.items()}
-                for key, basename in [('chart', name + '.X360'), ('lyric', name + '_Lyric.X360')]:
-                    assets[key] = basename
-                    if basename in files:
-                        raise ValueError('Media basename conflicts with chart')
-                    files[basename] = pair / basename
-                manifest = make_manifest(self.project.title, self.project.artist,
-                                         int(v['id'], 0), self.project.duration + 2, assets)
-                result = build_package(v['backend'], files, manifest, v['output'], self.project.title)
-            self.completed.emit(f'{v["output"]}\nSHA256: {result["sha256"]}')
-        except Exception as exc:
-            self.failed.emit(str(exc))
+            from studio.dlc_pack import build_projects_dlc
+            result = build_projects_dlc(self.projects, self.output, self.progress.emit,
+                                        pack_name=self.pack_name)
+            self.completed.emit(result['output_path'])
+        except Exception as error:
+            self.failed.emit(str(error))
 
 
 class DlcDialog(QDialog):
-    def __init__(self, project, parent):
+    def __init__(self, project, parent=None):
         super().__init__(parent)
+        self.project, self.worker = project, None
         self.setWindowTitle(tr('DLC exportieren (experimentell)'))
-        self.resize(620, 380)
-        self.project = project
-        self.worker = None
-        self.fields = {}
-        layout = QFormLayout(self)
-        self.media_notice = QPlainTextEdit()
-        self.media_notice.setReadOnly(True)
-        self.media_notice.setPlainText(portable_media_notice() if sys.platform != 'win32'
-                                      else media_requirements())
-        self.media_notice.setMaximumHeight(180)
-        layout.addRow(self.media_notice)
-        self.id = QLineEdit('0x73000001')
-        layout.addRow(tr('Eigene freie Song-ID'), self.id)
-        for key, label in [('backend', 'STFS-Backend'), ('audio', 'Audio (xWMA)'),
-                           ('preview_audio', tr('Vorschau (xWMA)')), ('jacket', 'Cover (optional)'),
-                           ('video', 'Video (optional)'), ('output', tr('Ausgabepaket'))]:
-            edit = QLineEdit()
-            self.fields[key] = edit
-            button = QPushButton('...')
-            button.setToolTip(label + tr(' auswaehlen'))
-            button.clicked.connect(lambda checked=False, k=key: self.choose(k))
-            from PySide6.QtWidgets import QWidget, QHBoxLayout
-            row = QWidget()
-            h = QHBoxLayout(row)
-            h.setContentsMargins(0, 0, 0, 0)
-            h.addWidget(edit, 1)
-            h.addWidget(button)
-            layout.addRow(label, row)
-        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        self.buttons.accepted.connect(self.build)
-        self.buttons.rejected.connect(self.reject)
-        layout.addRow(self.buttons)
+        self.resize(520, 190)
+        layout = QVBoxLayout(self)
+        self.status = QLabel(tr('export.dlc_ready'))
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+        self.preview_button = QPushButton(tr('preview.settings'))
+        self.preview_button.clicked.connect(self.edit_preview)
+        layout.addWidget(self.preview_button)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1)
+        layout.addWidget(self.progress)
+        self.save_button = QPushButton(tr('export.dlc_save'))
+        self.save_button.clicked.connect(self.build)
+        layout.addWidget(self.save_button)
+        self.usb_button = QPushButton(qta.icon('fa5b.usb', color='#cdd3d9'), tr('usb.title'))
+        self.usb_button.setVisible(False)
+        self.usb_button.clicked.connect(self.copy_to_usb)
+        layout.addWidget(self.usb_button)
+        self.output_path = None
+        self.editable_controls = [self.preview_button]
 
-    def choose(self, key):
-        if key == 'output':
-            path, _ = QFileDialog.getSaveFileName(self, tr('Neues Paket'), 'custom.LIVE', 'LIVE (*.LIVE)')
+    def edit_preview(self):
+        parent = self.parent()
+        if parent and hasattr(parent, 'edit_preview'):
+            parent.edit_preview()
         else:
-            path, _ = QFileDialog.getOpenFileName(self, key)
-        if path:
-            self.fields[key].setText(path)
+            from studio.preview_dialog import PreviewDialog
+            dialog = PreviewDialog(self.project, self)
+            if dialog.exec():
+                self.project.preview_start, self.project.preview_length = dialog.values()
 
     def build(self):
-        import copy
-        if QMessageBox.question(self, tr('Experimenteller Export'),
-            tr('Der STFS-Container wird geprueft, die DLC-Erkennung im Spiel ist noch nicht bestaetigt. Fortfahren?')) != QMessageBox.StandardButton.Yes:
+        self.start_build([self.project])
+
+    def start_build(self, projects, pack_name=None):
+        if self.worker and self.worker.isRunning():
             return
-        values = {k: w.text() for k, w in self.fields.items()}
-        values['id'] = self.id.text()
-        self.worker = PackageWorker(copy.deepcopy(self.project), values, self)
+        try:
+            for project in projects:
+                try:
+                    internal_chart(project)
+                except ValueError as error:
+                    raise ValueError(f'{project.artist} - {project.title}: {error}') from error
+                source = project.video_path or project.audio_path
+                if not source or not Path(source).is_file():
+                    raise ValueError(tr('export.need_media'))
+        except Exception as error:
+            self.status.setText(str(error))
+            return
+        path = QFileDialog.getExistingDirectory(self, tr('export.dlc_directory'))
+        if not path:
+            return
+        self.worker = PackageWorker(self.project, path, self, projects=projects, pack_name=pack_name)
+        self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(self.success)
         self.worker.failed.connect(self.failure)
-        self.buttons.setEnabled(False)
+        self.progress.setRange(0, 0)
+        self.save_button.setEnabled(False)
+        for widget in self.editable_controls:
+            widget.setEnabled(False)
+        self.usb_button.setVisible(False)
         self.worker.start()
 
-    def success(self, result):
-        QMessageBox.information(self, tr('Paket validiert'), result)
-        self.buttons.setEnabled(True)
+    def success(self, path):
+        self.output_path = path
+        self.progress.setRange(0, 1)
+        self.progress.setValue(1)
+        self.status.setText(tr('export.saved', path=path))
+        self.save_button.setEnabled(True)
+        for widget in self.editable_controls:
+            widget.setEnabled(True)
+        self.usb_button.setVisible(True)
+
+    def copy_to_usb(self):
+        from studio.usb_dialog import UsbDialog
+        UsbDialog(self, self.output_path).exec()
 
     def failure(self, message):
-        QMessageBox.critical(self, tr('Export fehlgeschlagen'), message)
-        self.buttons.setEnabled(True)
+        self.progress.setRange(0, 1)
+        self.status.setText(message)
+        self.save_button.setEnabled(True)
+        for widget in self.editable_controls:
+            widget.setEnabled(True)
 
     def reject(self):
         if not self.worker or not self.worker.isRunning():
@@ -134,3 +128,67 @@ class DlcDialog(QDialog):
             event.ignore()
         else:
             super().closeEvent(event)
+
+
+class SongPackDialog(DlcDialog):
+    def __init__(self, project, parent=None):
+        super().__init__(project, parent)
+        self.setWindowTitle(tr('pack.title'))
+        self.resize(620, 470)
+        self.projects = []
+        self.name = QLineEdit()
+        self.name.setPlaceholderText(tr('pack.name'))
+        self.layout().insertWidget(0, self.name)
+        self.songs = QListWidget()
+        self.layout().insertWidget(1, self.songs)
+        buttons = QHBoxLayout()
+        add = QPushButton(qta.icon('fa5s.plus', color='#cdd3d9'), tr('pack.add'))
+        add.clicked.connect(self.add_projects)
+        buttons.addWidget(add)
+        remove = QPushButton(qta.icon('fa5s.trash-alt', color='#cdd3d9'), tr('pack.remove'))
+        remove.clicked.connect(self.remove_project)
+        buttons.addWidget(remove)
+        self.layout().insertLayout(2, buttons)
+        self.editable_controls += [self.name, self.songs, add, remove]
+        if project.notes:
+            self.append_project(copy.deepcopy(project))
+        self.status.setText(tr('pack.ready'))
+
+    def append_project(self, project):
+        self.projects.append(project)
+        self.songs.addItem(f'{project.artist} - {project.title}')
+        if self.songs.currentRow() < 0:
+            self.songs.setCurrentRow(0)
+
+    def edit_preview(self):
+        from studio.preview_dialog import PreviewDialog
+        row = self.songs.currentRow()
+        if row < 0:
+            return
+        project = self.projects[row]
+        dialog = PreviewDialog(project, self)
+        if dialog.exec():
+            project.preview_start, project.preview_length = dialog.values()
+
+    def add_projects(self):
+        from studio.model import load_project
+        paths, _ = QFileDialog.getOpenFileNames(self, tr('pack.add'), filter='OpenLips (*.olp)')
+        for path in paths:
+            try:
+                self.append_project(load_project(path))
+            except Exception as error:
+                self.status.setText(str(error))
+
+    def remove_project(self):
+        row = self.songs.currentRow()
+        if row >= 0:
+            self.projects.pop(row)
+            self.songs.takeItem(row)
+
+    def build(self):
+        if not self.name.text().strip():
+            self.status.setText(tr('pack.need_name'))
+        elif not 2 <= len(self.projects) <= 16:
+            self.status.setText(tr('pack.count_limit'))
+        else:
+            self.start_build(self.projects, self.name.text().strip())

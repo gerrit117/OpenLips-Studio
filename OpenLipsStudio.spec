@@ -6,16 +6,31 @@ from pathlib import Path
 
 media_helper = Path('private/runtime/og-framing-test/transcode_windows.exe')
 media_binaries = [(str(media_helper), 'media')] if sys.platform == 'win32' and media_helper.is_file() else []
+if sys.platform == 'win32':
+    stfs = Path('private/runtime/dlc-backend-build/Release/openlips_stfs.exe')
+    if not stfs.is_file():
+        raise ValueError('Build the integrated STFS backend before packaging Windows Studio')
+    media_binaries.append((str(stfs), 'media'))
+    probe = Path(__import__('os').environ.get('OPENLIPS_FFPROBE', 'private/runtime/usdb-media/extracted/ffmpeg-8.1.2-essentials_build/bin/ffprobe.exe'))
+    if not probe.is_file():
+        raise ValueError('Missing bundled FFprobe')
+    media_binaries.append((str(probe), 'media'))
 import imageio_ffmpeg
 ffmpeg_binary = imageio_ffmpeg.get_ffmpeg_exe()
 notices = Path('build/studio-licenses')
 notice_data = [(str(notices), 'licenses')] if notices.is_dir() else []
+download_root = Path(__import__('os').environ.get('OPENLIPS_DOWNLOAD_DIST', 'dist')) / 'OpenLipsDownload'
+if not (download_root / ('OpenLipsDownload.exe' if sys.platform == 'win32' else 'OpenLipsDownload')).is_file():
+    raise ValueError('Build DownloadWorker.spec before packaging Studio')
+notice_data += [(str(path), 'download/OpenLipsDownload/' + str(path.parent.relative_to(download_root)))
+                for path in download_root.rglob('*') if path.is_file()]
 icon = 'studio/assets/app-icon.ico' if sys.platform == 'win32' else None
 asset_data = [(str(path), 'studio/assets') for path in Path('studio/assets').iterdir()
               if path.is_file() and path.suffix in ('.png', '.ico', '.icns', '.sh')]
 ai_source_data = [(str(path), 'ai_backend/' + str(path.parent)) for path in map(Path, (
     'studio/__init__.py', 'studio/model.py', 'studio/lrc.py', 'studio/ai_chart.py', 'studio/ai_alignment.py',
-    'tools/__init__.py', 'tools/create_ai_chart.py', 'tools/align_lyrics.py'))]
+    'tools/__init__.py', 'tools/create_ai_chart.py', 'tools/align_lyrics.py',
+    'tools/ai_devices.py', 'tools/ai_transcription.py'))]
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
              datas=collect_data_files('qtawesome') + collect_data_files('pyphen') + collect_data_files('swift_f0') + copy_metadata('swift-f0') +

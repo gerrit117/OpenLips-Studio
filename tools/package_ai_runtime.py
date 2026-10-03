@@ -7,8 +7,14 @@ import zipfile
 from tools.package_studio_release import TARGETS, release_version
 
 
-def package(target, dist=Path('dist'), output=Path('release_assets')):
+def package(target, dist=Path('dist'), output=Path('release_assets'), flavor='cpu'):
     label = TARGETS[target]
+    if flavor == 'amd':
+        if label != 'windows-x64':
+            raise ValueError('AMD runtime packaging currently targets Windows x64')
+        label += '-amd'
+    elif flavor != 'cpu':
+        raise ValueError('Unknown AI runtime flavor')
     source = Path(dist) / 'OpenLipsAI'
     if not (source / ('OpenLipsAI.exe' if label.startswith('windows') else 'OpenLipsAI')).is_file():
         raise ValueError('Build the native AI engine first')
@@ -36,5 +42,6 @@ def package(target, dist=Path('dist'), output=Path('release_assets')):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', choices=TARGETS, required=True)
+    parser.add_argument('--flavor', choices=('cpu', 'amd'), default='cpu')
     args = parser.parse_args()
-    print(package(args.target))
+    print(package(args.target, flavor=args.flavor))

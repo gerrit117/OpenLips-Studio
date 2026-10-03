@@ -75,25 +75,29 @@ def analyze(args):
         progress('decode')
         command = [ffmpeg, '-nostdin', '-v', 'error', '-i', str(input_path)]
         command += ['-t', str(args.duration or 1800.1)]
-        command += ['-vn', '-ac', '2', '-ar', '44100', str(wav)]
-        subprocess.run(command, check=True, timeout=7200,
+        command += ['-map', '0:a:0', '-vn', '-ac', '2', '-ar', '44100', str(wav)]
+        decoded = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, timeout=7200,
                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        if decoded.returncode:
+            if b'matches no streams' in decoded.stderr:
+                raise ValueError('This video has no audio track. Select the separate song audio file.')
+            detail = decoded.stderr.decode('utf-8', errors='replace')[-1500:]
+            raise ValueError('Audio decoding failed: ' + detail)
         audio, rate = sf.read(wav, dtype='float32', always_2d=True)
         if not len(audio) or len(audio) / rate > 1800:
             raise ValueError('Audio must contain between 0 and 1800 seconds')
         report['duration'] = len(audio) / rate
-        device = 'cpu'
-        if args.separate or (args.transcribe and args.device in ('cuda', 'mps')):
+        device, backend = 'cpu', 'cpu'
+        if args.separate or args.transcribe:
             import torch
+            from tools.ai_devices import resolve_device
             torch.set_num_threads(args.threads)
-            if args.device == 'cuda' and torch.cuda.is_available():
-                device = 'cuda'
-            elif args.device == 'mps' and torch.backends.mps.is_available():
-                device = 'mps'
-            elif args.device != 'cpu':
-                report['warnings'].append(f'{args.device} unavailable: CPU fallback')
+            backend, device, gpu, notices = resolve_device(args.device, torch)
+            report['warnings'].extend(notices)
+            report['gpu_name'] = gpu
+            progress('device', requested=args.device, backend=backend, gpu=gpu)
         if args.separate:
-            progress('separate', model='htdemucs', device=device)
+            progress('separate', model='htdemucs', device=backend)
             try:
                 audio, rate = separate(audio, rate, cache, device)
             except RuntimeError:
@@ -105,8 +109,8 @@ def analyze(args):
                 audio, rate = sf.read(wav, dtype='float32', always_2d=True)
                 audio, rate = separate(audio, rate, cache, 'cpu')
             sf.write(wav, audio, rate)
-        report['separation_device'] = device if args.separate else 'not used'
-        if args.device != 'cpu' and not args.separate and not args.transcribe:
+        report['separation_device'] = (backend if device != 'cpu' else 'cpu') if args.separate else 'not used'
+        if args.device not in ('cpu', 'auto') and not args.separate and not args.transcribe:
             report['warnings'].append('Pitch and supplied-lyric alignment use CPU; requested accelerator is not used.')
         words = []
         if args.lrc:
@@ -129,38 +133,13 @@ def analyze(args):
                 if not words:
                     raise ValueError('No supplied lyric windows could be aligned; input/project unchanged')
         elif args.transcribe:
-            from faster_whisper import WhisperModel
-            asr_device = 'cuda' if device == 'cuda' else 'cpu'
-            report['asr_device'] = asr_device
+            from tools.ai_transcription import transcribe_with_fallback
             report['asr_model'] = args.model
-            progress('transcribe', model=args.model, device=asr_device)
-            def transcribe(device):
-                model = WhisperModel(args.model, device=device,
-                                     compute_type='float16' if device == 'cuda' else 'int8',
-                                     download_root=str(cache / 'whisper'), cpu_threads=args.threads)
-                segments, info = model.transcribe(str(wav), language=args.language or None,
-                                                 word_timestamps=True, condition_on_previous_text=False,
-                                                 vad_filter=False, beam_size=5)
-                # Inference is lazy: include iteration in the GPU fallback boundary.
-                return list(segments), info
-            try:
-                segments, info = transcribe(asr_device)
-            except RuntimeError:
-                if asr_device == 'cpu':
-                    raise
-                report['warnings'].append('CUDA transcription failed: retrying CPU')
-                report['asr_device'] = 'cpu'
-                segments, info = transcribe('cpu')
-            for segment in segments:
-                recognized = [w for w in segment.words or () if w.end > w.start and w.word.strip()]
-                for i, word in enumerate(recognized):
-                    # Whisper can produce slightly overlapping word windows.
-                    start = max(0.0, word.start, words[-1].end if words else 0.0)
-                    if word.end > start:
-                        words.append(WordSpan(start, word.end, word.word.strip(),
-                                              i == len(recognized) - 1, word.probability))
-                progress('transcribe', seconds=segment.end)
-            report['language'] = info.language
+            words, language, engine, actual, notices = transcribe_with_fallback(
+                wav, audio, rate, args.model, args.language, cache, threads=args.threads,
+                progress=progress, backend=backend)
+            report.update(language=language, asr_backend=engine, asr_device=actual)
+            report['warnings'].extend(notices)
             report['word_source'] = 'Whisper estimated word timestamps (not forced alignment)'
         progress('pitch', model='SwiftF0', device='cpu')
         detector = SwiftF0(threads=args.threads)
@@ -218,7 +197,7 @@ def main(argv=None):
     parser.add_argument('--word-notes', action='store_true', help='Reviewable one-note-per-word draft; simplify melismas')
     parser.add_argument('--model', choices=('tiny', 'base', 'small', 'medium', 'large-v3'), default='base')
     parser.add_argument('--language', default='')
-    parser.add_argument('--device', choices=('cpu', 'cuda', 'mps'), default='cpu')
+    parser.add_argument('--device', choices=('auto', 'cpu', 'cuda', 'amd', 'mps'), default='auto')
     parser.add_argument('--threads', type=int, default=4)
     parser.add_argument('--duration', type=float, default=0)
     parser.add_argument('--fmin', type=float, default=65)

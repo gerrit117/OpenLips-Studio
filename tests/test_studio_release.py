@@ -13,6 +13,9 @@ def test_windows_release_contains_only_app_and_checksum(tmp_path):
     app = tmp_path / 'dist/OpenLipsStudio'
     app.mkdir(parents=True)
     (app / 'OpenLipsStudio.exe').write_bytes(b'synthetic-executable')
+    for name in ('ai', 'ai-amd'):
+        (app / name).mkdir()
+        (app / name / 'OpenLipsAI.exe').write_bytes(b'optional-runtime')
     (tmp_path / 'private').mkdir()
     (tmp_path / 'private/sample.X360').write_bytes(b'private')
     archive = package('windows-2022', tmp_path / 'dist', tmp_path / 'release')

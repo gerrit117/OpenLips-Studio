@@ -92,3 +92,59 @@ def test_gui_import_cancel_accept_undo_redo(monkeypatch):
     assert window.project == imported
     window.dirty = False
     window.close()
+
+
+def test_lrc_assigns_existing_notes_without_changing_music():
+    from studio.lrc import assign_lrc_notes
+    from studio.model import EditorNote
+    project = StudioProject(notes=[EditorNote(1 + i, .8, 60 + i) for i in range(5)])
+    original = [(n.id, n.time, n.length, n.pitch) for n in project.notes]
+    doc = parse_lrc('[00:01]Hello world\n[00:05]Last')
+    assert assign_lrc_notes(project, doc) == 5
+    assert [n.text for n in project.notes] == ['Hello', '~', 'world', '~', 'Last']
+    assert [(n.id, n.time, n.length, n.pitch) for n in project.notes] == original
+    assert project.notes[3].line_break_after and project.notes[4].line_break_after
+
+
+def test_enhanced_lrc_assignment_uses_word_anchors():
+    from studio.lrc import assign_lrc_notes
+    from studio.model import EditorNote
+    project = StudioProject(notes=[EditorNote(2, 1, 60), EditorNote(6, 1, 62)])
+    assign_lrc_notes(project, parse_lrc('[00:01]<00:01>First <00:05>second'))
+    assert [n.text for n in project.notes] == ['First', 'second']
+
+
+def test_lrc_rounding_gap_assigns_overlapping_note_only_once():
+    from studio.lrc import assign_lrc_notes
+    from studio.model import EditorNote
+    project = StudioProject(notes=[EditorNote(53.650833, .197917, 56),
+        EditorNote(53.850833, .197917, 56), EditorNote(60, .1, 60)])
+    document = parse_lrc('[00:51.70]\n[00:53.66]Two words\n[00:55.00]\n[01:00.50]Later')
+    assert assign_lrc_notes(project, document) == 2
+    assert [n.text for n in project.notes] == ['Two', 'words', '']
+
+
+def test_lrc_boundary_note_has_single_owner():
+    from studio.lrc import assign_lrc_notes
+    from studio.model import EditorNote
+    project = StudioProject(notes=[EditorNote(1, .2, 60), EditorNote(1.99, .2, 61)])
+    assert assign_lrc_notes(project, parse_lrc('[00:01]First\n[00:02]Second')) == 2
+    assert [n.text for n in project.notes] == ['First', 'Second']
+
+
+def test_lrc_assignment_gui_is_undoable(monkeypatch):
+    from PySide6.QtWidgets import QApplication
+    from studio.app import StudioWindow
+    from studio.lrc_dialog import LrcDialog
+    from studio.model import EditorNote
+    app = QApplication.instance() or QApplication([])
+    window = StudioWindow()
+    window.project.notes = [EditorNote(1, 1, 60)]
+    original = copy.deepcopy(window.project)
+    monkeypatch.setattr(LrcDialog, 'exec', lambda self: LrcDialog.DialogCode.Accepted)
+    window.accept_lrc(parse_lrc('[00:01]Hello'))
+    assert window.project.notes[0].text == 'Hello'
+    window.undo()
+    assert window.project == original
+    window.dirty = False
+    window.close()

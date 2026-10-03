@@ -70,6 +70,10 @@ def configure(state, video=True):
     if binaries.is_dir():
         os.environ['PATH'] = str(binaries) + os.pathsep + os.environ.get('PATH', '')
         settings.set_ffmpeg_dir(str(binaries), temp=True)
+        # Deno's Python wheel normally searches a Python installation's Scripts
+        # directory. A frozen plugin carries the executable privately instead.
+        import deno
+        deno.find_deno_bin = lambda: str(binaries / ('deno.exe' if os.name == 'nt' else 'deno'))
 
 
 def attach(window, output):
@@ -137,6 +141,23 @@ def self_test(output):
     output.mkdir(parents=True, exist_ok=True)
     configure(output / 'state')
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    # Import and construct the real upstream UI, not just its TXT parser. Wheels
+    # built straight from Git can omit generated Qt forms/resources.
+    from usdb_syncer import db, utils
+    from usdb_syncer.gui.mw import MainWindow
+    utils.AppPaths.make_dirs()
+    db.connect(':memory:')
+    window = MainWindow()
+    action = attach(window, output)
+    assert action in window.menu_tools.actions()
+    if getattr(sys, 'frozen', False):
+        import subprocess
+        binaries = Path(sys._MEIPASS) / 'bin'
+        for name in ('ffmpeg', 'ffprobe', 'deno'):
+            exe = binaries / (name + ('.exe' if os.name == 'nt' else ''))
+            subprocess.run([str(exe), '-version' if name != 'deno' else '--version'],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True, timeout=15,
+                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     fixture = output / 'fixture.txt'
     fixture.write_text('#TITLE:OpenLips Fixture\n#ARTIST:OpenLips\n#BPM:120\n#GAP:0\n: 0 4 0 Hel\n: 4 4 2 lo \n- 8\nE\n', encoding='utf-8')
     from usdb_syncer.song_txt import SongTxt
@@ -148,6 +169,8 @@ def self_test(output):
         def video_path(self): return None
         def cover_path(self): return None
     export_song(FixtureSong(), output)
+    window.close()
+    db.close()
     print('Offline USDB/yt-dlp/Qt bridge test passed', flush=True)
 
 
@@ -156,9 +179,16 @@ def main():
     parser.add_argument('--request', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--serve', action='store_true')
+    parser.add_argument('--state', type=Path)
     args = parser.parse_args()
     try:
-        if args.self_test:
+        if args.serve:
+            if not args.state:
+                raise ValueError('Missing plugin state directory')
+            from service import serve
+            serve(args.output, args.state)
+        elif args.self_test:
             self_test(args.output)
         else:
             if not args.request or args.request.stat().st_size > 64 * 1024 * 1024:

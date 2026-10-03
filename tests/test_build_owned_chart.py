@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.build_owned_chart import TRACKS, OG_CLASS_TOKENS, build_owned_pair, validate_owned_chart, offset_notes
+from tools.build_owned_chart import TRACKS, OG_CLASS_TOKENS, build_owned_pair, validate_owned_chart, offset_notes, midi_to_lips_pitch, owned_lyric_payload
 from tools.build_lyric_resource import TEXT
 from tools.walk_ixb_graph import Graph, GraphError
 from tools.write_template_chart import Note, SongChart, load_json_chart
@@ -13,6 +13,91 @@ from tools.write_template_chart import Note, SongChart, load_json_chart
 def model():
     return SongChart([Note(8, 1, 65, "World", line_break_after=True),
                       Note(5, 0.5, 60, "Hello")])
+
+
+@pytest.mark.parametrize('pitch', range(128))
+def test_midi_conversion_is_ascending_not_legacy_raw_index(pitch):
+    raw, tone, octave = midi_to_lips_pitch(pitch)
+    assert raw == 127 - pitch
+    assert tone == pitch % 12
+    assert octave == pitch // 12
+    assert tone + 12 * octave == pitch
+
+
+def test_export_preserves_contour_and_exact_note_durations():
+    source = SongChart([Note(1, .09, 73, 'One'), Note(2, .7, 66, 'Two'),
+                        Note(3, .3, 64, 'Three')])
+    chart, _ = build_owned_pair(source, 'Contour', 'Audio/Contour')
+    graph = Graph(chart)
+    markers = [r for r in graph.records if graph.is_a(r, 'lpsPhraseMarker')]
+    for marker, note in zip(markers, source.notes, strict=True):
+        time, length, raw, tone, octave = struct.unpack_from('>ffi4xfI', chart, marker.payload+8)
+        assert time == pytest.approx(note.time)
+        assert length == pytest.approx(note.length)
+        assert raw == 127 - note.pitch
+        assert tone + 12 * octave == note.pitch
+
+
+def test_melisma_has_no_literal_tildes_or_duplicate_visible_syllables():
+    source = SongChart([Note(1, .2, 60, 'tha', end_word=False),
+                        Note(1.2, .2, 62, '~', end_word=False),
+                        Note(1.4, .2, 64, '~t'), Note(2, .5, 65, 'way')])
+    payload, places = owned_lyric_payload(source)
+    text = payload.decode('utf-8')
+    assert text == '\ufeff\r\nthat way\r\n'
+    assert 1 not in places
+    assert text[places[2].offset:places[2].offset+places[2].length] == 't'
+    chart, lyric = build_owned_pair(source, 'Melisma', 'Audio/Melisma')
+    assert Graph(chart).summary()['melodies'] == 4
+    graph = Graph(chart)
+    markers = [r for r in graph.records if graph.is_a(r, 'lpsLyricMarker')]
+    assert len(markers) == 3
+    fragments = []
+    for marker in markers:
+        _, word = graph.vector(marker, 'm_vecLyricWordData', 20)
+        start, size = graph.u32(word, 4), graph.u32(word, 8)
+        fragments.append(text[start:start + size])
+    assert fragments == ['tha', 't', 'way']
+    assert [n.text for n in source.notes] == ['tha', '~', '~t', 'way']
+    resource = Graph(lyric).ref(TEXT)
+    assert lyric[resource.payload:resource.payload+resource.size] == payload
+
+
+def test_bare_continuations_keep_notes_without_repeated_lyric_markers():
+    source = SongChart([Note(1, .2, 73, 'Yeah', end_word=False),
+                        Note(1.2, .3, 71, '~', end_word=False),
+                        Note(1.5, .2, 69, '~', end_word=False),
+                        Note(1.7, .4, 69, '~', line_break_after=True)])
+    chart, _ = build_owned_pair(source, 'Sustain', 'Audio/Sustain')
+    graph = Graph(chart)
+    melodies = [r for r in graph.records if graph.is_a(r, 'lpsMelodyMarker')]
+    lyrics = [r for r in graph.records if graph.is_a(r, 'lpsLyricMarker')]
+    assert len(melodies) == 4
+    assert len(lyrics) == 1
+    assert graph.u32(lyrics[0], 24) == melodies[0].key
+    assert graph.u32(lyrics[0], 60) == 1
+    _, word = graph.vector(lyrics[0], 'm_vecLyricWordData', 20)
+    assert graph.u32(word, 12) == 1
+    assert [graph.u32(m, 4) for m in melodies] == [2, 1, 1, 1]
+    for marker, note in zip(melodies, source.notes, strict=True):
+        assert struct.unpack_from('>ff', chart, marker.payload + 8) == pytest.approx((note.time, note.length))
+    corrupted = bytearray(chart)
+    struct.pack_into('>f', corrupted, melodies[1].payload + 12, 9)
+    with pytest.raises(GraphError, match='melody'):
+        validate_owned_chart(bytes(corrupted), owned_lyric_payload(source)[0], source)
+
+
+def test_intentional_repeated_words_are_not_collapsed():
+    source = SongChart([Note(1, .3, 60, 'no'), Note(2, .3, 60, 'no')])
+    chart, _ = build_owned_pair(source, 'Repeat', 'Audio/Repeat')
+    graph = Graph(chart)
+    assert len([r for r in graph.records if graph.is_a(r, 'lpsLyricMarker')]) == 2
+    assert owned_lyric_payload(source)[0].decode('utf-8') == '\ufeff\r\nno no\r\n'
+
+
+def test_orphan_melisma_is_refused():
+    with pytest.raises(ValueError, match='preceding lyric'):
+        build_owned_pair(SongChart([Note(1, 1, 60, '~')]), 'Bad', 'Audio/Bad')
 
 
 def test_note_offset_delays_linked_notes_not_media_or_durations():

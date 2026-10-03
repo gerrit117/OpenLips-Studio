@@ -1,10 +1,10 @@
 """Horizontal karaoke editor: playback scrolls the notes to the left."""
 from PySide6.QtCore import Qt, QRectF, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QWidget, QLineEdit
+from PySide6.QtWidgets import QWidget, QLineEdit, QMenu
 
 from studio.i18n import tr
-from studio.model import EditorNote, pitch_name, snap_time
+from studio.model import EditorNote, pitch_name, snap_time, merge_selection
 from tools.build_owned_chart import phrase_page_starts
 
 
@@ -19,6 +19,7 @@ class LyricField(QLineEdit):
 
     def focusInEvent(self, event):
         self.timeline.selected_id = self.note_id
+        self.timeline.selected_ids = {self.note_id}
         self.timeline.selected.emit(self.note_id)
         super().focusInEvent(event)
 
@@ -46,11 +47,13 @@ class Timeline(QWidget):
     before_edit = Signal()
     edit_text = Signal(str)
     seek = Signal(float)
+    pitch_preview = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.project = None
         self.selected_id = ''
+        self.selected_ids = set()
         self.scale = 100.0
         self.origin = 0.0
         self.cursor = 0.0
@@ -67,11 +70,13 @@ class Timeline(QWidget):
 
     def set_project(self, project):
         if self.project is not project:
+            self.selected_ids.clear()
             for field in self.lyric_fields.values():
                 field.hide()
                 field.deleteLater()
             self.lyric_fields.clear()
         self.project = project
+        self.selected_ids.intersection_update(n.id for n in project.notes)
         pitches = [n.pitch for n in project.notes]
         self.low = max(0, min(pitches, default=54) - 4)
         self.high = min(127, max(self.low + 23, max(pitches, default=72) + 4))
@@ -131,8 +136,9 @@ class Timeline(QWidget):
         for i, n in enumerate(visible):
             r = self.geometry_for(n)
             active = n.time <= self.cursor < n.time + n.length
-            color = '#f4c95d' if active else '#ef599c' if n.id == self.selected_id else '#49c6cd'
-            p.setPen(QPen(QColor('#ffffff' if n.id == self.selected_id else color), 1))
+            chosen = n.id == self.selected_id or n.id in self.selected_ids
+            color = '#f4c95d' if active else '#ef599c' if chosen else '#49c6cd'
+            p.setPen(QPen(QColor('#ffffff' if chosen else color), 1))
             p.setBrush(QColor(color))
             p.drawRoundedRect(r, 3, 3)
             next_x = self.geometry_for(visible[i + 1]).x() if i + 1 < len(visible) else r.right() + 80
@@ -187,13 +193,78 @@ class Timeline(QWidget):
         pos = event.position()
         note = self.hit(pos)
         if note:
+            self.setFocus(Qt.FocusReason.MouseFocusReason)
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                if self.selected_id and not self.selected_ids:
+                    self.selected_ids.add(self.selected_id)
+                if note.id in self.selected_ids:
+                    self.selected_ids.remove(note.id)
+                    self.selected_id = next(iter(self.selected_ids), '')
+                else:
+                    self.selected_ids.add(note.id)
+                    self.selected_id = note.id
+                self.selected.emit(self.selected_id)
+                self.update()
+                return
+            self.selected_ids = {note.id}
             self.selected_id = note.id
             self.selected.emit(note.id)
             resize = abs(pos.x() - self.geometry_for(note).right()) < 9
             self.drag = (note, pos, note.time, note.length, note.pitch, resize, False)
         else:
+            self.selected_ids.clear()
+            self.selected_id = ''
+            self.selected.emit('')
             self.seek.emit(max(0, self.origin + (pos.x() - 62) / self.scale))
         self.update()
+
+    def keyPressEvent(self, event):
+        if self.project and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+            identifiers = self.selected_ids or {self.selected_id}
+            notes = [n for n in self.project.notes if n.id in identifiers]
+            if notes:
+                delta = 1 if event.key() == Qt.Key.Key_Up else -1
+                if all(0 <= note.pitch + delta <= 127 for note in notes):
+                    self.before_edit.emit()
+                    for note in notes:
+                        note.pitch += delta
+                    self.edited.emit()
+                    self.pitch_preview.emit(notes[0].pitch)
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def merge_notes(self):
+        merge_selection(self.project, self.selected_ids, validate_only=True)
+        self.before_edit.emit()
+        note = merge_selection(self.project, self.selected_ids)
+        self.selected_id = note.id
+        self.selected_ids = {note.id}
+        self.edited.emit()
+        self.selected.emit(note.id)
+        self.pitch_preview.emit(note.pitch)
+
+    def contextMenuEvent(self, event):
+        if not self.project:
+            return
+        note = self.hit(event.pos())
+        if not note:
+            return
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        if note.id not in self.selected_ids:
+            self.selected_ids = {note.id}
+        self.selected_id = note.id
+        self.selected.emit(note.id)
+        menu = QMenu(self)
+        menu.setToolTipsVisible(True)
+        action = menu.addAction(tr('note.merge_selected'))
+        try:
+            merge_selection(self.project, self.selected_ids, validate_only=True)
+        except ValueError:
+            action.setEnabled(False)
+        action.setToolTip(tr('note.merge_hint'))
+        action.triggered.connect(self.merge_notes)
+        menu.exec(event.globalPos())
 
     def mouseMoveEvent(self, event):
         if self.drag:
@@ -221,6 +292,8 @@ class Timeline(QWidget):
     def mouseReleaseEvent(self, event):
         if self.drag and self.drag[-1]:
             self.edited.emit()
+            if self.drag[0].pitch != self.drag[4]:
+                self.pitch_preview.emit(self.drag[0].pitch)
         self.drag = None
 
     def mouseDoubleClickEvent(self, event):

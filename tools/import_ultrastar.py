@@ -221,9 +221,9 @@ def chart_to_json_payload(chart: UltraStarChart) -> dict[str, Any]:
     for note in chart.notes:
         time = beat_to_seconds(note.start_beat, bpm, gap_ms)
         length = note.duration_beats * 60.0 / (bpm * 4.0)
-        if note.raw_pitch < 24 or note.raw_pitch > 84:
+        if note.raw_pitch < 0 or note.raw_pitch > 127:
             chart.warnings.append(
-                f"line {note.line_number}: converted raw_pitch {note.raw_pitch} is outside OpenLips validation range 24..84"
+                f"line {note.line_number}: converted MIDI pitch {note.raw_pitch} is outside 0..127"
             )
         notes.append(
             {

@@ -22,11 +22,13 @@ static void check(HRESULT hr, const char* operation) {
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc < 3 || argc > 4 || (argc == 4 && std::wstring(argv[3]) != L"--audio-only")) {
-        std::cerr << "usage: transcode_windows input new-output.wmv [--audio-only]\n";
+    if (argc < 3 || argc > 4 || (argc == 4 && std::wstring(argv[3]) != L"--audio-only" && std::wstring(argv[3]) != L"--audio-standard" && std::wstring(argv[3]) != L"--preview-video")) {
+        std::cerr << "usage: transcode_windows input new-output.wmv [--audio-only|--audio-standard|--preview-video]\n";
         return 2;
     }
-    const bool audio_only = argc == 4;
+    const bool preview = argc == 4 && std::wstring(argv[3]) == L"--preview-video";
+    const bool audio_only = argc == 4 && !preview;
+    const bool standard = audio_only && std::wstring(argv[3]) == L"--audio-standard";
     const auto output = std::filesystem::absolute(argv[2]);
     const auto temporary = output.wstring() + L".partial.wmv";
     if (std::filesystem::exists(output) || std::filesystem::exists(temporary)) {
@@ -52,9 +54,9 @@ int wmain(int argc, wchar_t** argv) {
         ComPtr<IMFTranscodeProfile> profile;
         check(MFCreateTranscodeProfile(&profile), "transcode profile");
         ComPtr<IMFCollection> types;
-        check(MFTranscodeGetAudioOutputAvailableTypes(MFAudioFormat_WMAudioV9,
+        check(MFTranscodeGetAudioOutputAvailableTypes(standard ? MFAudioFormat_WMAudioV8 : MFAudioFormat_WMAudioV9,
               MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER,
-              nullptr, &types), "enumerate WMA Pro types");
+              nullptr, &types), "enumerate WMA audio types");
         DWORD count = 0;
         check(types->GetElementCount(&count), "audio type count");
         ComPtr<IMFMediaType> selected;
@@ -70,22 +72,22 @@ int wmain(int argc, wchar_t** argv) {
             type->GetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, &bits);
             if (rate == 48000 && channels == 2 && bytes == 24000 && bits == 16) {
                 selected = type;
-                std::cout << "audio: 48000 Hz stereo 192000 bit/s, 16-bit WMA Pro\n";
+                std::cout << "audio: 48000 Hz stereo 192000 bit/s, 16-bit " << (standard ? "WMA Standard" : "WMA Pro") << "\n";
                 break;
             }
         }
-        if (!selected) throw std::runtime_error("48k stereo 192k 16-bit WMA Pro encoder type unavailable");
+        if (!selected) throw std::runtime_error("48k stereo 192k 16-bit WMA encoder type unavailable");
         check(profile->SetAudioAttributes(selected.Get()), "audio profile");
         if (!audio_only) {
         ComPtr<IMFAttributes> video;
         check(MFCreateAttributes(&video, 8), "video attributes");
         check(video->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video), "video major");
         check(video->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_WVC1), "VC-1 subtype");
-        check(MFSetAttributeSize(video.Get(), MF_MT_FRAME_SIZE, 768, 432), "video size");
+        check(MFSetAttributeSize(video.Get(), MF_MT_FRAME_SIZE, preview ? 240 : 768, preview ? 136 : 432), "video size");
         check(MFSetAttributeRatio(video.Get(), MF_MT_FRAME_RATE, 24000, 1001), "video rate");
         check(MFSetAttributeRatio(video.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1), "pixel aspect");
         check(video->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive), "interlace");
-        check(video->SetUINT32(MF_MT_AVG_BITRATE, 2000000), "video bitrate");
+        check(video->SetUINT32(MF_MT_AVG_BITRATE, preview ? 600000 : 2000000), "video bitrate");
         check(profile->SetVideoAttributes(video.Get()), "video profile");
         }
         ComPtr<IMFAttributes> container;
@@ -127,7 +129,7 @@ int wmain(int argc, wchar_t** argv) {
         // MoveFile refuses an existing destination, including one created meanwhile.
         if (!MoveFileW(temporary.c_str(), output.c_str()))
             check(HRESULT_FROM_WIN32(GetLastError()), "publish output");
-        std::cout << (audio_only ? "encoded audio-only WMA Pro ASF\n" : "encoded VC-1 / WMA Pro ASF at 768x432\n");
+        std::cout << (standard ? "encoded audio-only WMA Standard ASF\n" : audio_only ? "encoded audio-only WMA Pro ASF\n" : preview ? "encoded preview VC-1 / WMA Pro ASF at 240x136\n" : "encoded VC-1 / WMA Pro ASF at 768x432\n");
         result = 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << "\n";
