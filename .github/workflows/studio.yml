@@ -259,7 +259,8 @@ jobs:
               if (error.status !== 404) throw error;
               release = (await github.rest.repos.createRelease({owner, repo, tag_name: tag,
                 target_commitish: context.sha, name: 'OpenLips Studio ' + version.replace(/b\d+$/, ' Beta'),
-                prerelease: /b\d+$/.test(version), draft: true,
+                // Keep Beta in the title/tag; GitHub prereleases cannot be Latest in the sidebar.
+                prerelease: false, draft: true,
                 body: fs.readFileSync('CHANGELOG.md', 'utf8').split(/^## /m)[1].split(/^## /m)[0].replace(/^[^\n]*\n/, '').trim() + '\n\n' +
                       'Native Windows installer, macOS DMGs (Apple Silicon / Intel), and portable archives. Basic Pitch remains a separate .opl plugin. Optional OpenLips-AI archives contain the independent inference engine, installed automatically when needed. A separate Windows AMD ROCm engine accelerates separation and transcription on supported Radeon GPUs. No separate Python installation is needed. SwiftF0 and FFmpeg are bundled; larger separation/transcription models download on first use.\n\n' +
                       'AI drafts require manual review, especially sung lyrics. Custom DLC has been played in Number One Hits on a modified Xbox 360; Xenia DLC discovery remains under investigation. Final media encoding currently requires Windows. macOS/Linux game export needs already-compatible media.\n\n' +
@@ -274,4 +275,5 @@ jobs:
               await github.rest.repos.uploadReleaseAsset({owner, repo, release_id: release.id, name,
                 data, headers: {'content-type': 'application/octet-stream', 'content-length': data.length}});
             }
-            await github.rest.repos.updateRelease({owner, repo, release_id: release.id, draft: false});
+            await github.rest.repos.updateRelease({owner, repo, release_id: release.id,
+              draft: false, prerelease: false, make_latest: 'true'});
