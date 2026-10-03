@@ -62,6 +62,8 @@ Einige Grundlagen sind bereits vorhanden:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Importieren oder selbst erstellen.** UltraStar-TXT-Dateien einlesen, eine Melodiespur aus einer MIDI-Datei auswählen oder eigene Noten hinzufügen. Beim UltraStar-Import bleiben das Timing und die Silben erhalten.
+- **Eine Sammlung importieren.** Mehrere UltraStar-Dateien oder Songordner samt Medien und Covern einlesen. Den Speicherort der Projekte auswählen oder direkt ein Song-Pack exportieren.
+- **Platz für den Text schaffen.** Die importierten Seitenwechsel behalten oder den rückgängig machbaren intelligenten Seitenumbruch anwenden. Er berücksichtigt ganze Wörter, Gesangspausen und Satzzeichen, statt nach einer festen Wortanzahl zu trennen.
 - **Mit einer Aufnahme anfangen.** Basic Pitch in der Plugin-Verwaltung aktivieren, eine Audiodatei auswählen und Erkennungsschwellen, Notendauer sowie Tonumfang einstellen. Den lokal erzeugten Entwurf prüfen, als MIDI speichern oder die Noten in den Editor übernehmen. Die Analyse lässt sich abbrechen; die Notenübernahme lässt sich rückgängig machen. Eine isolierte Gesangsspur eignet sich besser als ein vollständiger Mix. Gesangstrennung und Songtexterkennung übernimmt das Plugin nicht.
 - **Den Chart bearbeiten.** Noten erstellen, löschen, verschieben oder in ihrer Länge ändern, die Tonhöhe anpassen, Textfragmente zuordnen sowie Wortenden, Phrasen und Seitenwechsel festlegen. Änderungen lassen sich rückgängig machen und wiederholen.
 - **Synchronisierte Songtexte behalten.** Die Entwicklungsversion importiert LRC-Dateien und synchronisierte LRCLIB-Ergebnisse, zeigt Zeilen- und Wort-Zeitmarken zur Prüfung an und speichert sie im Projekt. Die automatische KI-Zuordnung ist noch in Arbeit.
@@ -69,7 +71,7 @@ Einige Grundlagen sind bereits vorhanden:
 - **Den Zwischenstand speichern.** Mit einem `.olp`-Projekt kannst du einen Song unfertig lassen und später daran weiterarbeiten. Verknüpfte Medien bleiben separate Dateien.
 - **Die Darstellung vorbereiten.** Ein Cover auswählen oder ein einfaches Cover erzeugen lassen. Unter Windows wandelt der DLC-Export das ausgewählte Video oder Audio um und erzeugt vollständiges xWMA-Audio sowie eine 15-Sekunden-Vorschau ab dem ersten Texteinsatz. Songs mit Video erhalten zusätzlich ein kleines Vorschauvideo für das Menü. Medienwerkzeuge und STFS-Backend sind enthalten.
 - **Die Tonhöhe prüfen.** Ausgewählte Noten mit einem Referenzton abhören oder die Notentöne während der Wiedergabe einschalten. Fehlende optionale KI-Komponenten werden beim ersten Einsatz automatisch heruntergeladen und geprüft.
-- **Exportieren und ausprobieren.** Einen medienfreien `.ols`-Community-Song oder ein experimentelles DLC-Paket speichern. Die zuverlässige Erkennung von DLCs im Spiel wird weiterhin untersucht.
+- **Exportieren und ausprobieren.** Einen medienfreien `.ols`-Community-Song oder ein DLC-Paket speichern. Eigene DLCs wurden im Nutzertest von Number One Hits auf einer modifizierten Xbox 360 erkannt und abgespielt. Die DLC-Erkennung in Xenia wird weiterhin untersucht.
 - **Songs bündeln und übertragen.** Gespeicherte Projekte als benanntes Song-Pack exportieren oder ein geprüftes DLC direkt auf einen Xbox-USB-Stick mit sichtbarem `Content`-Ordner kopieren. Aktuelle Grenzen und Teststand stehen im [Pack- und USB-Leitfaden](docs/song_packs_usb.md).
 
 ![Der Charteditor von OpenLips Studio](assets/screenshots/studio-editor.png)
@@ -86,9 +88,9 @@ Einige Grundlagen sind bereits vorhanden:
 
 ### Was noch nicht fertig ist
 
-Die bestätigten Tests des gesamten Ablaufs wurden mit dem originalen Lips von 2008 in Xenia durchgeführt. Spätere Veröffentlichungen, sämtliche Spielmodi und die Spielaktionen der Originalsongs werden noch nicht vollständig unterstützt. Ein funktionierender Chartexport ist noch kein fertiger „alles importieren und sofort spielen“-Ablauf. Er macht unsignierte Inhalte auch nicht auf einer unveränderten Xbox 360 installierbar.
+Getestet wurden das originale Lips von 2008 in Xenia und eigene DLCs in Number One Hits auf einer modifizierten Xbox 360. Damit ist nicht jede Veröffentlichung oder jeder Spielmodus bestätigt. Die Spielaktionen der Originalsongs werden noch nicht vollständig unterstützt. Unsignierte Inhalte lassen sich mit diesem Tool nicht auf einer unveränderten Xbox 360 installieren.
 
-Die Medienkonvertierung richtet sich derzeit an den getesteten Wiedergabeweg des ersten Spiels unter Windows. Bearbeitung und Chartexport sind auch unter macOS und Linux verfügbar. Automatische DLC-Audiokonvertierung, zuverlässige DLC-Erkennung und die Community-Webseite sind noch in Arbeit. Wenn etwas nicht klappt, melde es bitte, statt davon auszugehen, dass du etwas falsch gemacht hast.
+Der Windows-DLC-Export umfasst Medienkonvertierung, Audioextraktion, Vorschauen und Paketerstellung. Bearbeitung und Chartexport sind auch unter macOS und Linux verfügbar; dort werden vorerst kompatible Spielmedien benötigt. Die Community-Webseite wird privat getestet. Wenn etwas nicht klappt, melde es bitte, statt davon auszugehen, dass du etwas falsch gemacht hast.
 
 ### Medien unter macOS und Linux
 
@@ -106,7 +108,7 @@ Die eingebaute, optionale KI-Analyse erstellt bearbeitbare Chart-Entwürfe aus A
 
 Entpacke das vollständige Studio-Archiv und lass die enthaltenen Dateien zusammen. Python ist enthalten. Basic Pitch ist ein separater, optionaler **`.opl`**-Download für deine Plattform und wird über die Plugin-Verwaltung installiert. Das Paket enthält sein eigenes Modell und die Analyseumgebung. Eine zusätzliche Python-Installation, ein Spotify-Konto oder ein API-Schlüssel sind nicht nötig. Die Audiodatei wird lokal verarbeitet und nicht hochgeladen. Weitere Informationen stehen im [Plugin-Katalog](plugins/README.md), der [Editor-Anleitung](docs/studio.md), der [Plugin-Entwicklerdokumentation](docs/studio_plugins.md) und den [Plattformhinweisen](docs/studio_platforms.md). Die technische Dokumentation ist derzeit überwiegend auf Englisch.
 
-Für Windows gibt es zusätzlich einen Installationsassistenten, für macOS ein DMG mit einer Verknüpfung zu „Programme“. Für Gesangstrennung und Texterkennung entpackst du das **OpenLips-AI**-Archiv und wählst die enthaltene `OpenLipsAI`-Datei im Audio-Chart-Dialog aus. Größere Modelle werden beim ersten Einsatz heruntergeladen und lokal zwischengespeichert. Die [Testergebnisse und bekannten Grenzen](docs/ai_song_creation_test_report.md) sind dokumentiert.
+Für Windows gibt es zusätzlich einen Installationsassistenten, für macOS ein DMG mit einer Verknüpfung zu „Programme“. Optionale KI-Komponenten werden beim ersten Einsatz automatisch heruntergeladen und geprüft, mit Fortschrittsanzeige und Abbruchmöglichkeit. Größere Modelle bleiben im lokalen Zwischenspeicher. Unterstützte AMD-Radeon-Grafikkarten können die separate Windows-ROCm-Engine nutzen; CPU-Verarbeitung bleibt möglich. Die [Testergebnisse und bekannten Grenzen](docs/ai_song_creation_test_report.md) sind dokumentiert.
 
 ## Dokumentation
 
@@ -134,7 +136,7 @@ Ein besonderes Dankeschön geht an **Spotifys Audio Intelligence Lab und die Ent
 
 Die eingebaute Audio-Chart-Funktion wurde durch [UltraSinger](https://github.com/rakuri255/UltraSinger) und [UltraSinger Studio](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0) inspiriert. Danke an ihre Entwickler und an die Teams hinter [Demucs](https://github.com/facebookresearch/demucs), [Whisper](https://github.com/openai/whisper), [faster-whisper](https://github.com/SYSTRAN/faster-whisper) und [SwiftF0](https://github.com/lars76/swift-f0). Die Einbindungen arbeiten lokal und sind keine offiziellen Dienste dieser Projekte.
 
-Danke auch an **Markus Böhning und die Mitwirkenden von [USDB Syncer](https://github.com/bohning/usdb_syncer)** sowie an das [yt-dlp](https://github.com/yt-dlp/yt-dlp)-Team. Ein eigenständiges USDB-Downloader-Plugin ist in Entwicklung und nutzt die bestehende Such- und Downloadoberfläche. Native Plugin-Pakete und Tests mit angemeldeten Downloads stehen noch aus.
+Danke auch an **Markus Böhning und die Mitwirkenden von [USDB Syncer](https://github.com/bohning/usdb_syncer)** sowie an das [yt-dlp](https://github.com/yt-dlp/yt-dlp)-Team. Das optionale USDB-Downloader-Plugin bietet eine Suche und Stapeldownloads direkt in Studio, einschließlich Covern. Studio enthält außerdem einen manuellen Mediendownload. Lade und teile nur Material, für dessen Nutzung du die erforderlichen Rechte hast.
 
 ## Unabhängigkeit, Rechte und Verantwortung
 

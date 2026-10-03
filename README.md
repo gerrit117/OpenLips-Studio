@@ -7,7 +7,7 @@
 
 **Ever wanted to add your own songs to Lips? Even if you haven't, now you can give it a try.**
 
-OpenLips is an independent community project about bringing new songs to the Xbox 360 karaoke game *Lips*. **OpenLips Studio** is the software being built to make that possible: import a song chart, work on its notes and lyrics, and prepare it for the game. You can start with UltraStar or MIDI files, or create a chart yourself.
+OpenLips is an independent community project about bringing new songs to the Xbox 360 karaoke game *Lips*. **OpenLips Studio** takes you from an UltraStar chart, MIDI melody or recording to an editable song and a DLC package. Adjust notes and lyrics, check them against your audio or video, and export a single song or a named song pack. You can also start with an empty chart.
 
 This is **early-stage development**, not a finished product. There is a working foundation, but plenty is still incomplete, experimental or waiting for more testing.
 
@@ -62,6 +62,8 @@ Some foundations are already in place:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Import or create.** Bring in UltraStar TXT files, choose a melody track from a MIDI file, or add notes yourself. UltraStar timing and syllables are preserved on import.
+- **Import a collection.** Batch-import UltraStar files or song folders with their media and covers. Choose where to save the projects or proceed directly to song-pack export.
+- **Make room for lyrics.** Keep the imported page breaks or apply the undoable Intelligent Page Breaks action. It considers whole words, vocal pauses and punctuation instead of cutting after a fixed number of words.
 - **Start from a recording.** Enable Basic Pitch in the plugin manager, choose an audio file and adjust detection sensitivity, note duration and pitch limits. Review the locally generated draft, save it as MIDI or take its notes into the editor. The analysis can be cancelled; replacing notes can be undone. Isolated vocals work better than a full mix. This is not automatic vocal separation or lyric transcription.
 - **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
 - **Create a draft from audio.** Optional local vocal separation, pitch detection and lyric recognition produce an editable chart. Review the result before using it: singing recognition still makes substantial mistakes. Small-model pitch analysis is bundled; the heavier AI engine is a separate download.
@@ -70,7 +72,7 @@ Some foundations are already in place:
 - **Check the pitch.** Audition selected notes with a reference tone or enable note tones during playback. Missing optional AI components are downloaded and verified automatically on first use.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
 - **Prepare the presentation.** Choose a cover or generate a simple one. On Windows, DLC export converts the selected video or audio and creates full xWMA audio plus a 15-second preview starting at the first lyric. Video songs also get a small menu preview video. The media tools and STFS backend are included.
-- **Export and experiment.** Save a media-free `.ols` Community song or an experimental DLC package. Reliable in-game DLC discovery is still being investigated.
+- **Export and experiment.** Save a media-free `.ols` Community song or a DLC package. Custom DLC has been recognized and played in Number One Hits on a modified Xbox 360 in user testing; DLC discovery in Xenia remains under investigation.
 - **Group songs and transfer them.** Export a named song pack from saved projects, or copy a verified DLC directly to an Xbox USB drive with a visible `Content` folder. See the [pack and USB guide](docs/song_packs_usb.md) for current limits and testing status.
 
 ![The OpenLips Studio chart editor](assets/screenshots/studio-editor.png)
@@ -87,9 +89,9 @@ Some foundations are already in place:
 
 ### What is not ready yet
 
-The confirmed end-to-end tests use the original Lips (2008) through Xenia. Later releases, all gameplay modes and original song events are not fully supported. A working chart export is not yet a finished “import anything and play” workflow, and it does not make unsigned content installable on an unmodified Xbox 360.
+Testing covers the original Lips (2008) through Xenia and custom DLC in Number One Hits on a modified Xbox 360. This does not establish compatibility with every release or gameplay mode. Original song events are not fully supported, and unsigned content cannot be installed on an unmodified Xbox 360 through this tool.
 
-Media conversion currently targets the tested original-game path on Windows; editing and chart export are available on macOS and Linux too. Automatic DLC audio conversion, dependable DLC discovery and the community website are still work in progress. If a feature fails, please report it rather than assuming you've done something wrong.
+Windows DLC export includes media conversion, audio extraction, previews and package creation. Editing and chart export are available on macOS and Linux too, but those systems still need compatible game media. The community website is being tested privately. If a feature fails, please report it rather than assuming you've done something wrong.
 
 ### Media on macOS and Linux
 
@@ -105,7 +107,7 @@ Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLi
 
 Extract the complete Studio archive and keep its files together. Python is included. Basic Pitch is a separate, optional **`.opl`** download for your platform; install it in the plugin manager. Its package includes its own model and analysis runtime, without a separate Python installation, Spotify account or API key. Audio is processed locally, not uploaded. See the [plugin catalog](plugins/README.md), [editor guide](docs/studio.md), [plugin developer guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
 
-Windows also has an installer; macOS has a DMG with an Applications shortcut. For optional vocal separation and lyric recognition, extract the **OpenLips-AI** archive and select its `OpenLipsAI` executable in the audio-chart dialog. The larger models download on first use and remain in your local cache. See the [AI workflow and measured limitations](docs/ai_song_creation_test_report.md).
+Windows also has an installer; macOS has a DMG with an Applications shortcut. Optional AI components are downloaded and verified when first needed, with progress and cancellation. Larger models remain in your local cache. Supported AMD Radeon GPUs can use the separate Windows ROCm engine; CPU processing remains available. See the [AI workflow and measured limitations](docs/ai_song_creation_test_report.md).
 
 ## Documentation
 
@@ -133,7 +135,7 @@ A special thank you to **Spotify's Audio Intelligence Lab and the authors of [Ba
 
 The built-in audio-chart workflow was inspired by [UltraSinger](https://github.com/rakuri255/UltraSinger) and [UltraSinger Studio](https://github.com/lazinessss999-dot/UltraSinger_studio-v1.0). Thank you to their authors, and to the teams behind [Demucs](https://github.com/facebookresearch/demucs), [Whisper](https://github.com/openai/whisper), [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and [SwiftF0](https://github.com/lars76/swift-f0). These are independent local integrations, not affiliated services.
 
-Thank you also to **Markus Böhning and the contributors to [USDB Syncer](https://github.com/bohning/usdb_syncer)**, and to the [yt-dlp](https://github.com/yt-dlp/yt-dlp) team. A separate USDB Downloader plugin is in development, using their existing search/download interface rather than rebuilding it. Native plugin packages and authenticated download testing are still pending.
+Thank you also to **Markus Böhning and the contributors to [USDB Syncer](https://github.com/bohning/usdb_syncer)**, and to the [yt-dlp](https://github.com/yt-dlp/yt-dlp) team. The optional USDB Downloader plugin provides native search and batch-download controls in Studio, including covers. Studio also includes a manual media downloader. Only download and share material you have the necessary rights to use.
 
 ## Independence, rights and responsibility
 

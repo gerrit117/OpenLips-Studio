@@ -170,7 +170,7 @@ class DLC(unittest.TestCase):
                         build_package(backend, {'synthetic.dat': source}, b'<DLCContents/>',
                                       automatic, 'Test', canonical_name=True)
                     self.assertEqual(emitted.read_bytes(), before)
-                    self.assertEqual(list(automatic.iterdir()), [emitted])
+                    self.assertEqual([path.resolve() for path in automatic.iterdir()], [emitted.resolve()])
                 original = package.read_bytes()
                 corrupt = bytearray(original)
                 corrupt[-1] ^= 1
