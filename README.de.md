@@ -7,7 +7,7 @@
 
 **Du wolltest schon immer deine eigenen Songs in Lips importieren? Selbst wenn nicht: Jetzt kannst du es zumindest ausprobieren.**
 
-OpenLips ist ein unabhängiges Community-Projekt, das neue Songs in das Xbox-360-Karaokespiel *Lips* bringen möchte. **OpenLips Studio** ist das Programm, das diesen Gedanken umsetzen soll: einen Chart importieren, Noten und Songtext bearbeiten und den Song für das Spiel vorbereiten. Als Ausgangspunkt können UltraStar- oder MIDI-Dateien dienen. Du kannst aber auch einen eigenen Chart erstellen.
+OpenLips ist ein unabhängiges Community-Projekt, das neue Songs in das Xbox-360-Karaokespiel *Lips* bringen möchte. **OpenLips Studio** ist das Programm dafür: einen Chart importieren, Noten und Songtext bearbeiten und einzelne Songs oder ganze Song-Packs für das Spiel vorbereiten. Als Ausgangspunkt können UltraStar, MIDI, zeitlich zugeordnete Lyrics oder eine Aufnahme dienen. Du kannst aber auch einen eigenen Chart von Grund auf erstellen.
 
 Das Ganze befindet sich **noch in einer frühen Entwicklungsphase**. Es gibt eine funktionierende Grundlage, aber vieles ist noch unvollständig, experimentell oder muss gründlicher getestet werden.
 
@@ -38,11 +38,13 @@ Das sind Vorhaben, keine Zusagen für das nächste Release. Die ersten Schwerpun
 - [x] Eine aktivierbare Plugin-Verwaltung mit `.opl`-Paketen, Einstellungen, Vorschau und Import im Hintergrund einbauen.
 - [ ] Das Songformat tiefergehend dokumentieren, einschließlich LS2 und späterer Veröffentlichungen.
 - [ ] Quick-Time-Events (QTEs) und weitere songbezogene Spielaktionen unterstützen.
-- [ ] Eine Community-Webseite mit Benutzerkonten und einer gemeinsamen Datenbank für selbst erstellte Charts und Lyrics aufbauen, mit den nötigen Nutzungsrechten und Moderationsregeln.
+- [ ] Die Community-Webseite veröffentlichen: **Coming soon**, mit Benutzerkonten und einer gemeinsamen Datenbank für selbst erstellte Charts und Lyrics, mit den nötigen Nutzungsrechten und Moderationsregeln.
 - [x] Spotifys [Basic Pitch](https://github.com/spotify/basic-pitch) einbinden: Gesang in einen MIDI- und Notenentwurf umwandeln, der geprüft und bearbeitet werden kann.
 - [ ] Die Plugin-Schnittstelle um weitere Verarbeitungs- und Exportabläufe erweitern.
-- [ ] Eigene DLCs zuverlässig installieren und vom Spiel erkennen lassen, auch mit bestehenden Profilen.
-- [ ] Medienvorbereitung und Songexport zu einem einfacheren Ablauf zusammenführen und die Konvertierung auf weiteren Plattformen unterstützen.
+- [x] Eigene DLCs und Song-Packs für eine kompatible Xbox-Umgebung exportieren; in Number One Hits auf einer modifizierten Xbox 360 von Nutzern getestet.
+- [ ] Die DLC-Erkennung in Xenia klären und weitere Spielversionen testen.
+- [x] Medienvorbereitung, Vorschauen und Paketerstellung im Windows-Export zusammenführen.
+- [ ] Eine gleichwertige Medienkonvertierung für macOS und Linux ergänzen.
 - [ ] Einen optionalen FTP-Upload für eine kompatible Xbox-Umgebung ergänzen.
 - [ ] Bedienbarkeit, Übersetzungen, Barrierefreiheit und Tests im Alltag verbessern.
 
@@ -51,6 +53,7 @@ Mit „LS2“ sind hier die Lips-Veröffentlichungen nach dem ersten Spiel von 2
 Einige Grundlagen sind bereits vorhanden:
 
 - [x] UltraStar-Charts und MIDI-Melodien importieren.
+- [x] Mit LRC ohne MIDI beginnen oder das Timing des Songtexts mit der Leertaste aufnehmen.
 - [x] Noten, Silben und Phrasengrenzen in einem grafischen Editor bearbeiten.
 - [x] Unfertige Arbeit als `.olp`-Projekt speichern.
 - [x] Neue Chart- und Lyric-Dateien für das originale Lips ohne Songvorlage erzeugen.
@@ -62,19 +65,21 @@ Einige Grundlagen sind bereits vorhanden:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Importieren oder selbst erstellen.** UltraStar-TXT-Dateien einlesen, eine Melodiespur aus einer MIDI-Datei auswählen oder eigene Noten hinzufügen. Beim UltraStar-Import bleiben das Timing und die Silben erhalten.
-- **Eine Sammlung importieren.** Mehrere UltraStar-Dateien oder Songordner samt Medien und Covern einlesen. Den Speicherort der Projekte auswählen oder direkt ein Song-Pack exportieren.
-- **Platz für den Text schaffen.** Die importierten Seitenwechsel behalten oder den rückgängig machbaren intelligenten Seitenumbruch anwenden. Er berücksichtigt ganze Wörter, Gesangspausen und Satzzeichen, statt nach einer festen Wortanzahl zu trennen.
+- **Eine Sammlung importieren.** Mehrere UltraStar-Dateien oder Songordner samt Medien und Covern einlesen. Den Speicherort der Projekte auswählen oder direkt ein Song-Pack exportieren. Die Seitenaufteilung wird automatisch verbessert, ohne die musikalischen Noten zu verändern.
+- **Platz für den Text schaffen.** Beim einzelnen UltraStar-Import bleiben die ursprünglichen Umbrüche erhalten. Den intelligenten Seitenumbruch anwenden, eigene Wechsel während der Wiedergabe mit der Leertaste aufnehmen oder die Aufteilung beim Batch-Import und Song-Pack-Export automatisch erledigen lassen. Ausdrücklich manuell bearbeitete Aufteilungen bleiben erhalten; ganze Wörter und Melismen bleiben zusammen.
+- **Mit zeitlich zugeordneten Lyrics beginnen.** „Nur LRC“ erzeugt graue Textbalken, ohne eine Melodie zu erfinden. Tonhöhen selbst zuweisen, Längen anpassen, eine Zeile versuchsweise in Wörter oder ein Wort in mehrere Töne aufteilen. Unfertige Entwürfe lassen sich speichern und später weiterbearbeiten.
+- **Das Text-Timing aufnehmen.** Keine LRC vorhanden? Songtext in den Timing-Assistenten einfügen und während der Wiedergabe die Leertaste drücken. Wörter oder ausdrücklich getrennte Silben wählen, mit Tick-Tönen gegenhören, einzelne Einträge korrigieren oder ab dort neu aufnehmen. Referenzaudio und Ticks haben getrennte Lautstärkeregler. Ein KI-Modell ist dafür nicht nötig.
 - **Mit einer Aufnahme anfangen.** Basic Pitch in der Plugin-Verwaltung aktivieren, eine Audiodatei auswählen und Erkennungsschwellen, Notendauer sowie Tonumfang einstellen. Den lokal erzeugten Entwurf prüfen, als MIDI speichern oder die Noten in den Editor übernehmen. Die Analyse lässt sich abbrechen; die Notenübernahme lässt sich rückgängig machen. Eine isolierte Gesangsspur eignet sich besser als ein vollständiger Mix. Gesangstrennung und Songtexterkennung übernimmt das Plugin nicht.
 - **Den Chart bearbeiten.** Noten erstellen, löschen, verschieben oder in ihrer Länge ändern, die Tonhöhe anpassen, Textfragmente zuordnen sowie Wortenden, Phrasen und Seitenwechsel festlegen. Änderungen lassen sich rückgängig machen und wiederholen.
 - **Einen Entwurf aus Audio erstellen.** Die optionale lokale KI-Analyse kann Gesang trennen, Tonhöhen erkennen und Wörter zuordnen. Das Ergebnis bleibt bearbeitbar und muss geprüft werden. Fehlende KI-Komponenten werden bei Bedarf heruntergeladen; unterstützte AMD-Grafikkarten können die Windows-ROCm-Engine nutzen.
-- **Synchronisierte Songtexte behalten.** Die Entwicklungsversion importiert LRC-Dateien und synchronisierte LRCLIB-Ergebnisse, zeigt Zeilen- und Wort-Zeitmarken zur Prüfung an und speichert sie im Projekt. Die automatische KI-Zuordnung ist noch in Arbeit.
+- **Synchronisierte Songtexte behalten.** LRC-Dateien und synchronisierte LRCLIB-Ergebnisse importieren, Zeilen- und Wort-Zeitmarken prüfen und im Projekt speichern. Enhanced LRC und, nach der Tonhöhenzuweisung, MIDI exportieren. Normale LRC enthält Zeilenanfänge, keine exakten Wortlängen; Timing und Melodie müssen weiterhin geprüft werden.
 - **Das Timing prüfen.** Referenzaudio oder ein Video zusammen mit dem Chart abspielen. Die Wiedergabegeschwindigkeit ändern, hineinzoomen und bei Bedarf alle Noten samt Seitenwechseln zeitlich verschieben.
 - **Den Zwischenstand speichern.** Mit einem `.olp`-Projekt kannst du einen Song unfertig lassen und später daran weiterarbeiten. Verknüpfte Medien bleiben separate Dateien.
 - **Die Darstellung vorbereiten.** Ein Cover auswählen oder ein einfaches Cover erzeugen lassen. Unter Windows wandelt der DLC-Export das ausgewählte Video oder Audio um und erzeugt vollständiges xWMA-Audio sowie eine 15-Sekunden-Vorschau ab dem ersten Texteinsatz. Songs mit Video erhalten zusätzlich ein kleines Vorschauvideo für das Menü. Medienwerkzeuge und STFS-Backend sind enthalten.
 - **Die Tonhöhe prüfen.** Ausgewählte Noten mit einem Referenzton abhören oder die Notentöne während der Wiedergabe einschalten. Fehlende optionale KI-Komponenten werden beim ersten Einsatz automatisch heruntergeladen und geprüft.
 - **Exportieren und ausprobieren.** Einen medienfreien `.ols`-Community-Song oder ein DLC-Paket speichern. Eigene DLCs wurden im Nutzertest von Number One Hits auf einer modifizierten Xbox 360 erkannt und abgespielt. Die DLC-Erkennung in Xenia wird weiterhin untersucht.
 - **Songs bündeln und übertragen.** Gespeicherte Projekte als benanntes Song-Pack exportieren oder ein geprüftes DLC direkt auf einen Xbox-USB-Stick mit sichtbarem `Content`-Ordner kopieren. Aktuelle Grenzen und Teststand stehen im [Pack- und USB-Leitfaden](docs/song_packs_usb.md).
-- **Die Community nutzen.** Im Community-Reiter bei OpenLips anmelden, Songs durchsuchen und herunterladen, Kommentare und Bewertungen ansehen oder einen .ols-Song beziehungsweise den aktuellen Chart zur Prüfung hochladen. Die Webseite wird noch mit Admins und Moderatoren getestet; die Registrierung öffnet zum öffentlichen Start.
+- **Community: Coming soon.** Studio hat bereits einen vorbereiteten Reiter für Anmeldung, Suche, Bewertungen, Kommentare und `.ols`-Uploads/-Downloads. Die Webseite ist noch nicht öffentlich verfügbar; die Online-Funktionen öffnen mit ihrer Veröffentlichung.
 
 ![Der Charteditor von OpenLips Studio](assets/screenshots/studio-editor.png)
 
@@ -84,13 +89,29 @@ Einige Grundlagen sind bereits vorhanden:
 
 *Für jede Note lassen sich Timing, Tonhöhe und Textzuordnung bearbeiten.*
 
+![Die Option „Nur LRC“ im Erstellungsassistenten](assets/screenshots/studio-wizard-de.png)
+
+*Mit einem Chart, MIDI, zeitlich zugeordneten Lyrics oder einer eigenen Aufnahme beginnen.*
+
+![Text-Timing aufnehmen und prüfen](assets/screenshots/studio-timing-de.png)
+
+*Der Timing-Assistent mit selbst erstellten Demo-Lyrics und bearbeitbaren Zeitmarken.*
+
+![Ein Textentwurf mit noch nicht zugewiesenen Tonhöhen](assets/screenshots/studio-lrc-draft.png)
+
+*Graue Balken zeigen Text-Timing, keine automatisch erkannte Melodie.*
+
 ![Community-Anmeldung in OpenLips Studio](assets/screenshots/studio-community-de.png)
 
-*Der Community-Reiter. Ein bestätigtes Konto ist erforderlich; Admins und Moderatoren nutzen zusätzlich ihren Authenticator.*
+*Der vorbereitete Community-Reiter. Die öffentliche Veröffentlichung steht noch aus.*
 
 ![Basic-Pitch-Einstellungen und ein synthetischer Notenentwurf](assets/screenshots/studio-plugins.png)
 
 *Das erste Plugin mit einer selbst erzeugten Aufnahme aus vier Testtönen, nicht mit einem Song.*
+
+### Neu in 0.4.0 Beta
+
+„Nur LRC“ und der Timing-Assistent ermöglichen den Einstieg ohne MIDI. Batch-Import und Song-Pack-Export optimieren die Seiten jetzt automatisch. Seitenwechsel lassen sich auch während der Wiedergabe aufnehmen. Das Bearbeiten von Tonhöhe oder Text rundet unveränderte Notenzeiten nicht mehr; Entwürfe ohne Tonhöhen können nicht versehentlich als DLC-Melodie exportiert werden. Mehr dazu im [englischen Changelog](CHANGELOG.md) und im [Leitfaden zum Arbeiten mit Lyrics](docs/lyric_first_workflow.md).
 
 ### Was noch nicht fertig ist
 
@@ -108,7 +129,7 @@ Die [genauen Medienanforderungen und Vorbereitungsschritte](docs/studio_media.md
 
 ## Download
 
-Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Es gibt Builds für Windows, macOS auf Apple Silicon und Intel sowie Linux.
+Die aktuelle Beta findest du unter **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Für Windows gibt es einen Installer und ein portables Archiv. macOS auf Apple Silicon und Intel sowie Linux haben eigene native Builds. Achte auf die Versionsnummer der einzelnen Dateien: Diese Builds können später fertig werden als die Windows-Veröffentlichung.
 
 Die eingebaute, optionale KI-Analyse erstellt bearbeitbare Chart-Entwürfe aus Audio: Gesang trennen, Tonhöhen erkennen und Wörter zuordnen. Bitte prüfe das Ergebnis sorgfältig; die Texterkennung macht bei Gesang noch deutliche Fehler. Das kleine Tonhöhenmodell ist enthalten, die große KI-Engine wird separat angeboten. Eine exakte automatische Silbenerkennung ist noch nicht fertig.
 
@@ -121,6 +142,7 @@ Für Windows gibt es zusätzlich einen Installationsassistenten, für macOS ein 
 Die technischen Informationen liegen in [`docs/`](docs/). Gute Einstiegspunkte sind:
 
 - [Den Editor verwenden](docs/studio.md).
+- [Nur LRC und den Timing-Assistenten verwenden](docs/lyric_first_workflow.md).
 - [Medien, Cover und Synchronisierung](docs/studio_media.md).
 - [Aufbau der Songdateien](docs/structures.md) und der [strukturelle Reader](docs/og_ixb_reader.md).
 - [Seitenwechsel und Projekte](docs/studio_pages_and_community.md).

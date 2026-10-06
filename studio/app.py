@@ -6,13 +6,14 @@ from pathlib import Path
 import sys
 import time
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, QEvent
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QFormLayout, QSplitter, QLineEdit, QDoubleSpinBox, QSpinBox,
     QCheckBox, QLabel, QTextEdit, QPushButton, QToolBar, QFileDialog, QMessageBox,
-    QInputDialog, QSlider, QComboBox, QGroupBox, QScrollArea, QLayout, QSizePolicy, QStackedWidget, QTabWidget)
+    QInputDialog, QSlider, QComboBox, QGroupBox, QScrollArea, QLayout, QSizePolicy, QStackedWidget, QTabWidget,
+    QAbstractButton, QAbstractSpinBox, QPlainTextEdit)
 import qtawesome as qta
 from studio.i18n import tr, language as ui_language, set_language
 
@@ -65,6 +66,7 @@ class StudioWindow(QMainWindow):
         self.timer.setInterval(20)
         self.timer.timeout.connect(self.tick)
         self.refresh()
+        QApplication.instance().installEventFilter(self)
 
     def action(self, label, icon, callback, shortcut=None):
         a = QAction(qta.icon(icon, color='#cdd3d9'), label, self)
@@ -98,6 +100,7 @@ class StudioWindow(QMainWindow):
         advanced = exports.addMenu(tr('export.advanced'))
         advanced.addAction(tr('X360-Paar exportieren'), self.export_pair)
         advanced.addAction(tr('Debug-JSON exportieren'), self.export_json)
+        advanced.addAction(tr('timing.midi_export'), self.export_midi)
         tools = self.menuBar().addMenu(tr('Werkzeuge'))
         for label, callback in [(tr('MIDI importieren'), self.import_midi),
                                (tr('UltraStar importieren'), self.import_txt),
@@ -112,9 +115,16 @@ class StudioWindow(QMainWindow):
         self.smart_pages_action = self.action(tr('pages.smart'), 'fa5s.stream', self.intelligent_lyric_pages)
         self.smart_pages_action.setToolTip(tr('pages.smart'))
         tools.addAction(self.smart_pages_action)
+        self.record_pages_action = self.action(tr('pages.record'), 'fa5s.keyboard', self.set_page_recording)
+        self.record_pages_action.setCheckable(True)
+        self.record_pages_action.setToolTip(tr('pages.record_tip'))
+        tools.addAction(self.record_pages_action)
+        self.clear_pages_action = tools.addAction(tr('pages.clear'), self.clear_lyric_pages)
         tools.addAction(tr('usb.title'), self.install_dlc_usb)
         tools.addAction(tr('Lyrics suchen'), self.search_lyrics)
         tools.addAction(tr('lrc.review'), self.review_lrc)
+        tools.addAction(tr('timing.title'), self.timing_assistant)
+        tools.addAction(tr('timing.lrc_export'), self.export_lrc)
         tools.addAction(tr('ai.title'), self.ai_chart_dialog)
         tools.addAction(tr('download.youtube'), self.download_youtube)
         self.plugin_menu = tools.addMenu(tr('plugin.actions'))
@@ -141,6 +151,7 @@ class StudioWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.smart_pages_action)
         toolbar.widgetForAction(self.smart_pages_action).setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toolbar.addAction(self.record_pages_action)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
@@ -159,6 +170,7 @@ class StudioWindow(QMainWindow):
         self.community_page = CommunityPage(lambda: self.project, self)
         self.community_page.song_opened.connect(self.open_downloaded_song)
         self.workspace_tabs.addTab(self.community_page, tr('community.title'))
+        self.workspace_tabs.currentChanged.connect(self.workspace_changed)
         self.setCentralWidget(self.workspace_tabs)
         welcome = QWidget()
         welcome_layout = QVBoxLayout(welcome)
@@ -217,9 +229,10 @@ class StudioWindow(QMainWindow):
             w.setSingleStep(.025)
             w.setSuffix(' s')
             w.setRange(0, 86400)
-        self.length_edit.setMinimum(.02)
+        self.length_edit.setMinimum(.001)
         self.pitch_edit = QSpinBox()
-        self.pitch_edit.setRange(0, 127)
+        self.pitch_edit.setRange(-1, 127)
+        self.pitch_edit.setSpecialValueText(tr('timing.unassigned'))
         self.pitch_edit.valueChanged.connect(self.preview_pitch_change)
         self.pitch_label = QLabel()
         self.text_edit = QLineEdit()
@@ -407,6 +420,7 @@ class StudioWindow(QMainWindow):
         draft = self.lyrics.toPlainText()
         origin, scale, follow, snap = self.timeline.origin, self.timeline.scale, self.timeline.follow, self.timeline.snap
         self.stop()
+        self.record_pages_action.setChecked(False)
         set_language(value)
         self.menuBar().clear()
         for toolbar in self.findChildren(QToolBar):
@@ -654,6 +668,11 @@ class StudioWindow(QMainWindow):
         self.undo_action.setEnabled(bool(self.history))
         self.redo_action.setEnabled(bool(self.future))
         self.smart_pages_action.setEnabled(bool(self.project.notes))
+        self.record_pages_action.setEnabled(len(self.project.notes) > 1)
+        self.clear_pages_action.setEnabled(any(n.line_break_after or n.page_break_time is not None
+                                               for n in self.project.notes))
+        if len(self.project.notes) < 2:
+            self.record_pages_action.setChecked(False)
         self.select_note(self.timeline.selected_id)
         self.statusBar().showMessage(tr('notes.summary', count=len(self.project.notes), duration=self.project.duration,
                                        warnings=len(self.project.warnings), source=self.project.source))
@@ -670,12 +689,12 @@ class StudioWindow(QMainWindow):
         for w in (self.time_edit, self.length_edit, self.pitch_edit, self.text_edit, self.word_edit, self.phrase_edit, self.page_override):
             w.setEnabled(n is not None)
         self.delete_action.setEnabled(n is not None)
-        self.tone_button.setEnabled(n is not None)
+        self.tone_button.setEnabled(n is not None and n.pitch_assigned)
         if n:
             self.time_edit.setValue(n.time)
             self.length_edit.setValue(n.length)
-            self.pitch_edit.setValue(n.pitch)
-            self.pitch_label.setText(pitch_name(n.pitch))
+            self.pitch_edit.setValue(n.pitch if n.pitch_assigned else -1)
+            self.pitch_label.setText(pitch_name(n.pitch) if n.pitch_assigned else tr('timing.unassigned'))
             self.text_edit.setText(n.text)
             self.word_edit.setChecked(n.end_word)
             self.phrase_edit.setChecked(n.line_break_after)
@@ -683,13 +702,14 @@ class StudioWindow(QMainWindow):
             self.page_override.setChecked(n.page_break_time is not None)
             self.page_edit.setEnabled(n.line_break_after and n.page_break_time is not None)
             self.page_edit.setValue(n.page_break_time if n.page_break_time is not None else n.time + n.length)
+            self.displayed_timing = {w:w.value() for w in (self.time_edit,self.length_edit,self.page_edit)}
         else:
             self.page_edit.setEnabled(False)
         self.loading = previous
         self.timeline.update()
 
     def audition_note(self):
-        if self.note():
+        if self.note() and self.pitch_edit.value() >= 0:
             self.tones.play(self.pitch_edit.value(), .6)
 
     def audition_selection(self, ident):
@@ -698,8 +718,9 @@ class StudioWindow(QMainWindow):
 
     def preview_pitch_change(self, value):
         if not self.loading and self.note():
-            self.pitch_label.setText(pitch_name(value))
-            if self.tone_auto.isChecked() and not self.playing:
+            self.pitch_label.setText(pitch_name(value) if value >= 0 else tr('timing.unassigned'))
+            self.tone_button.setEnabled(value >= 0)
+            if value >= 0 and self.tone_auto.isChecked() and not self.playing:
                 self.tones.play(value, .6)
 
     def toggle_note_tones(self, enabled):
@@ -709,7 +730,7 @@ class StudioWindow(QMainWindow):
     def update_note_tones(self):
         if not self.playing or not self.hear_notes.isChecked():
             return
-        note = max((n for n in self.project.notes if n.time <= self.position < n.time + n.length),
+        note = max((n for n in self.project.notes if n.pitch_assigned and n.time <= self.position < n.time + n.length),
                    key=lambda n: n.time, default=None)
         identity = (note.id, note.pitch) if note else None
         if identity != self.sounding_note:
@@ -723,13 +744,21 @@ class StudioWindow(QMainWindow):
         n = self.note()
         if self.loading or not n:
             return
-        values = (self.time_edit.value(), self.length_edit.value(), self.pitch_edit.value(),
+        def timing_value(widget, current):
+            if current is not None and widget.value() == getattr(self,'displayed_timing',{}).get(widget):
+                return current
+            return widget.value()
+        values = (timing_value(self.time_edit,n.time), timing_value(self.length_edit,n.length), max(0, self.pitch_edit.value()) if self.pitch_edit.value() >= 0 else n.pitch,
                   self.text_edit.text(), self.word_edit.isChecked(), self.phrase_edit.isChecked(),
-                  self.page_edit.value() if self.page_override.isChecked() and self.phrase_edit.isChecked() else None)
-        if values == (n.time, n.length, n.pitch, n.text, n.end_word, n.line_break_after, n.page_break_time):
+                  timing_value(self.page_edit,n.page_break_time) if self.page_override.isChecked() and self.phrase_edit.isChecked() else None)
+        assigned = self.pitch_edit.value() >= 0
+        if values == (n.time, n.length, n.pitch, n.text, n.end_word, n.line_break_after, n.page_break_time) and assigned == n.pitch_assigned:
             return
         self.snapshot()
+        if (n.line_break_after, n.page_break_time) != values[-2:]:
+            self.project.page_layout_mode = 'manual'
         n.time, n.length, n.pitch, n.text, n.end_word, n.line_break_after, n.page_break_time = values
+        n.pitch_assigned = assigned
         self.changed()
 
     def edit_metadata(self):
@@ -820,6 +849,7 @@ class StudioWindow(QMainWindow):
             raise ValueError('Importer must return a StudioProject')
         project.validate()
         self.stop()
+        self.record_pages_action.setChecked(False)
         self.project, self.path = project, path
         self.history.clear()
         self.future.clear()
@@ -851,6 +881,8 @@ class StudioWindow(QMainWindow):
                     self.plugins_dialog()
                 elif wizard.method.currentData() == 'ai':
                     self.ai_chart_dialog()
+                elif wizard.method.currentData() == 'timing':
+                    self.timing_assistant()
 
     def open_community(self):
         if not self.confirm_discard():
@@ -863,6 +895,11 @@ class StudioWindow(QMainWindow):
     def show_community(self):
         self.stop()
         self.workspace_tabs.setCurrentWidget(self.community_page)
+
+    def workspace_changed(self, index):
+        if index != 0:
+            self.stop()
+            self.record_pages_action.setChecked(False)
 
     def open_downloaded_song(self, path):
         if self.confirm_discard():
@@ -963,6 +1000,9 @@ class StudioWindow(QMainWindow):
             return
         self.snapshot()
         attach_lrc(self.project, document, source)
+        if not self.project.notes:
+            from studio.lyric_timing import lrc_draft
+            self.project = lrc_draft(self.project,document,source)
         if dialog.assign_notes.isChecked():
             from studio.lrc import assign_lrc_notes
             assign_lrc_notes(self.project, document)
@@ -970,6 +1010,35 @@ class StudioWindow(QMainWindow):
         self.lyrics.setPlainText(self.project.draft_lyrics)
         self.loading = False
         self.changed()
+
+    def timing_assistant(self):
+        from studio.timing_dialog import TimingDialog
+        if self.project.notes and QMessageBox.question(self,tr('timing.title'),
+                tr('timing.replace')) != QMessageBox.StandardButton.Yes:
+            return
+        self.stop()
+        self.record_pages_action.setChecked(False)
+        dialog = TimingDialog(self.project,self)
+        if dialog.exec() and dialog.project:
+            self.snapshot()
+            self.project = dialog.project
+            self.loading = True
+            self.lyrics.setPlainText(self.project.draft_lyrics)
+            self.loading = False
+            self.configure_media()
+            self.changed()
+
+    def export_lrc(self):
+        from studio.lyric_timing import write_lrc
+        path,_ = QFileDialog.getSaveFileName(self,tr('timing.lrc_export'),'', 'LRC (*.lrc)')
+        if path:
+            self.attempt(lambda:write_lrc(self.project,path))
+
+    def export_midi(self):
+        from studio.exporters import export_midi
+        path,_ = QFileDialog.getSaveFileName(self,tr('timing.midi_export'),'', 'MIDI (*.mid)')
+        if path:
+            self.attempt(lambda:export_midi(self.project,path))
 
     def review_lrc(self):
         from studio.lrc import parse_lrc
@@ -1099,6 +1168,8 @@ class StudioWindow(QMainWindow):
         candidate = copy.deepcopy(self.project)
         try:
             result = intelligent_pages(candidate)
+            result['changed'] |= candidate.page_layout_mode != 'automatic'
+            candidate.page_layout_mode = 'automatic'
             if result['changed']:
                 self.stop()
                 self.snapshot()
@@ -1107,6 +1178,62 @@ class StudioWindow(QMainWindow):
             self.statusBar().showMessage(tr('pages.smart_result', **result))
         except ValueError as error:
             self.error(str(error))
+
+    def set_page_recording(self, enabled):
+        if enabled:
+            self.workspace_tabs.setCurrentWidget(self.screens)
+            self.screens.setCurrentIndex(1)
+            self.timeline.setFocus()
+            self.statusBar().showMessage(tr('pages.record_ready'))
+
+    def record_page_switch(self):
+        from studio.page_recording import plan_page_switch, apply_page_switch
+        switch = plan_page_switch(self.project, self.position)
+        if switch is None:
+            self.statusBar().showMessage(tr('pages.record_none'))
+            return
+        candidate = copy.deepcopy(self.project)
+        if apply_page_switch(candidate, switch):
+            self.snapshot()
+            self.project = candidate
+            self.changed()
+        message = 'pages.recorded_adjusted' if switch.adjusted else 'pages.recorded'
+        self.statusBar().showMessage(tr(message, time=switch.time))
+
+    def clear_lyric_pages(self):
+        from studio.page_recording import clear_page_switches
+        candidate = copy.deepcopy(self.project)
+        if clear_page_switches(candidate):
+            self.snapshot()
+            self.project = candidate
+            self.changed()
+            self.statusBar().showMessage(tr('pages.cleared'))
+
+    def eventFilter(self, watched, event):
+        if (event.type() == QEvent.Type.KeyPress and self.record_pages_action.isChecked()
+                and isinstance(watched, QWidget) and watched.window() is self
+                and self.workspace_tabs.currentWidget() is self.screens
+                and QApplication.activeModalWidget() is None
+                and QApplication.activePopupWidget() is None
+                and event.modifiers() == Qt.KeyboardModifier.NoModifier):
+            if event.key() == Qt.Key.Key_Escape:
+                self.record_pages_action.setChecked(False)
+                return True
+            focus = QApplication.focusWidget()
+            if isinstance(focus, (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox)):
+                return super().eventFilter(watched, event)
+            if isinstance(focus, QAbstractButton) and focus is not self.play_button:
+                return super().eventFilter(watched, event)
+            if event.key() == Qt.Key.Key_Space:
+                if not event.isAutoRepeat():
+                    if self.playing:
+                        self.tick()
+                        if self.playing:
+                            self.record_page_switch()
+                    else:
+                        self.toggle_play()
+                return True
+        return super().eventFilter(watched, event)
 
     def optimize_lyric_pages(self):
         from studio.page_dialog import PageDialog
@@ -1241,9 +1368,8 @@ class StudioWindow(QMainWindow):
             return
         if self.confirm_discard():
             self.community_page.client.clear_session()
-            self.tones.stop()
-            self.player.stop()
-            self.video_player.stop()
+            QApplication.instance().removeEventFilter(self)
+            self.stop()
             event.accept()
         else:
             event.ignore()
@@ -1257,9 +1383,15 @@ def main():
     parser.add_argument('--smoke-plugin', type=Path, help='Test bundled Basic Pitch and GUI acceptance with generated tones')
     parser.add_argument('--smoke-dlc', type=Path, help='Test bundled Windows encoders and STFS with synthetic media')
     parser.add_argument('--smoke-community', action='store_true', help='Capture the community sign-in tab without network requests')
+    parser.add_argument('--smoke-timing', action='store_true', help='Capture the lyric-timing dialog using the supplied synthetic project')
+    parser.add_argument('--smoke-wizard', action='store_true', help='Capture the LRC-only wizard choice')
+    parser.add_argument('--smoke-note-details', action='store_true', help='Select the first synthetic chart note in a screenshot')
+    parser.add_argument('--smoke-language', choices=('en','de'), help='Temporary screenshot language without changing preferences')
     parser.add_argument('--smoke-width', type=int, default=1260)
     parser.add_argument('--smoke-height', type=int, default=790)
     args = parser.parse_args()
+    if args.smoke_language:
+        set_language(args.smoke_language,persist=False)
     app = QApplication(sys.argv)
     from studio.fonts import use_system_font
     use_system_font(app)
@@ -1296,13 +1428,31 @@ def main():
         QTimer.singleShot(150, lambda: run(app, window, args.smoke_plugin))
     elif args.smoke_test:
         window.resize(args.smoke_width, args.smoke_height)
+        view = window
+        if args.smoke_note_details and window.project.notes:
+            window.select_note(window.project.notes[0].id)
         if args.smoke_community:
             window.show_community()
+        elif args.smoke_timing:
+            from studio.timing_dialog import TimingDialog
+            view = TimingDialog(window.project,window)
+            view.notes = copy.deepcopy(window.project.notes)
+            for note in view.notes:
+                note.pitch_assigned = False
+            view.render()
+            view.show()
+        elif args.smoke_wizard:
+            from studio.song_wizard import SongWizard
+            view = SongWizard(window)
+            view.choices.setCurrentRow(view.modes.index('lrc'))
+            view.show()
         def capture():
             args.smoke_test.parent.mkdir(parents=True, exist_ok=True)
-            if not window.grab().save(str(args.smoke_test)):
+            if not view.grab().save(str(args.smoke_test)):
                 app.exit(1)
                 return
+            if view is not window:
+                view.reject()
             app.exit(0)
         QTimer.singleShot(350, capture)
     return app.exec()

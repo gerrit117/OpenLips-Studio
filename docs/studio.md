@@ -1,4 +1,4 @@
-# OpenLips Studio 0.2.1 Beta
+# OpenLips Studio
 
 ## Start
 
@@ -32,6 +32,20 @@ position represents pitch. MIDI note names use C4 = 60, not inferred song keys.
   seconds; the edit grid uses initial BPM. Type 2 and SMPTE timing are rejected.
   Sustain, overlapping notes and percussion generate warnings.
 - Import UltraStar TXT through the existing parser, preserving source timing.
+- Batch-import UltraStar files or song folders with their media and covers;
+  choose the project output directory or export a Song Pack directly. Pages
+  are optimized automatically without retiming notes. Explicit manual layouts
+  stay intact; single-file import retains source pages.
+- Start with LRC only to create editable grey blocks with unassigned pitches,
+  or use the Timing Assistant to record word/syllable onsets with Space and
+  review them with ticks. Ordinary LRC contains line starts rather than exact
+  word lengths. See [lyric-first creation](lyric_first_workflow.md).
+- Record page switches using the keyboard toolbar button: Space starts playback
+  when paused and records a cut while playing; Esc ends recording. Presses in
+  pauses retain their exact timing; presses inside words snap to a safe word
+  boundary. Clear existing switches through Tools when starting a new layout.
+  Both recording and clearing are undoable and never retime notes. See
+  [chart quality and native scaling](chart_quality_investigation.md).
 - Select a note to edit start, length, MIDI pitch, text, word/phrase endings.
   Each visible monophonic note also has an inline lyric field below the grid.
   Exact next-page times can be specified on phrase-ending notes; otherwise
@@ -39,6 +53,10 @@ position represents pitch. MIDI note names use C4 = 60, not inferred song keys.
   [pages and project semantics](studio_pages_and_community.md).
   Drag a note to change time/pitch; drag its right edge to resize. Double-click
   empty grid to create a note, or a note to edit its text in the inspector.
+  Up/Down changes selected pitches. Ctrl-click selects several notes for a
+  compatible-pitch merge through the context menu. Right-click also provides
+  splitting at the pointer or estimated word division. Pitch/text edits preserve
+  the precision of untouched timing fields.
 - Use the song-text panel to assign fragments from the selected note onward.
   Spaces separate words, newlines mark phrase endings. Optional `|` separators
   explicitly split syllables. An optional English/German dictionary-hyphenation
@@ -52,12 +70,15 @@ position represents pitch. MIDI note names use C4 = 60, not inferred song keys.
   Video appears behind the note grid and can be hidden independently. If both
   are supplied, video audio is muted and reference audio is the master clock.
   The preview offset uses `media_time = chart_time + reference_offset`, in seconds;
-  it never changes chart/export timing. Negative offsets delay reference playback.
-  Reference media is linked, not copied into the project. Without
-  reference audio, playback is a visual cursor preview, not a synthesized song.
+  it never changes native chart timing. MIDI/LRC interchange exports apply the
+  offset to match the media clock. Negative offsets delay reference playback.
+  Reference media is linked, not copied into the project. Optional note tones
+  and note audition work independently of reference media, with separate volume
+  controls. Unassigned lyric blocks do not play an invented pitch.
 - Save `.olp` projects (versioned UTF-8 JSON, not a song package); atomic writes preserve the previous saved project
   when preparation fails. Relative audio/video links are resolved on reopening.
-  Unfinished notes without lyrics can be saved, even when export would reject them.
+  Unfinished notes without lyrics or assigned pitches can be saved, even when
+  export would reject them.
   The temporary `.olips` extension is also accepted when opening older projects.
 - Undo/redo covers note and metadata edits, import replaces the project after
   confirmation. Freeform lyric draft typing uses the text widget's own undo.
@@ -73,15 +94,23 @@ to the runtime-tested `build_owned_chart` serializer, without using templates.
 Choose a new output directory and the already-converted audio asset filename.
 This export does not transcode media or register a disc song in MusicDB.
 
-The editor accepts MIDI pitches 0..127. OG export deliberately enforces the
-existing writer's validated vocal/time/length constraints and rejects notes
-without lyric fragments rather than silently changing them.
+The editor accepts MIDI pitches 0..127, plus an explicit unassigned state for
+lyric-first drafts. The current writer supports the full MIDI pitch range;
+export validates timing, lyrics and assigned pitches rather than inventing them.
+Enhanced LRC and MIDI exports are available for interchange.
 
-DLC export packages prepared xWMA/cover/video assets using a separately built
-STFS executable. Structural/hash validation is not in-game discovery proof:
-the existing custom DLC discovery issue is still unresolved. No FTP connection
-or game installation is performed automatically. The native STFS/media
-backends currently need separate Windows builds; editing/importing are portable.
+Windows DLC export includes the STFS and media backends. It converts reference
+video/audio, extracts xWMA audio, creates a default 15-second audio preview
+from the first lyric (adjustable), cover and optional menu video, then packages
+one song or a named Song Pack. Choose the destination; no backend paths need
+to be entered. Song packs optimize pages on copies by default, retaining
+explicit manual layouts. See [packs and USB transfer](song_packs_usb.md).
+
+Custom DLC has been recognized and played in Number One Hits on a modified
+Xbox 360 in user testing. Structural/hash validation alone is not game acceptance;
+Xenia DLC discovery remains unresolved. No FTP connection or game modification
+is performed automatically. macOS/Linux editing/import are portable, but game
+export still requires [already-compatible media](studio_media.md).
 
 ## Modules and plugins
 
@@ -98,18 +127,15 @@ package, not built into Studio. See the [plugin guide and API](studio_plugins.md
 for setup, limitations, development and credits. Plugins are trusted code, not
 sandboxed. Merely opening Studio does not execute third-party plugins.
 
-## Public-release checklist
+## Release and testing notes
 
-This is the first beta foundation, not the end of repository cleanup. Existing
-research tools/docs retain their paths. No private samples, generated songs,
-media or copyrighted UltraStar examples are included in new Studio commits.
-Previously tracked private assets may remain in Git history: audit licensing
-and agree on history cleanup before declaring the whole repository safe for
-public redistribution. Do not force-push a rewritten history without approval.
-
-Before a public binary release: audit complete bundled third-party license
-notices, verify macOS builds, review plugin packaging and install paths, finish
-DLC discovery, and test longer real projects and audio synchronization.
+This remains an early beta. README screenshots use original synthetic charts,
+not licensed songs or game assets. Releases bundle third-party notices and
+target-native runtimes. Windows builds receive local synthetic UI/export tests;
+these do not replace console tests or verify macOS/Linux runtime behavior.
+The Community tab is prepared, but the website is not publicly launched.
+Report failures with the app version and reproduction steps; keep licensed
+media, private credentials and original game files out of public reports.
 
 References: [Qt deployment](https://doc.qt.io/qtforpython-6/deployment/deployment-pyinstaller.html),
 [Mido timing](https://mido.readthedocs.io/en/latest/files/),

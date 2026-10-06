@@ -77,7 +77,7 @@ class Timeline(QWidget):
             self.lyric_fields.clear()
         self.project = project
         self.selected_ids.intersection_update(n.id for n in project.notes)
-        pitches = [n.pitch for n in project.notes]
+        pitches = [n.pitch if n.pitch_assigned else 60 for n in project.notes]
         self.low = max(0, min(pitches, default=54) - 4)
         self.high = min(127, max(self.low + 23, max(pitches, default=72) + 4))
         self.update()
@@ -85,7 +85,7 @@ class Timeline(QWidget):
     def geometry_for(self, note):
         lane = (self.height() - 92) / (self.high - self.low + 1)
         return QRectF(62 + (note.time - self.origin) * self.scale,
-                      38 + (self.high - note.pitch) * lane + 2,
+                      38 + (self.high - (note.pitch if note.pitch_assigned else 60)) * lane + 2,
                       max(5, note.length * self.scale), max(4, lane - 4))
 
     def set_cursor(self, seconds):
@@ -137,8 +137,9 @@ class Timeline(QWidget):
             r = self.geometry_for(n)
             active = n.time <= self.cursor < n.time + n.length
             chosen = n.id == self.selected_id or n.id in self.selected_ids
-            color = '#f4c95d' if active else '#ef599c' if chosen else '#49c6cd'
-            p.setPen(QPen(QColor('#ffffff' if chosen else color), 1))
+            color = '#ef599c' if chosen else '#88929b' if not n.pitch_assigned else '#f4c95d' if active else '#49c6cd'
+            p.setPen(QPen(QColor('#ffffff' if chosen else color), 1,
+                         Qt.PenStyle.SolidLine if n.pitch_assigned else Qt.PenStyle.DashLine))
             p.setBrush(QColor(color))
             p.drawRoundedRect(r, 3, 3)
             next_x = self.geometry_for(visible[i + 1]).x() if i + 1 < len(visible) else r.right() + 80
@@ -173,7 +174,7 @@ class Timeline(QWidget):
                 field = self.lyric_fields[n.id] = LyricField(self, n.id)
             if not field.hasFocus() and field.text() != n.text:
                 field.setText(n.text)
-            field.setToolTip(f'{n.text} / {pitch_name(n.pitch)} / {n.length:.3f}s')
+            field.setToolTip(f'{n.text} / {pitch_name(n.pitch) if n.pitch_assigned else tr("timing.unassigned")} / {n.length:.3f}s')
             field.setGeometry(round(left), self.height() - 34, round(right - left), 25)
             field.show()
             seen.add(n.id)
@@ -228,6 +229,7 @@ class Timeline(QWidget):
                     self.before_edit.emit()
                     for note in notes:
                         note.pitch += delta
+                        note.pitch_assigned = True
                     self.edited.emit()
                     self.pitch_preview.emit(notes[0].pitch)
                 event.accept()
@@ -242,7 +244,8 @@ class Timeline(QWidget):
         self.selected_ids = {note.id}
         self.edited.emit()
         self.selected.emit(note.id)
-        self.pitch_preview.emit(note.pitch)
+        if note.pitch_assigned:
+            self.pitch_preview.emit(note.pitch)
 
     def contextMenuEvent(self, event):
         if not self.project:
@@ -264,7 +267,27 @@ class Timeline(QWidget):
             action.setEnabled(False)
         action.setToolTip(tr('note.merge_hint'))
         action.triggered.connect(self.merge_notes)
+        seconds = self.origin + (event.pos().x()-62)/self.scale
+        split = menu.addAction(tr('timing.split'))
+        split.setEnabled(note.time+.001 <= seconds <= note.time+note.length-.001)
+        split.triggered.connect(lambda: self.split_selected(note.id, seconds))
+        words = menu.addAction(tr('timing.split_words'))
+        words.setEnabled(len(note.text.split()) > 1 and note.length/len(note.text.split()) >= .001)
+        words.setToolTip(tr('timing.estimated'))
+        words.triggered.connect(lambda: self.split_selected(note.id))
         menu.exec(event.globalPos())
+
+    def split_selected(self, identifier, seconds=None):
+        from studio.lyric_timing import split_note, split_words
+        self.before_edit.emit()
+        if seconds is None:
+            result = split_words(self.project, identifier)[0]
+        else:
+            result = split_note(self.project, identifier, seconds)
+        self.selected_id = result.id
+        self.selected_ids = {result.id}
+        self.edited.emit()
+        self.selected.emit(result.id)
 
     def mouseMoveEvent(self, event):
         if self.drag:
@@ -284,10 +307,12 @@ class Timeline(QWidget):
                 n.time = value
                 lane = (self.height() - 92) / (self.high - self.low + 1)
                 n.pitch = max(0, min(127, pitch - round((event.position().y() - start.y()) / lane)))
+                if round((event.position().y() - start.y()) / lane):
+                    n.pitch_assigned = True
             self.update()
         elif self.project:
             n = self.hit(event.position())
-            self.setToolTip(f'{pitch_name(n.pitch)} / {n.time:.3f}s / {n.length:.3f}s / {n.text}' if n else '')
+            self.setToolTip(f'{pitch_name(n.pitch) if n.pitch_assigned else tr("timing.unassigned")} / {n.time:.3f}s / {n.length:.3f}s / {n.text}' if n else '')
 
     def mouseReleaseEvent(self, event):
         if self.drag and self.drag[-1]:

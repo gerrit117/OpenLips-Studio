@@ -54,4 +54,5 @@ def load_chart(path):
     project.validate()
     if not project.notes:
         raise ValueError('TXT contains no notes')
-    return project
+    from studio.page_policy import prepare_pages
+    return prepare_pages(project)

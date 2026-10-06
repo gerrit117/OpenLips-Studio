@@ -41,7 +41,7 @@ def test_wizard_audio_mode_accepts_video_file(tmp_path):
     video = tmp_path / 'song.mp4'
     video.touch()
     wizard = SongWizard()
-    wizard.choices.setCurrentRow(3)
+    wizard.choices.setCurrentRow(wizard.modes.index('scratch'))
     wizard.next()
     wizard.rows['media'][0].setText(str(video))
     wizard.media_kind.setCurrentIndex(wizard.media_kind.findData('audio'))

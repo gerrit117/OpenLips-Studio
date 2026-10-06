@@ -3,7 +3,7 @@ import copy
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QProgressBar, QLabel, QPushButton,
-    QFileDialog, QLineEdit, QListWidget, QHBoxLayout)
+    QFileDialog, QLineEdit, QListWidget, QHBoxLayout, QCheckBox)
 import qtawesome as qta
 from studio.exporters import internal_chart
 from studio.i18n import tr
@@ -14,17 +14,18 @@ class PackageWorker(QThread):
     failed = Signal(str)
     progress = Signal(str)
 
-    def __init__(self, project, output, parent, *, projects=None, pack_name=None):
+    def __init__(self, project, output, parent, *, projects=None, pack_name=None, optimize_pages=None):
         super().__init__(parent)
         self.project, self.output = copy.deepcopy(project), output
         self.projects = copy.deepcopy(projects) if projects is not None else [self.project]
         self.pack_name = pack_name
+        self.optimize_pages = optimize_pages
 
     def run(self):
         try:
             from studio.dlc_pack import build_projects_dlc
             result = build_projects_dlc(self.projects, self.output, self.progress.emit,
-                                        pack_name=self.pack_name)
+                                        pack_name=self.pack_name, optimize_pages=self.optimize_pages)
             self.completed.emit(result['output_path'])
         except Exception as error:
             self.failed.emit(str(error))
@@ -87,7 +88,9 @@ class DlcDialog(QDialog):
         path = QFileDialog.getExistingDirectory(self, tr('export.dlc_directory'))
         if not path:
             return
-        self.worker = PackageWorker(self.project, path, self, projects=projects, pack_name=pack_name)
+        automatic = self.optimize_pages.isChecked() if hasattr(self,'optimize_pages') else None
+        self.worker = PackageWorker(self.project, path, self, projects=projects,
+                                    pack_name=pack_name,optimize_pages=automatic)
         self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(self.success)
         self.worker.failed.connect(self.failure)
@@ -149,7 +152,12 @@ class SongPackDialog(DlcDialog):
         remove.clicked.connect(self.remove_project)
         buttons.addWidget(remove)
         self.layout().insertLayout(2, buttons)
+        self.optimize_pages = QCheckBox(tr('pages.auto_pack'))
+        self.optimize_pages.setChecked(True)
+        self.optimize_pages.setToolTip(tr('pages.auto_hint'))
+        self.layout().insertWidget(3,self.optimize_pages)
         self.editable_controls += [self.name, self.songs, add, remove]
+        self.editable_controls.append(self.optimize_pages)
         if project.notes:
             self.append_project(copy.deepcopy(project))
         self.status.setText(tr('pack.ready'))

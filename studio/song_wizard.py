@@ -12,10 +12,16 @@ class SongWizard(QWizard):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr('wizard.title'))
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        for button, key in ((QWizard.WizardButton.BackButton,'wizard.back'),
+                            (QWizard.WizardButton.NextButton,'wizard.next'),
+                            (QWizard.WizardButton.FinishButton,'wizard.finish'),
+                            (QWizard.WizardButton.CancelButton,'Abbrechen')):
+            self.setButtonText(button,tr(key))
         self.resize(760, 480)
         self.project = None
         self.choice = 'ultrastar'
-        self.modes = ['ultrastar', 'midi-lrc', 'midi', 'scratch']
+        self.modes = ['ultrastar', 'midi-lrc', 'midi', 'lrc', 'scratch']
         page = QWizardPage()
         page.setTitle(tr('wizard.start'))
         row = QHBoxLayout(page)
@@ -50,6 +56,7 @@ class SongWizard(QWizard):
             self.rows[key] = (edit, widget, form.labelForField(widget))
         self.method = QComboBox()
         self.method.addItem(tr('wizard.manual'), 'manual')
+        self.method.addItem(tr('timing.title'), 'timing')
         self.method.addItem('Basic Pitch (.opl)', 'plugin')
         self.method.addItem(tr('ai.title'), 'ai')
         form.addRow(tr('wizard.method'), self.method)
@@ -78,7 +85,7 @@ class SongWizard(QWizard):
     def update_fields(self, index):
         self.rows['chart'][2].setText('UltraStar TXT' if self.choice == 'ultrastar' else 'MIDI')
         for key in ('chart', 'lrc'):
-            visible = (key == 'chart' and self.choice != 'scratch') or (key == 'lrc' and self.choice == 'midi-lrc')
+            visible = (key == 'chart' and self.choice in ('ultrastar','midi','midi-lrc')) or (key == 'lrc' and self.choice in ('midi-lrc','lrc'))
             for widget in self.rows[key][1:]:
                 widget.setVisible(visible)
         self.method.setVisible(self.choice == 'scratch')
@@ -89,12 +96,12 @@ class SongWizard(QWizard):
             return True
         try:
             paths = {key: field[0].text().strip() for key, field in self.rows.items()}
-            if self.choice == 'scratch':
+            if self.choice in ('scratch','lrc'):
                 paths['chart'] = ''
-            if self.choice != 'midi-lrc':
+            if self.choice not in ('midi-lrc','lrc'):
                 paths['lrc'] = ''
-            required = ['chart'] if self.choice != 'scratch' else []
-            if self.choice == 'midi-lrc':
+            required = ['chart'] if self.choice in ('ultrastar','midi','midi-lrc') else []
+            if self.choice in ('midi-lrc','lrc'):
                 required.append('lrc')
             for key, value in paths.items():
                 if (key in required or value) and not Path(value).is_file():
@@ -124,6 +131,13 @@ class SongWizard(QWizard):
             from studio.song_media_check import ensure_song_audio
             if not ensure_song_audio(project, self):
                 return False
+            if self.choice == 'lrc':
+                from studio.lrc import read_lrc
+                from studio.lyric_timing import lrc_draft
+                document = read_lrc(paths['lrc'])
+                project = lrc_draft(project,document,paths['lrc'])
+                project.title = document.metadata.get('ti', Path(paths['lrc']).stem)
+                project.artist = document.metadata.get('ar','')
             project.validate()
             self.project = project
             return True

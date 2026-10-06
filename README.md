@@ -7,7 +7,7 @@
 
 **Ever wanted to add your own songs to Lips? Even if you haven't, now you can give it a try.**
 
-OpenLips is an independent community project about bringing new songs to the Xbox 360 karaoke game *Lips*. **OpenLips Studio** takes you from an UltraStar chart, MIDI melody or recording to an editable song and a DLC package. Adjust notes and lyrics, check them against your audio or video, and export a single song or a named song pack. You can also start with an empty chart.
+OpenLips is an independent community project about bringing new songs to the Xbox 360 karaoke game *Lips*. **OpenLips Studio** takes you from an UltraStar chart, MIDI melody, timed lyrics or recording to an editable song and a DLC package. Adjust notes and lyrics, check them against your audio or video, and export a single song or a named song pack. You can also start with an empty chart.
 
 This is **early-stage development**, not a finished product. There is a working foundation, but plenty is still incomplete, experimental or waiting for more testing.
 
@@ -38,11 +38,13 @@ These are plans, not promises about the next release. The first priorities are:
 - [x] Add an opt-in plugin manager with `.opl` packages, settings, previews and background import workflows.
 - [ ] Document the song format more deeply, including LS2 and later releases.
 - [ ] Support quick-time events (QTEs) and other song-specific gameplay actions.
-- [ ] Build a community website with accounts and a shared database of user-created charts and lyrics, subject to the necessary rights and moderation.
+- [ ] Launch the community website: **coming soon**, with accounts and a shared database of user-created charts and lyrics, subject to the necessary rights and moderation.
 - [x] Integrate Spotify's [Basic Pitch](https://github.com/spotify/basic-pitch): turn vocal audio into a MIDI and note draft that can be reviewed and edited.
 - [ ] Expand the plugin API to additional processing and export workflows.
-- [ ] Finish reliable custom DLC installation and discovery, including use with existing profiles.
-- [ ] Bring media preparation and song export together into a simpler workflow, and expand conversion support across platforms.
+- [x] Export playable custom DLC and song packs for a compatible Xbox setup; tested by users in Number One Hits on a modified Xbox 360.
+- [ ] Resolve DLC discovery in Xenia and expand testing across game editions.
+- [x] Combine media preparation, previews and DLC packaging in the Windows export workflow.
+- [ ] Add equivalent media conversion on macOS and Linux.
 - [ ] Add optional FTP transfer to a compatible Xbox setup.
 - [ ] Improve usability, translations, accessibility and real-world testing.
 
@@ -51,6 +53,7 @@ These are plans, not promises about the next release. The first priorities are:
 Some foundations are already in place:
 
 - [x] Import UltraStar charts and MIDI melodies.
+- [x] Create a melody from LRC-only lyric blocks or record lyric timing with Space.
 - [x] Edit notes, syllables and phrase boundaries in a graphical editor.
 - [x] Save unfinished work as an `.olp` project.
 - [x] Generate new chart and lyric files for the original Lips, without a song template.
@@ -62,19 +65,21 @@ Some foundations are already in place:
 ![OpenLips Studio](assets/branding/concept-01/logo-dark.png#gh-dark-mode-only)
 
 - **Import or create.** Bring in UltraStar TXT files, choose a melody track from a MIDI file, or add notes yourself. UltraStar timing and syllables are preserved on import.
-- **Import a collection.** Batch-import UltraStar files or song folders with their media and covers. Choose where to save the projects or proceed directly to song-pack export.
-- **Make room for lyrics.** Keep the imported page breaks or apply the undoable Intelligent Page Breaks action. It considers whole words, vocal pauses and punctuation instead of cutting after a fixed number of words.
+- **Import a collection.** Batch-import UltraStar files or song folders with their media and covers. Choose where to save the projects or proceed directly to song-pack export. Page layout is improved automatically, without changing the musical notes.
+- **Make room for lyrics.** A single UltraStar import keeps its source breaks. Apply Intelligent Page Breaks, record your own switches with Space during playback, or let batch import and song-pack export handle the layout. Explicit manual layouts stay intact; whole words and melismas stay together.
+- **Start with timed lyrics.** Choose LRC only to create grey lyric blocks without inventing pitches. Assign the melody yourself, adjust durations, split a line into estimated word blocks or split a word across several pitches. Save an unfinished draft and return to it later.
+- **Record lyric timing.** No LRC? Paste the words into the Timing Assistant and tap Space during playback. Choose words or explicitly divided syllables, listen back with timing ticks, correct a fragment or re-record from it. Reference audio and ticks have separate volume controls. No AI model is needed.
 - **Start from a recording.** Enable Basic Pitch in the plugin manager, choose an audio file and adjust detection sensitivity, note duration and pitch limits. Review the locally generated draft, save it as MIDI or take its notes into the editor. The analysis can be cancelled; replacing notes can be undone. Isolated vocals work better than a full mix. This is not automatic vocal separation or lyric transcription.
 - **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
 - **Create a draft from audio.** Optional local vocal separation, pitch detection and lyric recognition produce an editable chart. Review the result before using it: singing recognition still makes substantial mistakes. Small-model pitch analysis is bundled; the heavier AI engine is a separate download.
-- **Keep synchronized lyrics.** Import LRC files and synchronized LRCLIB results, preview line/word timestamps and save them with the project. Exact automatic syllable alignment is still in progress.
+- **Keep synchronized lyrics.** Import LRC files and synchronized LRCLIB results, preview line/word timestamps and save them with the project. Export enhanced LRC and, once pitches are assigned, MIDI. Ordinary LRC gives line starts, not exact word lengths; timing and melody still need review.
 - **Check the timing.** Play reference audio or video alongside the chart. Adjust playback speed, zoom in and shift notes and page changes together when the chart needs a timing correction.
 - **Check the pitch.** Audition selected notes with a reference tone or enable note tones during playback. Missing optional AI components are downloaded and verified automatically on first use.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
 - **Prepare the presentation.** Choose a cover or generate a simple one. On Windows, DLC export converts the selected video or audio and creates full xWMA audio plus a 15-second preview starting at the first lyric. Video songs also get a small menu preview video. The media tools and STFS backend are included.
 - **Export and experiment.** Save a media-free `.ols` Community song or a DLC package. Custom DLC has been recognized and played in Number One Hits on a modified Xbox 360 in user testing; DLC discovery in Xenia remains under investigation.
 - **Group songs and transfer them.** Export a named song pack from saved projects, or copy a verified DLC directly to an Xbox USB drive with a visible `Content` folder. See the [pack and USB guide](docs/song_packs_usb.md) for current limits and testing status.
-- **Use the community.** Sign in to OpenLips in the Community tab, browse and download songs, see comments and ratings, and upload an .ols song or the current chart for moderation. The website is still in staff-only testing; registration opens with the public launch.
+- **Community: coming soon.** Studio already has a tab prepared for sign-in, browsing, ratings, comments and `.ols` uploads/downloads. The website is not publicly available yet; these online features will open with its launch.
 
 ![The OpenLips Studio chart editor](assets/screenshots/studio-editor.png)
 
@@ -84,13 +89,29 @@ Some foundations are already in place:
 
 *Each note has editable timing, pitch and lyric settings.*
 
+![The LRC-only choice in the song-creation wizard](assets/screenshots/studio-wizard.png)
+
+*Start with a chart, MIDI, timed lyrics or your own recording.*
+
+![Recording and reviewing lyric timing](assets/screenshots/studio-timing.png)
+
+*The Timing Assistant with original demo lyrics and editable timestamps.*
+
+![A lyric-first chart with unassigned pitches](assets/screenshots/studio-lrc-draft.png)
+
+*Grey blocks are lyric timing, not an automatically detected melody.*
+
 ![OpenLips Community sign-in inside Studio](assets/screenshots/studio-community.png)
 
-*The Community tab. A confirmed account is required; staff also use their authenticator.*
+*The prepared Community tab. Public launch is still ahead.*
 
 ![Basic Pitch parameters and a synthetic note draft](assets/screenshots/studio-plugins.png)
 
 *The first plugin, using an original four-tone test recording rather than a song.*
+
+### New in 0.4.0 Beta
+
+LRC-only creation and the Timing Assistant make it possible to start without MIDI. Batch imports and song packs now optimize pages automatically. You can also record page changes during playback. Pitch or lyric edits no longer round untouched note timings, and unpitched drafts cannot accidentally become DLC melody. See the [English changelog](CHANGELOG.md) and [lyric-first guide](docs/lyric_first_workflow.md).
 
 ### What is not ready yet
 
@@ -108,7 +129,7 @@ See the [exact media requirements and preparation steps](docs/studio_media.md#al
 
 ## Download
 
-Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Builds are available for Windows, macOS on Apple Silicon and Intel, and Linux.
+Get the latest beta from **[GitHub Releases](https://github.com/gerrit117/OpenLips-Studio/releases)**. Windows has an installer and a portable archive. macOS on Apple Silicon and Intel, and Linux have separate native builds; check the version on each asset, as they may finish later than the Windows release.
 
 Extract the complete Studio archive and keep its files together. Python is included. Basic Pitch is a separate, optional **`.opl`** download for your platform; install it in the plugin manager. Its package includes its own model and analysis runtime, without a separate Python installation, Spotify account or API key. Audio is processed locally, not uploaded. See the [plugin catalog](plugins/README.md), [editor guide](docs/studio.md), [plugin developer guide](docs/studio_plugins.md) and [platform notes](docs/studio_platforms.md).
 
@@ -119,6 +140,7 @@ Windows also has an installer; macOS has a DMG with an Applications shortcut. Op
 The technical material lives in [`docs/`](docs/). Start with:
 
 - [Using the editor](docs/studio.md).
+- [LRC-only creation and the Timing Assistant](docs/lyric_first_workflow.md).
 - [Media, covers and synchronization](docs/studio_media.md).
 - [Song-file structures](docs/structures.md) and the [structural reader](docs/og_ixb_reader.md).
 - [Page timing and projects](docs/studio_pages_and_community.md).

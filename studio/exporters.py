@@ -43,6 +43,9 @@ def export_community_song(project, path, *, duration, youtube=None, album='', ge
 
 def internal_chart(project):
     project.validate()
+    from studio.i18n import tr
+    if any(not n.pitch_assigned for n in project.notes):
+        raise ValueError(tr('timing.unassigned_export'))
     notes = [Note(n.time, n.length, n.pitch, n.text, n.end_word, n.line_break_after, n.page_break_time)
              for n in project.ordered()]
     if not notes:
@@ -63,6 +66,39 @@ def export_debug_json(project, path):
                       indent=2, allow_nan=False).encode('utf-8')
     with path.open('xb') as stream:
         stream.write(data)
+
+
+def export_midi(project, path):
+    import mido
+    from studio.i18n import tr
+    project.validate()
+    if not project.notes or any(not n.pitch_assigned for n in project.notes):
+        raise ValueError(tr('timing.unassigned_export'))
+    path = Path(path)
+    if path.suffix.lower() not in ('.mid','.midi'):
+        raise ValueError('Choose a MIDI filename')
+    tempo = mido.bpm2tempo(project.bpm)
+    midi = mido.MidiFile(type=0,ticks_per_beat=480)
+    track = mido.MidiTrack()
+    midi.tracks.append(track)
+    track.append(mido.MetaMessage('set_tempo',tempo=tempo,time=0))
+    events = []
+    for note in project.ordered():
+        media_start = note.time+project.reference_offset
+        if media_start<0:
+            raise ValueError('Reference offset produces a negative MIDI onset')
+        start = round(mido.second2tick(media_start,480,tempo))
+        stop = max(start+1,round(mido.second2tick(media_start+note.length,480,tempo)))
+        events.append((start,1,note.pitch))
+        events.append((stop,0,note.pitch))
+    previous = 0
+    for tick,on,pitch in sorted(events):
+        track.append(mido.Message('note_on' if on else 'note_off',note=pitch,
+                                 velocity=90 if on else 0,time=tick-previous))
+        previous = tick
+    with path.open('xb') as stream:
+        midi.save(file=stream)
+    return path
 
 
 def export_owned_pair(project, directory, name, audio_name, movie_name=None, duration=None):

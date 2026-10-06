@@ -9,13 +9,16 @@ from studio.i18n import tr
 from tools.build_dlc import MAX_ASSET_BYTES, build_package, make_manifest, make_pack_manifest
 
 
-def build_projects_dlc(projects, output, progress=lambda message: None, *, pack_name=None):
+def build_projects_dlc(projects, output, progress=lambda message: None, *, pack_name=None, optimize_pages=None):
     if not projects or (pack_name is not None and not pack_name.strip()):
         raise ValueError(tr('pack.need_name'))
     if pack_name is not None and not 2 <= len(projects) <= 16:
         raise ValueError(tr('pack.count_limit'))
     if not Path(output).is_dir():
         raise ValueError(tr('export.dlc_directory'))
+    from studio.page_policy import prepare_pages
+    projects = [prepare_pages(p, (pack_name is not None or p.page_layout_mode == 'automatic')
+                if optimize_pages is None else optimize_pages) for p in projects]
     for project in projects:
         internal_chart(project)
         if not project.artist.strip() or not project.title.strip():

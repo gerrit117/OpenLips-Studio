@@ -23,7 +23,7 @@ def merge_selection(project, identifiers, validate_only=False):
     if indices != list(range(indices[0], indices[-1] + 1)):
         raise ValueError('Only consecutive notes can be merged')
     notes = [ordered[i] for i in indices]
-    if len({note.pitch for note in notes}) != 1:
+    if len({note.pitch if note.pitch_assigned else None for note in notes}) != 1:
         raise ValueError('Merged notes must have the same pitch')
     if any(note.line_break_after for note in notes[:-1]):
         raise ValueError('Notes on different lyric pages cannot be merged')
@@ -59,6 +59,7 @@ class EditorNote:
     line_break_after: bool = False
     page_break_time: float | None = None
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    pitch_assigned: bool = True
 
     def validate(self):
         if not math.isfinite(self.time) or self.time < 0:
@@ -73,6 +74,8 @@ class EditorNote:
             raise ValueError("Note ID must be a nonempty string")
         if not isinstance(self.end_word, bool) or not isinstance(self.line_break_after, bool):
             raise ValueError("Word/phrase flags must be boolean")
+        if not isinstance(self.pitch_assigned, bool):
+            raise ValueError('Pitch assignment flag must be boolean')
         if self.page_break_time is not None and (not math.isfinite(self.page_break_time) or self.page_break_time < 0):
             raise ValueError('Page switch time must be finite and nonnegative')
 
@@ -95,10 +98,13 @@ class StudioProject:
     video_reference: str = ''
     preview_start: float | None = None
     preview_length: float = 15.0
+    page_layout_mode: str = 'source'
 
     def validate(self):
         if not math.isfinite(self.bpm) or not 1 <= self.bpm <= 1000:
             raise ValueError("BPM must be in 1..1000")
+        if self.page_layout_mode not in ('source', 'automatic', 'manual'):
+            raise ValueError('Invalid page layout mode')
         if not math.isfinite(self.reference_offset) or abs(self.reference_offset) > 86400:
             raise ValueError('Invalid reference offset')
         if self.preview_start is not None and (not math.isfinite(self.preview_start) or self.preview_start < 0):

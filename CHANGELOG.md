@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0 Beta
+
+- Add an LRC-only song-creation route with editable, unpitched lyric blocks.
+- Add a local word/syllable timing assistant: tap Space against reference media,
+  review with timing ticks, undo/redo and re-record from a selected fragment.
+- Automatically optimize lyric pages for UltraStar batch imports and song packs,
+  preserving musical timing and explicitly authored manual page switches.
+- Split blocks into estimated words or melisma segments, assign pitches in the
+  editor and save unfinished lyric-first projects without inventing melody.
+- Export enhanced LRC and MIDI on the same reference-media clock; block song
+  export until every lyric block has an assigned pitch.
+- Preserve sub-millisecond note timing when changing pitch or lyrics in the
+  inspector instead of rewriting rounded display values.
+- Keep wizard navigation inside the window with a consistent cross-platform style.
+- Record lyric-page switches with Space during playback, with undo/redo and
+  exact timing preserved in projects and exports.
+- Snap recorded cuts to complete-word boundaries without splitting syllables,
+  melismas or overlapping notes; keep source breaks until explicitly edited.
+- Add a separate command to clear page switches for a new manual layout.
+- Keep normal text entry available while recording and disarm on project or
+  workspace changes; stop playback when closing Studio.
+
 ## 0.3.4 Beta
 
 - Add a native Community tab with account sign-in, staff two-factor verification,

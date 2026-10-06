@@ -95,12 +95,13 @@ a format error or something that should automatically be lengthened.
 
 The OG and NoH ChartRenderer Lua both position notes through
 `GetXFromTiming` and apply a native-supplied `displayLength` using
-`SetTotalWidthDirect`. The actual time-to-width calculation is native, so
-the following is an inference, not a verified pixel formula: putting a
-235 ms note into an 8-second time window gives it much less room than a
-roughly 2-second window. Shorter pages address crowding without changing
-pitch, note duration or scoring timing. The source of a specific user's
-tiny pills still requires the exported pair or an Xbox before/after test.
+`SetTotalWidthDirect`. The [follow-up native investigation](chart_quality_investigation.md)
+now establishes an important detail for the inspected Number One Hits build:
+ordinary note width is normalized using the maximum sung page span over the
+track, not just the current page. One long page can shrink bars throughout
+the song. Removing longest-page outliers can improve width without changing
+pitch, duration or scoring timing. Actual pixel widths and improvement still
+require an Xbox before/after test.
 
 Both inspected LyricRenderer scripts measure text width, use a safe width
 of 1090 coordinate units and clamp scaling to no smaller than 0.7.

@@ -84,7 +84,8 @@ def test_gui_import_cancel_accept_undo_redo(monkeypatch):
     monkeypatch.setattr(LrcDialog, 'exec', lambda self: LrcDialog.DialogCode.Accepted)
     window.accept_lrc(doc)
     imported = copy.deepcopy(window.project)
-    assert imported.notes == original.notes
+    assert len(imported.notes) == 2
+    assert all(not note.pitch_assigned for note in imported.notes)
     assert window.lyrics.toPlainText() == 'Hello\nworld'
     window.undo()
     assert window.project == original
