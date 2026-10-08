@@ -1,0 +1,5 @@
+services:
+  library:
+    build:
+      context: ..
+      dockerfile: library_server/Dockerfile

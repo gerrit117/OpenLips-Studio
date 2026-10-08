@@ -1,0 +1,65 @@
+name: Library container
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'library_server/**'
+      - 'studio/**'
+      - 'tools/**'
+      - 'LICENSE'
+      - 'THIRD_PARTY_NOTICES.md'
+      - '.github/workflows/library-container.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: library-container-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-test-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Linux amd64 image for testing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: library_server/Dockerfile
+          load: true
+          tags: openlips-library:test
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.sha }}
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+      - name: Test anonymous API, imports, chart exports and persistent data
+        run: python3 library_server/container_smoke.py
+      - name: Log in to GHCR using this job's temporary token
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested image
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REVISION: ${{ github.sha }}
+        run: |
+          IMAGE="ghcr.io/${OWNER,,}/openlips-library"
+          docker tag openlips-library:test "$IMAGE:sha-$REVISION"
+          docker tag openlips-library:test "$IMAGE:latest"
+          docker push "$IMAGE:sha-$REVISION"
+          docker push "$IMAGE:latest"
+          printf '### OpenLips Library\n\n`docker pull %s:latest`\n\nLinux amd64; tested before publishing.\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Logs on failure
+        if: failure()
+        run: docker logs openlips-library-ci 2>/dev/null || true

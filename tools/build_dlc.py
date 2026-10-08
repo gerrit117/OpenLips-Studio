@@ -252,7 +252,7 @@ def make_pack_manifest(songs, pack_id):
 
 def xbox_path(package, root='Hdd1/Content'):
     root = root.replace('\\', '/')
-    if any(c in root for c in '\r\n') or '..' in PurePosixPath(root).parts:
+    if not root.strip('/') or any(c in root for c in '\r\n\x00') or '..' in PurePosixPath(root).parts:
         raise ValueError('unsafe FTP content root')
     name = Path(package).name
     if (not name or len(name) > 255 or name in ('.', '..') or any(
@@ -261,9 +261,9 @@ def xbox_path(package, root='Hdd1/Content'):
     return f"{root.rstrip('/')}/0000000000000000/{TITLE_ID:08X}/00000002/{name}"
 
 
-def upload_package(ftp, package, remote):
+def upload_package(ftp, package, remote, *, progress=None, cancelled=lambda: False, cleanup=None):
     """Upload new content using a unique temporary name, verify, then rename."""
-    verify_stfs(package)
+    checked = verify_stfs(package)
     if any(c in remote for c in '\r\n') or '..' in PurePosixPath(remote).parts:
         raise ValueError('unsafe FTP path')
     parent, name = remote.rsplit('/', 1)
@@ -278,20 +278,58 @@ def upload_package(ftp, package, remote):
             ftp.cwd(part)
     if name.casefold() in {PurePosixPath(p).name.casefold() for p in ftp.nlst()}:
         raise FileExistsError('remote package already exists; not overwritten')
-    temporary = '.openlips-' + uuid.uuid4().hex + '.tmp'
+    # Keep incomplete files outside the content-type directory enumerated by Lips.
+    destination = '/' + parent.strip('/') + '/' + name
+    staging = '/' + parent.strip('/').rsplit('/', 1)[0] + '/.openlips-transfer'
     try:
+        ftp.cwd(staging)
+    except ftplib.error_perm:
+        ftp.mkd(staging)
+        ftp.cwd(staging)
+    temporary = '.openlips-' + uuid.uuid4().hex + '.tmp'
+    total = Path(package).stat().st_size
+    sent, received = 0, 0
+
+    def notify(phase, done):
+        if cancelled():
+            raise InterruptedError('Transfer cancelled; no DLC installed')
+        if progress:
+            progress(phase, done, total)
+
+    def uploaded(chunk):
+        nonlocal sent
+        sent += len(chunk)
+        notify('upload', sent)
+
+    digest = hashlib.sha256()
+
+    def downloaded(chunk):
+        nonlocal received
+        received += len(chunk)
+        if received > total:
+            raise ValueError('FTP read-back size mismatch')
+        digest.update(chunk)
+        notify('verify', received)
+
+    try:
+        notify('upload', 0)
         with Path(package).open('rb') as stream:
-            ftp.storbinary('STOR ' + temporary, stream)
-        digest = hashlib.sha256()
-        ftp.retrbinary('RETR ' + temporary, digest.update)
-        if digest.hexdigest() != sha256(package):
+            ftp.storbinary('STOR ' + temporary, stream, blocksize=65536, callback=uploaded)
+        ftp.retrbinary('RETR ' + temporary, downloaded, blocksize=65536)
+        if received != total or digest.hexdigest() != checked['sha256']:
             raise ValueError('FTP read-back hash mismatch')
+        ftp.cwd('/' + parent.strip('/'))
         if name.casefold() in {PurePosixPath(p).name.casefold() for p in ftp.nlst()}:
             raise FileExistsError('remote target appeared during upload')
-        ftp.rename(temporary, name)
+        notify('verify', total)
+        ftp.rename(staging + '/' + temporary, destination)
     except Exception:
         try:
-            ftp.delete(temporary)
+            if cleanup:
+                ftp.close()
+                cleanup(staging + '/' + temporary)
+            else:
+                ftp.delete(staging + '/' + temporary)
         except ftplib.all_errors:
             pass
         raise

@@ -9,6 +9,10 @@ The desktop application uses these separately licensed dependencies:
 | --- | --- |
 | PySide6 / Qt | LGPLv3/GPLv3/commercial alternatives; [Qt for Python licensing](https://doc.qt.io/qtforpython-6/licenses.html) |
 | Mido | MIT; [repository](https://github.com/mido/mido) |
+| python-zeroconf / ifaddr | LGPL-2.1 / MIT; [python-zeroconf](https://github.com/python-zeroconf/python-zeroconf), [ifaddr](https://github.com/p-st/easyifaddr) |
+| cryptography | Apache-2.0 or BSD-3-Clause; [source](https://github.com/pyca/cryptography) |
+| Lucide (library WebUI icons) | ISC; [source](https://github.com/lucide-icons/lucide); local license included in `library_server/static/LUCIDE-LICENSE.txt` |
+| pyftpdlib (optional LAN worker FTP service), pyasyncore / pyasynchat compatibility modules | MIT; [pyftpdlib source and license](https://github.com/giampaolo/pyftpdlib), [pyasyncore](https://github.com/simonrob/pyasyncore), [pyasynchat](https://github.com/simonrob/pyasynchat) |
 | Pyphen | GPL/LGPL/MPL alternatives; dictionaries have their own notices; [repository](https://github.com/Kozea/Pyphen) |
 | QtAwesome | MIT; bundled icon fonts have their own licenses; [repository](https://github.com/spyder-ide/qtawesome) |
 | PyInstaller bootloader | GPL with bootloader exception; [license](https://pyinstaller.org/en/stable/license.html) |
@@ -56,6 +60,20 @@ No Xbox SDK components or game executables are distributed.
 Before distributing binaries publicly, inventory the exact bundled dependency
 versions and preserve their complete notices/font licenses and source-offer
 requirements as applicable. This summary is not a substitute for those files.
+
+The local native Xbox-client build also uses:
+
+| Component | License/source |
+| --- | --- |
+| cJSON (Dave Gamble and contributors) | MIT; https://github.com/DaveGamble/cJSON |
+| BearSSL SHA-256 routines (Thomas Pornin) | MIT; https://www.bearssl.org/ |
+| mDNS (Mattias Jansson and contributors) | Public domain; https://github.com/mjansson/mdns |
+| stb_image (Sean Barrett and contributors) | MIT or public domain; https://github.com/nothings/stb |
+
+Exact source revisions are pinned in `tools/build_xbox_client.py`. BearSSL is
+used for hashes, not TLS in the anonymous LAN client. Microsoft SDK-linked
+development binaries and private font atlases remain local, pending any
+applicable redistribution rights; they are not public Studio release assets.
 
 The optional USDB plugin uses upstream download functions in an isolated
 process. The Windows native runtime is tested offline; authenticated downloads

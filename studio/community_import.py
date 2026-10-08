@@ -9,7 +9,7 @@ from tools.song_bundle import decode_bundle, MAX_BUNDLE
 from tools.walk_ixb_graph import Graph
 
 
-def import_community(path):
+def import_community(path, *, storage_root=None):
     path = Path(path)
     if path.stat().st_size > MAX_BUNDLE:
         raise ValueError('Community song exceeds the supported size')
@@ -69,7 +69,7 @@ def import_community(path):
                             reference_offset=bundle.manifest['media']['offset_seconds'],
                             bpm=tempos[0] if tempos else 120)
     project.validate()
-    root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'community-imports'
+    root = Path(storage_root) if storage_root else Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'community-imports'
     root.mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix='song-', dir=root))
     (folder / 'cover.jpg').write_bytes(bundle.cover)

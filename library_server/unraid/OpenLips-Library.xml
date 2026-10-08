@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>OpenLips-Library</Name>
+  <Repository>ghcr.io/gerrit117/openlips-library:latest</Repository>
+  <Registry>https://github.com/gerrit117/OpenLips-Studio/pkgs/container/openlips-library</Registry>
+  <Network>host</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/gerrit117/OpenLips-Studio/issues</Support>
+  <Project>https://github.com/gerrit117/OpenLips-Studio</Project>
+  <Overview>Private OpenLips home-network library. No login or TLS. Browse and manage songs, import charts/lyrics and download prepared packages. Windows is still required for compatible media encoding. Set OPENLIPS_BIND to your Unraid LAN IPv4 address. The /data directory must be writable by UID/GID 10001.</Overview>
+  <Category>MediaApp:Other</Category>
+  <WebUI>http://[IP]:8765/</WebUI>
+  <Icon>https://raw.githubusercontent.com/gerrit117/OpenLips-Studio/main/library_server/static/logo-light.png</Icon>
+  <ExtraParams>--read-only --tmpfs /tmp:rw,noexec,nosuid,size=128m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges:true</ExtraParams>
+  <Config Name="Library data" Target="/data" Default="/mnt/user/appdata/openlips-library" Mode="rw" Description="Persistent library; writable by UID/GID 10001." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openlips-library</Config>
+  <Config Name="Unraid LAN IPv4" Target="OPENLIPS_BIND" Default="" Mode="" Description="Your Unraid LAN IPv4 address, e.g. 192.168.1.10. Required for discovery." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+</Container>
