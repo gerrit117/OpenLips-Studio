@@ -1,5 +1,13 @@
 # Library Changelog
 
+## Unified Song Catalog
+
+- List uploaded DLC songs alongside editable projects in the Songs view.
+- Read song titles and artists from DLC manifests, including each song in a multi-song package.
+- Identify entries as DLC, project, community song, UltraStar, MIDI or LRC.
+- Download ready DLCs directly from song details; show the package name, size and Xbox destination.
+- Keep multi-song downloads as complete packages and retain the technical Downloads view.
+
 ## Separate Library Storage
 
 - Store projects, media, packages and the library database in /library instead of appdata.

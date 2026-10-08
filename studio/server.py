@@ -190,7 +190,7 @@ def handler_for(library, config, manager, auth=None):
             if not self.authorized():
                 return
             if self.path == '/api/v1/library':
-                self.reply(200, {'projects': library.projects(), 'packages': library.packages(), 'artifacts': library.artifacts()})
+                self.reply(200, {'projects': library.projects(), 'packages': library.packages(), 'artifacts': library.artifacts(), 'songs': library.songs()})
             elif self.path == '/api/v1/status':
                 self.reply(200, dict(protocol=1, auth_required=not config.get('lan_open', False), encoding=sys.platform == 'win32' and config.get('encoding_enabled', True),
                     chart_conversion=True, portable_transcode=False, native_xbox_transport=False,

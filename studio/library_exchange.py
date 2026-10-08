@@ -61,7 +61,7 @@ def import_input(library, name, data, *, title='', artist=''):
         project.audio_path = project.video_path = ''
         if extension != '.ols':
             project.cover_path = ''
-        project.source = 'Library import'
+        project.source = 'Library ' + extension[1:].upper()
         project.title = title.strip()[:256] or project.title
         project.artist = artist.strip()[:256] or project.artist
         if extension == '.lrc' and project.title == 'Neuer Song':

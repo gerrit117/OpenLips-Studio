@@ -68,6 +68,8 @@ def main():
             assert b'OpenLips Library' in response.read()
         text = '#TITLE:Container demo\n#ARTIST:OpenLips\n#BPM:120\n#GAP:0\n: 0 4 0 Hello\n: 4 4 4 world\n- 8\nE\n'
         project = api('import', {'name': 'demo.txt', 'data': base64.b64encode(text.encode()).decode()})['id']
+        songs = api('library')['songs']
+        assert len(songs) == 1 and songs[0]['project_id'] == project and songs[0]['kind'] == 'ultrastar'
         for kind in ('midi', 'lrc', 'chart'):
             job(project, kind)
         subprocess.run(['docker', 'restart', NAME], check=True)

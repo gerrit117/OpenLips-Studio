@@ -85,6 +85,14 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build
 - Charts/Lyrics konvertieren und native Lips-Daten, MIDI oder LRC exportieren.
 - Gemeinsame HTTP-Schnittstelle für Studio und Xbox-Client.
 
+Unter Songs erscheinen auch fertige DLCs und alle Songs eines Songpacks,
+ohne dass ein bearbeitbares Projekt vorhanden sein muss. Die Spalte Typ
+unterscheidet DLCs, Projekte, Community-Importe, UltraStar, MIDI und LRC.
+Bei fertigen DLCs stehen der Originalpaket-Download und der Xbox-Content-Zielordner
+in den Details. Bei einem Song aus einem Pack wird das vollständige Pack
+heruntergeladen, kein neu erzeugtes Einzel-DLC. Downloads bleibt zusätzlich
+als Übersicht aller fertigen Dateien und Exportversionen erhalten.
+
 LRC-Entwürfe benötigen Tonhöhen für bewertbare Charts. Kompatible
 Medienkonvertierung benötigt weiterhin Windows und ist im Container nicht aktiv.
 USDB, öffentliche Community-Importe und Konsolen-Agent-Transport bleiben inaktiv.

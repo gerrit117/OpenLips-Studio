@@ -52,6 +52,7 @@ class Library:
                     recipe TEXT PRIMARY KEY, package_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, filename TEXT UNIQUE NOT NULL,
                     kind TEXT NOT NULL, project_id TEXT NOT NULL, bytes INTEGER NOT NULL, created REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS project_types (project_id TEXT PRIMARY KEY, kind TEXT NOT NULL);
             ''')
 
     @contextmanager
@@ -139,6 +140,12 @@ class Library:
             save_project(project, self.root / 'projects' / (identifier + '.olp'))
             db.execute('INSERT INTO projects VALUES (?,?,?,?,?)',
                 (identifier, fingerprint, project.title, project.artist, time.time()))
+            source = project.source.lower()
+            kind = ('community' if source in ('openlips song', 'library ols') else
+                    'ultrastar' if source in ('ultrastar txt', 'library txt') else
+                    'midi' if source.startswith('midi /') or source in ('library mid', 'library midi') else
+                    'lrc' if source == 'library lrc' else 'project')
+            db.execute('INSERT INTO project_types VALUES (?,?)', (identifier, kind))
         return identifier
 
     def project_path(self, identifier):
@@ -168,6 +175,7 @@ class Library:
     def projects(self):
         with self.connect() as db:
             return [dict(row) for row in db.execute('''SELECT id,title,artist,created,
+                COALESCE((SELECT kind FROM project_types t WHERE t.project_id=projects.id), 'project') AS kind,
                 (SELECT count(*) FROM package_projects l WHERE l.project_id=projects.id) AS packages
                 FROM projects ORDER BY artist COLLATE NOCASE,title COLLATE NOCASE''')]
 
@@ -177,6 +185,19 @@ class Library:
         for row in result:
             row['songs'] = json.loads(row['songs'])
         return result
+
+    def songs(self):
+        records = [dict(key='project:' + p['id'], project_id=p['id'],
+                        title=p['title'], artist=p['artist'], kind=p['kind'])
+                   for p in self.projects()]
+        for package in self.packages():
+            for index, song in enumerate(package['songs']):
+                records.append(dict(key=f"dlc:{package['id']}:{index}",
+                    title=song['title'] or package['title'], artist=song['artist'],
+                    kind='dlc', song_id=song['song_id'], package_id=package['id'],
+                    package_title=package['title'], filename=package['filename'],
+                    bytes=package['bytes'], song_count=len(package['songs'])))
+        return sorted(records, key=lambda p: (p['artist'].casefold(), p['title'].casefold(), p['key']))
 
     def add_artifact(self, path, kind, project_id):
         from tools.build_dlc import sha256
@@ -209,6 +230,7 @@ class Library:
         self.project_path(identifier)
         with self.connect() as db:
             db.execute('DELETE FROM projects WHERE id=?', (identifier,))
+            db.execute('DELETE FROM project_types WHERE project_id=?', (identifier,))
             db.execute('DELETE FROM package_projects WHERE project_id=?', (identifier,))
             db.execute('DELETE FROM build_cache')
         (self.root / 'projects' / (identifier + '.olp')).unlink(missing_ok=True)

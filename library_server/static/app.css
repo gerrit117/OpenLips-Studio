@@ -1,4 +1,5 @@
 :root{color-scheme:light;--bg:#fff;--surface:#f4f6f7;--text:#20272c;--muted:#647079;--line:#dce2e5;--accent:#087f7f;--soft:#e5f4f2;--danger:#ac343f}
+.song-list th:last-child{width:140px!important}#download-package{width:100%}
 :root[data-theme=dark]{color-scheme:dark;--bg:#111618;--surface:#1b2326;--text:#e9eff0;--muted:#a1afb4;--line:#344045;--accent:#61ccc5;--soft:#203b3b;--danger:#ef8b97}
 :root[data-theme=dark] header{background:#283237}
 @media(max-width:600px){.header-title{display:none!important}.heading{flex-wrap:wrap}.heading .commands{margin-left:auto}}

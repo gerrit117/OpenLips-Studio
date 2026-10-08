@@ -14,10 +14,14 @@ const words = {
   confirm:['Remove this project snapshot? Shared media and already built DLCs will be retained.','Diesen Projektstand entfernen? Gemeinsame Medien und bereits gebaute DLCs bleiben erhalten.'],
   uploading:['Uploading…','Wird hochgeladen …'],working:['Working…','Wird verarbeitet …'],pairing:['Pairing code (valid for 5 minutes, one device):','Kopplungscode (5 Minuten gültig, ein Gerät):'],
   fingerprint:['Certificate SHA-256','Zertifikat SHA-256'],tooLarge:['Use a song file up to 16 MiB.','Eine Songdatei bis 16 MiB verwenden.'],
-  language:['Language','Sprache'],theme:['Switch dark/light mode','Dunklen/hellen Modus wechseln'],logout:['Sign out','Abmelden'],refresh:['Refresh','Aktualisieren']
+  language:['Language','Sprache'],theme:['Switch dark/light mode','Dunklen/hellen Modus wechseln'],logout:['Sign out','Abmelden'],refresh:['Refresh','Aktualisieren'],
+  project:['Project','Projekt'],community:['Community song','Community-Song'],ultrastar:['UltraStar','UltraStar'],midi:['MIDI','MIDI'],lrc:['LRC','LRC'],
+  pack:['Song pack','Songpack'],package:['Package','Paket'],readyDlc:['Ready DLC','Fertiges DLC'],
+  downloadDlc:['Download DLC','DLC herunterladen'],downloadPack:['Download song pack','Songpack herunterladen'],
+  xboxFolder:['Xbox destination','Xbox-Zielordner'],dlcImported:['DLC added to songs','DLC zur Songübersicht hinzugefügt']
 };
 let lang = localStorage.getItem('openlips-library-language') || (navigator.language.startsWith('de') ? 'de' : 'en');
-let token = '', catalog = {projects:[],packages:[],artifacts:[]}, selected = null, details = null, identity = {}, poll = null, coverURL = null, mediaField = '';
+let token = '', catalog = {projects:[],packages:[],artifacts:[],songs:[]}, selected = null, selectedSong = null, details = null, identity = {}, poll = null, coverURL = null, mediaField = '';
 const t = key => (words[key] || [key,key])[lang === 'de' ? 1 : 0];
 const kindName = value => ({chart:'.ols',midi:'MIDI',lrc:'LRC',dlc:'DLC'}[value] || value);
 const stateName = value => ({queued:['Queued','Wartend'],running:['Processing','In Arbeit'],ready:['Ready','Fertig'],failed:['Failed','Fehlgeschlagen']}[value] || [value,value])[lang==='de'?1:0];
@@ -27,6 +31,7 @@ function language() {
   $('search').placeholder = t('search');
   for (const id of ['theme','logout','refresh']) $(id).title = t(id);
   icons(); if (token || identity.auth_required===false) renderSongs();
+  $('import-dlc').title=t('readyDlc'); $('import-dlc').setAttribute('aria-label',t('readyDlc'));
 }
 function icons() { if (window.lucide) window.lucide.createIcons(); }
 function message(text) { $('status').textContent = text || ''; }
@@ -41,23 +46,41 @@ async function api(path, options = {}) {
 }
 async function run(callback) { try { await callback(); } catch(error) { message(error.message); } }
 async function refresh() {
-  catalog = await api('library'); $('counts').textContent = `${catalog.projects.length} ${t('songs')} · ${catalog.packages.length} DLC`;
+  catalog = await api('library'); $('counts').textContent = `${catalog.songs.length} ${t('songs')} · ${catalog.packages.length} DLC`;
   renderSongs(); renderOutputs(); await jobs();
 }
 function renderSongs() {
   const query = $('search').value.toLocaleLowerCase(); $('song-rows').replaceChildren();
-  const records = catalog.projects.filter(p=>(p.artist+' '+p.title).toLocaleLowerCase().includes(query));
+  const records = catalog.songs.filter(p=>(p.artist+' '+p.title+' '+(p.package_title || '')).toLocaleLowerCase().includes(query));
   $('empty-songs').hidden = records.length > 0;
-  for (const project of records) {
-    const row = el('tr',null,{'data-id':project.id,tabindex:'0'}); if (project.id === selected) row.className='selected';
-    for(const value of [project.artist,project.title,String(project.packages)]) row.append(el('td',value));
-    row.addEventListener('click',()=>run(()=>select(project.id)));
-    row.addEventListener('keydown',event=>{if(event.key==='Enter') run(()=>select(project.id));});
+  for (const song of records) {
+    const row = el('tr',null,{'data-id':song.key,tabindex:'0'}); if (song.key === selectedSong) row.className='selected';
+    const label = song.kind==='dlc' ? 'DLC' + (song.song_count>1 ? ' · '+t('pack') : '') : t(song.kind);
+    for(const value of [song.artist,song.title,label]) row.append(el('td',value));
+    row.addEventListener('click',()=>run(()=>selectSong(song.key)));
+    row.addEventListener('keydown',event=>{if(event.key==='Enter') run(()=>selectSong(song.key));});
     $('song-rows').append(row);
   }
 }
+async function selectSong(key) {
+  const song = catalog.songs.find(p=>p.key===key); if(!song)return;
+  if(song.project_id)return select(song.project_id);
+  selected=null; selectedSong=key; details=null; renderSongs();
+  $('song-controls').hidden=true; $('package-controls').hidden=false;
+  $('song-title').textContent=song.title; $('song-artist').textContent=song.artist;
+  if(coverURL)URL.revokeObjectURL(coverURL); coverURL=null; $('cover').src='/logo-light.png';
+  $('package-info').replaceChildren();
+  for(const [label,value] of [[t('type'),t('readyDlc')],[t('package'),song.package_title],
+      [t('songs'),song.song_count],[t('size'),(song.bytes/1048576).toFixed(1)+' MiB'],
+      [t('xboxFolder'),'Content/0000000000000000/4D530888/00000002']])
+    $('package-info').append(el('dt',label),el('dd',String(value)));
+  const button=$('download-package'); button.replaceChildren(el('i',null,{'data-lucide':'download'}),
+      el('span',t(song.song_count>1?'downloadPack':'downloadDlc')));
+  icons();
+}
 async function select(id) {
-  selected = id; details = await api('projects/' + id); renderSongs();
+  selected = id; selectedSong='project:'+id; details = await api('projects/' + id); renderSongs();
+  $('package-controls').hidden=true;
   const p = details.project; $('song-title').textContent = p.title; $('song-artist').textContent = p.artist;
   for(const kind of ['chart','midi']) document.querySelector(`[data-job="${kind}"]`).disabled=p.notes.some(note=>!note.pitch_assigned);
   document.querySelector('[data-job="chart"]').disabled ||= p.notes.some(note=>!note.text.trim());
@@ -70,6 +93,7 @@ async function select(id) {
   if(details.media.cover) { coverURL=URL.createObjectURL(await api(`projects/${id}/media/cover`,{binary:true})); $('cover').src=coverURL; }
 }
 async function download(path, name) {
+  if(identity.auth_required===false) { el('a',null,{href:'/api/v1/'+path,download:name}).click(); return; }
   const blob=await api(path,{binary:true}); const url=URL.createObjectURL(blob); const link=el('a',null,{href:url,download:name}); link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function renderOutputs() {
@@ -102,15 +126,16 @@ $('login-form').addEventListener('submit',event=>{event.preventDefault(); run(as
   token=$('access-key').value.trim(); $('access-key').value='';
   try { await enter(); } catch(error) {token='';throw error;}
 });});
-$('logout').addEventListener('click',()=>{token='';if(poll)clearInterval(poll);poll=null;$('workspace').hidden=true;$('signin').hidden=false;$('logout').hidden=true;selected=null;details=null;catalog={projects:[],packages:[],artifacts:[]};$('pair-code').textContent='';$('pair-code').hidden=true;if(coverURL)URL.revokeObjectURL(coverURL);message('');});
-$('language').addEventListener('change',()=>{lang=$('language').value;localStorage.setItem('openlips-library-language',lang);language();if(selected)run(()=>select(selected));});
+$('logout').addEventListener('click',()=>{token='';if(poll)clearInterval(poll);poll=null;$('workspace').hidden=true;$('signin').hidden=false;$('logout').hidden=true;selected=null;selectedSong=null;details=null;catalog={projects:[],packages:[],artifacts:[],songs:[]};$('pair-code').textContent='';$('pair-code').hidden=true;if(coverURL)URL.revokeObjectURL(coverURL);message('');});
+$('language').addEventListener('change',()=>{lang=$('language').value;localStorage.setItem('openlips-library-language',lang);language();if(selectedSong)run(()=>selectSong(selectedSong));});
 document.documentElement.dataset.theme=localStorage.getItem('openlips-library-theme') || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
 $('theme').addEventListener('click',()=>{const value=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=value;localStorage.setItem('openlips-library-theme',value);});
 $('refresh').addEventListener('click',()=>run(refresh)); $('search').addEventListener('input',renderSongs);
 document.querySelectorAll('[data-tab]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b===button));for(const name of ['songs','outputs','jobs','devices']) $(name+'-view').hidden=name!==button.dataset.tab;if(button.dataset.tab==='devices')run(devices);if(button.dataset.tab==='outputs')run(refresh);}));
 $('import').addEventListener('click',()=>$('song-file').click());
 $('import-dlc').addEventListener('click',()=>$('dlc-file').click());
-$('dlc-file').addEventListener('change',()=>run(async()=>{const file=$('dlc-file').files[0];if(!file)return;message(t('uploading'));await api('packages',{method:'POST',body:file,headers:{'Content-Type':'application/octet-stream'}});await refresh();message(t('saved'));$('dlc-file').value='';}));
+$('dlc-file').addEventListener('change',()=>run(async()=>{const file=$('dlc-file').files[0];if(!file)return;message(t('uploading'));const result=await api('packages',{method:'POST',body:file,headers:{'Content-Type':'application/octet-stream'}});await refresh();const song=catalog.songs.find(p=>p.package_id===result.id);if(song)await selectSong(song.key);document.querySelector('[data-tab="songs"]').click();message(t('dlcImported'));$('dlc-file').value='';}));
+$('download-package').addEventListener('click',()=>run(async()=>{const song=catalog.songs.find(p=>p.key===selectedSong);if(song?.package_id)await download('packages/'+song.package_id,song.filename);}));
 $('song-file').addEventListener('change',()=>run(async()=>{const file=$('song-file').files[0];if(!file)return;if(file.size>16*1048576)throw new Error(t('tooLarge'));message(t('uploading'));
   const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let n=0;n<bytes.length;n+=8192)binary+=String.fromCharCode(...bytes.subarray(n,n+8192));
   const result=await api('import',{method:'POST',json:{name:file.name,data:btoa(binary)}});await refresh();await select(result.id);message(t('imported'));$('song-file').value='';
@@ -121,7 +146,7 @@ $('media-file').addEventListener('change',()=>run(async()=>{const file=$('media-
 const lyricButton=action('captions','LRC',()=>$('lyric-file').click());document.querySelector('.media-actions').append(lyricButton);
 $('lyric-file').addEventListener('change',()=>run(async()=>{const file=$('lyric-file').files[0];if(!file||!selected)return;if(file.size>2*1048576)throw new Error(t('tooLarge'));const text=await file.text();const bytes=new TextEncoder().encode(text);let binary='';for(let n=0;n<bytes.length;n+=8192)binary+=String.fromCharCode(...bytes.subarray(n,n+8192));const result=await api(`projects/${selected}/lyrics`,{method:'POST',json:{data:btoa(binary)}});await refresh();await select(result.id);message(t('saved'));$('lyric-file').value='';}));
 document.querySelectorAll('[data-job]').forEach(button=>button.addEventListener('click',()=>run(async()=>{if(!selected)return;await api('jobs',{method:'POST',json:{projects:[selected],kind:button.dataset.job}});await jobs();message(t('queued'));})));
-$('remove').addEventListener('click',()=>run(async()=>{if(!selected||!confirm(t('confirm')))return;await api('projects/'+selected,{method:'DELETE'});selected=null;details=null;$('song-controls').hidden=true;$('song-title').textContent=t('select');$('song-artist').textContent='';await refresh();message('');}));
+$('remove').addEventListener('click',()=>run(async()=>{if(!selected||!confirm(t('confirm')))return;await api('projects/'+selected,{method:'DELETE'});selected=null;selectedSong=null;details=null;$('song-controls').hidden=true;$('song-title').textContent=t('select');$('song-artist').textContent='';await refresh();message('');}));
 $('pair').addEventListener('click',()=>run(async()=>{const result=await api('pairing',{method:'POST',json:{}});$('pair-code').textContent=t('pairing')+' '+result.code;$('pair-code').hidden=false;setTimeout(()=>{$('pair-code').hidden=true;$('pair-code').textContent='';},result.expires_in*1000);}));
 language();
 run(async()=>{identity=await api('identity');if(identity.auth_required===false)await enter();else $('signin').hidden=false;});

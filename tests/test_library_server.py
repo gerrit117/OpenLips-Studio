@@ -169,6 +169,9 @@ def test_native_metadata_library_and_cache(tmp_path, native_package):
     library = Library(tmp_path / 'library')
     identifier = library.add_project(project(tmp_path))
     package_id = library.add_package(native_package, [identifier])
+    ready = [song for song in library.songs() if song['kind'] == 'dlc']
+    assert len(ready) == 1 and ready[0]['title'] == 'Synthetic'
+    assert ready[0]['artist'] == 'OpenLips' and ready[0]['package_id'] == package_id
     assert library.cached_package([identifier]) == package_id
     assert library.cached_package([identifier], 'wrong title') is None
     assert library.add_package(native_package, [identifier]) == package_id
