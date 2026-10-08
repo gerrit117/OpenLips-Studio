@@ -1,6 +1,7 @@
 """The simple container must work with port forwarding and stale host settings."""
 from http.server import ThreadingHTTPServer
 import json
+from pathlib import Path
 import threading
 from unittest.mock import patch
 import urllib.error
@@ -11,6 +12,14 @@ import pytest
 from library_server.container_app import container_handler, local_authority, main, runtime_config
 from studio.library import Library
 from studio.server import JobManager
+
+
+def test_default_library_is_separate_from_appdata(tmp_path):
+    library = Library(tmp_path / 'songs')
+    with patch('library_server.container_app.Library', return_value=library) as constructor, \
+         patch('library_server.container_app.serve_http', return_value=0):
+        assert main([]) == 0
+    constructor.assert_called_once_with(Path('/library'))
 
 
 def test_old_configuration_does_not_override_container(tmp_path, monkeypatch):

@@ -32,8 +32,10 @@ Die [Vorlage](unraid/OpenLips-Library.xml) verwenden oder einen Container anlege
 | Privilegiert | Nein |
 | TCP-Container-Port | 8765 |
 | TCP-Host-Port | 8765 |
-| Container-Datenpfad | /data |
-| Host-Datenpfad | /mnt/user/appdata/openlips-library |
+| Container-Appdata-Pfad | /data |
+| Host-Appdata-Pfad | /mnt/user/appdata/openlips-library |
+| Container-Bibliothekspfad | /library |
+| Host-Bibliothekspfad | /mnt/user/OpenLips-Library |
 | Datenzugriff | Lesen/Schreiben |
 | Variable PUID | 99 |
 | Variable PGID | 100 |
@@ -44,12 +46,17 @@ Variablen, FTP-Ports und Host-Netzwerk-Einstellungen entfernen.
 Keine manuelle Änderung der server.json nötig.
 Einen eigenen Appdata-Ordner verwenden, nicht die gesamte Medienfreigabe.
 
-Die Starthilfe bereitet die Besitzrechte von /data und dessen Bibliotheks-
-Unterordner vor und gibt anschließend root-Rechte dauerhaft ab.
+Die Starthilfe bereitet die Besitzrechte von /library und dessen Inhalt
+vor und gibt anschließend root-Rechte dauerhaft ab.
 Der Server läuft als PUID/PGID, nicht als root.
 Eine vorhandene server.json bleibt unverändert und steuert das Netzwerk
-nicht mehr. Projekte, Medien, Pakete und Datenbank unter /data/library
-bleiben erhalten. Beim Ersetzen des Containers den Appdata-Ordner nicht löschen.
+nicht mehr. Projekte, Medien, Pakete und Datenbank liegen direkt unter /library,
+nicht in Appdata. Dafür eine eigene Unraid-Freigabe auswählen.
+Für eine vorhandene Sammlung den Container stoppen und den **Inhalt** von
+/mnt/user/appdata/openlips-library/library in die neue Bibliotheksfreigabe
+kopieren, einschließlich library.sqlite3 und aller Unterordner.
+Das Original behalten, bis die neue Sammlung geprüft wurde.
+Die Anwendung verschiebt oder löscht keine alten Dateien automatisch.
 
 Die Vorlage unter
 `/boot/config/plugins/dockerMan/templates-user/my-OpenLips-Library.xml`
@@ -63,7 +70,7 @@ Tags erlauben die Rückkehr zu einem früheren Stand.
 Für Updates das Image laden und den Container neu erstellen; Datenvolume behalten.
 Die Zustandsprüfung nutzt localhost im Container und benötigt keine Zugangsdaten.
 
-Für Sicherungen den Container stoppen und /data sichern.
+Für Sicherungen den Container stoppen und /library sowie /data sichern.
 `docker compose down -v` löscht die Sammlung. Lokal bauen:
 
 ```sh

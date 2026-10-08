@@ -104,7 +104,7 @@ def serve_http(library, config):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--library', type=Path, default=Path('/data/library'))
+    parser.add_argument('--library', type=Path, default=Path('/library'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('OPENLIPS_PORT', '8765')))
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:

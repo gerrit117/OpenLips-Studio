@@ -1,5 +1,12 @@
 # Library Changelog
 
+## Separate Library Storage
+
+- Store projects, media, packages and the library database in /library instead of appdata.
+- Add a separate persistent song-library mount to Compose and the Unraid template.
+- Leave legacy appdata untouched; document copying existing library contents while stopped.
+- Test independent appdata and library mounts with preserved data across restarts.
+
 ## Simple HTTP Container
 
 - Replace host networking with standard Docker bridge networking and one published HTTP port.

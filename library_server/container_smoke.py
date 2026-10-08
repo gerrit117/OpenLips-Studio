@@ -57,7 +57,7 @@ def main():
         subprocess.run(['docker', 'run', '-d', '--name', NAME, '-p', '127.0.0.1:18765:8765',
             '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
             '--security-opt', 'no-new-privileges:true',
-            '-v', VOLUME + ':/data', 'openlips-library:test'], check=True)
+            '-v', VOLUME + ':/library', 'openlips-library:test'], check=True)
         wait_for_server()
         subprocess.run(['docker', 'exec', NAME, 'python', '-m', 'library_server.health'], check=True)
         subprocess.run(['docker', 'exec', NAME, 'python', '-c',
@@ -78,24 +78,25 @@ def main():
         print('PASS: Linux Docker startup, anonymous HTTP, TXT import, MIDI/LRC/OLS exports and persistence')
     finally:
         subprocess.run(['docker', 'logs', NAME], check=False)
-        subprocess.run(['docker', 'rm', '-f', NAME], check=False)
+        subprocess.run(['docker', 'rm', '-fv', NAME], check=False)
         subprocess.run(['docker', 'volume', 'rm', VOLUME], check=False)
     host_mount_smoke()
 
 
 def host_mount_smoke():
     # Match Unraid: restrictive existing appdata and stale server.json.
-    with tempfile.TemporaryDirectory(prefix='openlips-bind-ci-') as folder:
+    with tempfile.TemporaryDirectory(prefix='openlips-bind-ci-') as folder, \
+            tempfile.TemporaryDirectory(prefix='openlips-appdata-ci-') as appdata:
         os.chmod(folder, 0o700)
-        legacy = Path(folder) / 'server.json'
+        legacy = Path(appdata) / 'server.json'
         legacy.write_text('{"bind":"192.168.1.3","port":1,"tls_cert":"missing.pem"}')
-        mount = str(Path(folder).resolve()) + ':/data'
+        mount = str(Path(folder).resolve()) + ':/library'
         try:
             subprocess.run(['docker', 'run', '-d', '--name', NAME, '-p', '127.0.0.1:18765:8765',
                 '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
                 '--security-opt', 'no-new-privileges:true',
                 '-e', 'PUID=99', '-e', 'PGID=100',
-                '-v', mount, 'openlips-library:test'], check=True)
+                '-v', mount, '-v', str(Path(appdata).resolve()) + ':/data', 'openlips-library:test'], check=True)
             wait_for_server()
             uid = subprocess.check_output(['docker', 'exec', NAME, 'python', '-c',
                 "print(next(line.split()[1] for line in open('/proc/1/status') if line.startswith('Uid:')))"], text=True).strip()
@@ -106,12 +107,12 @@ def host_mount_smoke():
             print('PASS: Bridge networking, non-root app, restrictive appdata repair and ignored stale config')
         finally:
             subprocess.run(['docker', 'logs', NAME], check=False)
-            subprocess.run(['docker', 'rm', '-f', NAME], check=False)
+            subprocess.run(['docker', 'rm', '-fv', NAME], check=False)
             # Only this generated CI directory; prepare it for TemporaryDirectory cleanup.
             subprocess.run(['docker', 'run', '--rm',
                 '-v', mount, '--entrypoint', 'python', 'openlips-library:test', '-c',
                 "import pathlib,shutil,os; [shutil.rmtree(p) if p.is_dir() else p.unlink() "
-                "for p in pathlib.Path('/data').iterdir()]; os.chown('/data',"
+                "for p in pathlib.Path('/library').iterdir()]; os.chown('/library',"
                 + str(os.getuid()) + ',' + str(os.getgid()) + ')'], check=True)
 
 

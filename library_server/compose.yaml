@@ -10,6 +10,7 @@ services:
       PGID: ${PGID:-10001}
     volumes:
       - library-data:/data
+      - song-library:/library
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m,mode=1777
@@ -19,3 +20,4 @@ services:
     cpus: "1.0"
 volumes:
   library-data:
+  song-library:

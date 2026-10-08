@@ -54,5 +54,7 @@ def test_unraid_template_uses_one_port_bridge_and_persistent_data():
     assert template.findtext('Network')=='bridge'
     assert template.findtext('Privileged')=='false'
     assert any(c.get('Target')=='/data' and c.get('Type')=='Path' for c in template.findall('Config'))
+    assert any(c.get('Target')=='/library' and c.get('Type')=='Path' for c in template.findall('Config'))
+    assert 'song-library:/library' in yaml.safe_load((root/'library_server/compose.yaml').read_text())['services']['library']['volumes']
     assert any(c.get('Target')=='8765' and c.get('Type')=='Port' for c in template.findall('Config'))
     assert not any(c.get('Target')=='OPENLIPS_BIND' for c in template.findall('Config'))

@@ -32,8 +32,10 @@ Use [the template](unraid/OpenLips-Library.xml) or add a container:
 | Privileged | No |
 | TCP container port | 8765 |
 | TCP host port | 8765 |
-| Container data path | /data |
-| Host data path | /mnt/user/appdata/openlips-library |
+| Container appdata path | /data |
+| Host appdata path | /mnt/user/appdata/openlips-library |
+| Container song-library path | /library |
+| Host song-library path | /mnt/user/OpenLips-Library |
 | Data access | Read/Write |
 | PUID variable | 99 |
 | PGID variable | 100 |
@@ -43,11 +45,15 @@ Leave Extra Parameters and Post Arguments empty. Remove old OPENLIPS_BIND,
 FTP ports and host-network settings. No manual server.json editing is needed.
 Use a dedicated appdata directory, not a whole media share.
 
-The startup helper prepares ownership of /data and its library subtree,
+The startup helper prepares ownership of /library and its contents,
 then drops root permanently. The server runs as PUID/PGID, not root.
 Existing server.json is left untouched and no longer controls networking.
-Existing projects, media, packages and database contents under /data/library
-are retained. Do not delete the appdata directory when replacing the container.
+Projects, media, packages and the database are stored directly in /library,
+not appdata. Choose a dedicated Unraid share for this mapping.
+To migrate an existing collection, stop the container and copy the **contents**
+of /mnt/user/appdata/openlips-library/library into the chosen library share.
+Include library.sqlite3 and all subdirectories. Keep the original until the
+new collection has been verified. No automatic moves or deletions are performed.
 
 Place the template at
 `/boot/config/plugins/dockerMan/templates-user/my-OpenLips-Library.xml`
@@ -60,7 +66,7 @@ publishing latest. Immutable sha-<full-commit> tags allow rollback.
 Pull updates and recreate the container; retain the data volume.
 The health check uses localhost inside the container and requires no credentials.
 
-Back up /data while stopped. Do not use `docker compose down -v` unless you
+Back up /library and /data while stopped. Do not use `docker compose down -v` unless you
 intend to delete the collection. Local build:
 
 ```sh

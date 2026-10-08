@@ -13,7 +13,8 @@
   <Icon>https://raw.githubusercontent.com/gerrit117/OpenLips-Studio/main/library_server/static/logo-light.png</Icon>
   <ExtraParams></ExtraParams>
   <Config Name="Web port" Target="8765" Default="8765" Mode="tcp" Description="Open http://UNRAID-IP:8765." Type="Port" Display="always" Required="true" Mask="false">8765</Config>
-  <Config Name="Library data" Target="/data" Default="/mnt/user/appdata/openlips-library" Mode="rw" Description="Dedicated persistent appdata directory. Existing library data is retained." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openlips-library</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/openlips-library" Mode="rw" Description="Appdata and legacy configuration, separate from songs." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openlips-library</Config>
+  <Config Name="Song library" Target="/library" Default="/mnt/user/OpenLips-Library" Mode="rw" Description="Dedicated song library share. Contains projects, media, packages and library database. For migration, copy the contents of the old appdata/library folder here while stopped." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/OpenLips-Library</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Unraid nobody UID." Type="Variable" Display="always" Required="true" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Unraid users GID." Type="Variable" Display="always" Required="true" Mask="false">100</Config>
 </Container>
