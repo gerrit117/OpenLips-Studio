@@ -11,7 +11,7 @@ COPY studio/ /app/studio/
 COPY tools/ /app/tools/
 COPY library_server/ /app/library_server/
 COPY LICENSE THIRD_PARTY_NOTICES.md /app/
-USER 10001:10001
 VOLUME /data
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["python", "-m", "library_server.health"]
-CMD ["python", "-m", "library_server.app"]
+ENTRYPOINT ["python", "-m", "library_server.entrypoint"]
+CMD []

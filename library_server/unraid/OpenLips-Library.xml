@@ -3,15 +3,17 @@
   <Name>OpenLips-Library</Name>
   <Repository>ghcr.io/gerrit117/openlips-library:latest</Repository>
   <Registry>https://github.com/gerrit117/OpenLips-Studio/pkgs/container/openlips-library</Registry>
-  <Network>host</Network>
+  <Network>bridge</Network>
   <Privileged>false</Privileged>
   <Support>https://github.com/gerrit117/OpenLips-Studio/issues</Support>
   <Project>https://github.com/gerrit117/OpenLips-Studio</Project>
-  <Overview>Private OpenLips home-network library. No login or TLS. Browse and manage songs, import charts/lyrics and download prepared packages. Windows is still required for compatible media encoding. Set OPENLIPS_BIND to your Unraid LAN IPv4 address. The /data directory must be writable by UID/GID 10001.</Overview>
+  <Overview>OpenLips home-network library. One HTTP port, no login, TLS, FTP or discovery. Connect manually using http://UNRAID-IP:8765. The container prepares its dedicated appdata directory and runs the application as PUID/PGID. Compatible media encoding still requires Windows.</Overview>
   <Category>MediaApp:Other</Category>
   <WebUI>http://[IP]:8765/</WebUI>
   <Icon>https://raw.githubusercontent.com/gerrit117/OpenLips-Studio/main/library_server/static/logo-light.png</Icon>
-  <ExtraParams>--read-only --tmpfs /tmp:rw,noexec,nosuid,size=128m,mode=1777 --cap-drop=ALL --security-opt=no-new-privileges:true</ExtraParams>
-  <Config Name="Library data" Target="/data" Default="/mnt/user/appdata/openlips-library" Mode="rw" Description="Persistent library; writable by UID/GID 10001." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openlips-library</Config>
-  <Config Name="Unraid LAN IPv4" Target="OPENLIPS_BIND" Default="" Mode="" Description="Your Unraid LAN IPv4 address, e.g. 192.168.1.10. Required for discovery." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <ExtraParams></ExtraParams>
+  <Config Name="Web port" Target="8765" Default="8765" Mode="tcp" Description="Open http://UNRAID-IP:8765." Type="Port" Display="always" Required="true" Mask="false">8765</Config>
+  <Config Name="Library data" Target="/data" Default="/mnt/user/appdata/openlips-library" Mode="rw" Description="Dedicated persistent appdata directory. Existing library data is retained." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openlips-library</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Unraid nobody UID." Type="Variable" Display="always" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Unraid users GID." Type="Variable" Display="always" Required="true" Mask="false">100</Config>
 </Container>

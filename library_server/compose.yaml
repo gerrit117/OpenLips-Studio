@@ -3,15 +3,16 @@ services:
   library:
     image: ghcr.io/gerrit117/openlips-library:latest
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "${OPENLIPS_WEB_PORT:-8765}:8765"
     environment:
-      OPENLIPS_BIND: ${OPENLIPS_BIND:?Set a specific private LAN/VPN IPv4 address}
+      PUID: ${PUID:-10001}
+      PGID: ${PGID:-10001}
     volumes:
       - library-data:/data
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m,mode=1777
-    cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 96
     mem_limit: 768m

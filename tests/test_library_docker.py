@@ -8,13 +8,13 @@ def test_docker_is_unprivileged_and_context_is_not_the_private_website():
     compose=yaml.safe_load((root/'library_server/compose.yaml').read_text())
     service=compose['services']['library']
     assert service['read_only']
-    assert service['cap_drop']==['ALL']
     assert 'no-new-privileges:true' in service['security_opt']
-    assert service['network_mode']=='host'
+    assert 'network_mode' not in service
+    assert service['ports']==['${OPENLIPS_WEB_PORT:-8765}:8765']
     assert service['image']=='ghcr.io/gerrit117/openlips-library:latest'
     assert all('/var/run/docker.sock' not in value for value in service['volumes'])
     docker=(root/'library_server/Dockerfile').read_text()
-    assert 'USER 10001:10001' in docker
+    assert 'library_server.entrypoint' in docker
     assert 'COPY web/' not in docker and 'COPY private/' not in docker
     ignore=(root/'library_server/Dockerfile.dockerignore').read_text()
     assert ignore.startswith('**\n')
@@ -46,11 +46,13 @@ def test_container_publish_tests_before_push_and_uses_temporary_token():
     assert 'latest' in steps[publish]['run'] and 'sha-$REVISION' in steps[publish]['run']
 
 
-def test_unraid_template_uses_image_host_network_and_persistent_data():
+def test_unraid_template_uses_one_port_bridge_and_persistent_data():
     from xml.etree import ElementTree as ET
     root=Path(__file__).resolve().parents[1]
     template=ET.parse(root/'library_server/unraid/OpenLips-Library.xml').getroot()
     assert template.findtext('Repository')=='ghcr.io/gerrit117/openlips-library:latest'
-    assert template.findtext('Network')=='host'
+    assert template.findtext('Network')=='bridge'
     assert template.findtext('Privileged')=='false'
     assert any(c.get('Target')=='/data' and c.get('Type')=='Path' for c in template.findall('Config'))
+    assert any(c.get('Target')=='8765' and c.get('Type')=='Port' for c in template.findall('Config'))
+    assert not any(c.get('Target')=='OPENLIPS_BIND' for c in template.findall('Config'))

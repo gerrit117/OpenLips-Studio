@@ -54,12 +54,15 @@ def job(project, kind):
 def main():
     subprocess.run(['docker', 'volume', 'create', VOLUME], check=True)
     try:
-        subprocess.run(['docker', 'run', '-d', '--name', NAME, '--network', 'host',
+        subprocess.run(['docker', 'run', '-d', '--name', NAME, '-p', '127.0.0.1:18765:8765',
             '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
-            '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
-            '-e', 'OPENLIPS_BIND=127.0.0.1', '-e', 'OPENLIPS_PORT=18765',
+            '--security-opt', 'no-new-privileges:true',
             '-v', VOLUME + ':/data', 'openlips-library:test'], check=True)
         wait_for_server()
+        subprocess.run(['docker', 'exec', NAME, 'python', '-m', 'library_server.health'], check=True)
+        subprocess.run(['docker', 'exec', NAME, 'python', '-c',
+            "import socket; s=socket.socket(); assert s.connect_ex(('127.0.0.1',2121)) != 0; s.close()"], check=True)
+        identifier = api('identity')['server_id']
         assert api('identity')['auth_required'] is False
         with opener.open(BASE, timeout=10) as response:
             assert b'OpenLips Library' in response.read()
@@ -69,6 +72,7 @@ def main():
             job(project, kind)
         subprocess.run(['docker', 'restart', NAME], check=True)
         wait_for_server()
+        assert api('identity')['server_id'] == identifier
         assert any(p['id'] == project for p in api('library')['projects'])
         assert len(api('library')['artifacts']) == 3
         print('PASS: Linux Docker startup, anonymous HTTP, TXT import, MIDI/LRC/OLS exports and persistence')
@@ -80,29 +84,35 @@ def main():
 
 
 def host_mount_smoke():
-    # Match Unraid: writable bind mount owned by the host, not the container UID.
+    # Match Unraid: restrictive existing appdata and stale server.json.
     with tempfile.TemporaryDirectory(prefix='openlips-bind-ci-') as folder:
-        os.chmod(folder, 0o777)
+        os.chmod(folder, 0o700)
+        legacy = Path(folder) / 'server.json'
+        legacy.write_text('{"bind":"192.168.1.3","port":1,"tls_cert":"missing.pem"}')
         mount = str(Path(folder).resolve()) + ':/data'
         try:
-            subprocess.run(['docker', 'run', '-d', '--name', NAME, '--network', 'host',
+            subprocess.run(['docker', 'run', '-d', '--name', NAME, '-p', '127.0.0.1:18765:8765',
                 '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
-                '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
-                '-e', 'OPENLIPS_BIND=127.0.0.1', '-e', 'OPENLIPS_PORT=18765',
+                '--security-opt', 'no-new-privileges:true',
+                '-e', 'PUID=99', '-e', 'PGID=100',
                 '-v', mount, 'openlips-library:test'], check=True)
             wait_for_server()
+            uid = subprocess.check_output(['docker', 'exec', NAME, 'python', '-c',
+                "print(next(line.split()[1] for line in open('/proc/1/status') if line.startswith('Uid:')))"], text=True).strip()
+            assert uid == '99', uid
+            assert subprocess.check_output(['docker', 'exec', NAME, 'cat', '/data/server.json'], text=True).strip() == '{"bind":"192.168.1.3","port":1,"tls_cert":"missing.pem"}'
             subprocess.run(['docker', 'restart', NAME], check=True)
             wait_for_server()
-            assert os.stat(folder).st_mode & 0o777 == 0o777
-            print('PASS: Non-owned writable host mount starts and restarts without chmod')
+            print('PASS: Bridge networking, non-root app, restrictive appdata repair and ignored stale config')
         finally:
             subprocess.run(['docker', 'logs', NAME], check=False)
             subprocess.run(['docker', 'rm', '-f', NAME], check=False)
-            # Only this generated CI directory; remove files as their creating UID.
-            subprocess.run(['docker', 'run', '--rm', '--cap-drop', 'ALL',
+            # Only this generated CI directory; prepare it for TemporaryDirectory cleanup.
+            subprocess.run(['docker', 'run', '--rm',
                 '-v', mount, '--entrypoint', 'python', 'openlips-library:test', '-c',
-                "import pathlib,shutil; [shutil.rmtree(p) if p.is_dir() else p.unlink() "
-                "for p in pathlib.Path('/data').iterdir()]"], check=True)
+                "import pathlib,shutil,os; [shutil.rmtree(p) if p.is_dir() else p.unlink() "
+                "for p in pathlib.Path('/data').iterdir()]; os.chown('/data',"
+                + str(os.getuid()) + ',' + str(os.getgid()) + ')'], check=True)
 
 
 if __name__ == '__main__':
