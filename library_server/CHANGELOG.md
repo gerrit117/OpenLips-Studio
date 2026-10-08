@@ -1,5 +1,11 @@
 # Library Changelog
 
+## Storage Compatibility Fix
+
+- Stop changing permissions on host-mounted data directories during startup.
+- Explain storage permission failures without repeated Python tracebacks.
+- Document recovery of existing Unraid appdata ownership without deleting library files.
+
 ## Initial Container Release
 
 - Publish the Linux amd64 home-network library on GHCR.

@@ -51,6 +51,20 @@ mkdir -p /mnt/user/appdata/openlips-library
 chown 10001:10001 /mnt/user/appdata/openlips-library
 ```
 
+If an existing installation reports `Permission denied: /data/server.json`,
+stop the container and correct ownership of this dedicated appdata directory,
+including files created during earlier attempts:
+
+```sh
+chown -R 10001:10001 /mnt/user/appdata/openlips-library
+chmod u+rwx /mnt/user/appdata/openlips-library
+```
+
+Use your actual mapped directory if different. Do not apply this to the whole
+appdata share. Pull the latest image and restart; the application no longer
+changes permissions on the host's mount point. Keep the `/data` mapping
+read/write. Existing library files remain in place.
+
 Place the template at
 `/boot/config/plugins/dockerMan/templates-user/my-OpenLips-Library.xml` and
 select it under **Docker > Add Container**. No privileged mode or TLS needed.

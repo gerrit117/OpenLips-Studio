@@ -2,7 +2,10 @@
 import base64
 import hashlib
 import json
+import os
+from pathlib import Path
 import subprocess
+import tempfile
 import time
 import urllib.request
 
@@ -73,6 +76,33 @@ def main():
         subprocess.run(['docker', 'logs', NAME], check=False)
         subprocess.run(['docker', 'rm', '-f', NAME], check=False)
         subprocess.run(['docker', 'volume', 'rm', VOLUME], check=False)
+    host_mount_smoke()
+
+
+def host_mount_smoke():
+    # Match Unraid: writable bind mount owned by the host, not the container UID.
+    with tempfile.TemporaryDirectory(prefix='openlips-bind-ci-') as folder:
+        os.chmod(folder, 0o777)
+        mount = str(Path(folder).resolve()) + ':/data'
+        try:
+            subprocess.run(['docker', 'run', '-d', '--name', NAME, '--network', 'host',
+                '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,mode=1777',
+                '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
+                '-e', 'OPENLIPS_BIND=127.0.0.1', '-e', 'OPENLIPS_PORT=18765',
+                '-v', mount, 'openlips-library:test'], check=True)
+            wait_for_server()
+            subprocess.run(['docker', 'restart', NAME], check=True)
+            wait_for_server()
+            assert os.stat(folder).st_mode & 0o777 == 0o777
+            print('PASS: Non-owned writable host mount starts and restarts without chmod')
+        finally:
+            subprocess.run(['docker', 'logs', NAME], check=False)
+            subprocess.run(['docker', 'rm', '-f', NAME], check=False)
+            # Only this generated CI directory; remove files as their creating UID.
+            subprocess.run(['docker', 'run', '--rm', '--cap-drop', 'ALL',
+                '-v', mount, '--entrypoint', 'python', 'openlips-library:test', '-c',
+                "import pathlib,shutil; [shutil.rmtree(p) if p.is_dir() else p.unlink() "
+                "for p in pathlib.Path('/data').iterdir()]"], check=True)
 
 
 if __name__ == '__main__':

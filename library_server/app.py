@@ -55,18 +55,24 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.local_http_test and args.bind != '127.0.0.1':
         parser.error('HTTP development mode requires 127.0.0.1')
-    if not args.config.exists():
-        create_config(args.config, args.library, args.bind, args.port, args.ftp_port,
-            tls=args.authenticated and not args.local_http_test, discovery=args.bind != '127.0.0.1', lan_open=not args.authenticated)
-    config = load_config(args.config)
-    if not args.authenticated and not config.get('lan_open'):
-        update_features(args.config, tls=False, discovery=config['bind'] != '127.0.0.1', name=config['name'], lan_open=True)
+    try:
+        if not args.config.exists():
+            create_config(args.config, args.library, args.bind, args.port, args.ftp_port,
+                tls=args.authenticated and not args.local_http_test, discovery=args.bind != '127.0.0.1', lan_open=not args.authenticated)
         config = load_config(args.config)
+        if not args.authenticated and not config.get('lan_open'):
+            update_features(args.config, tls=False, discovery=config['bind'] != '127.0.0.1', name=config['name'], lan_open=True)
+            config = load_config(args.config)
+        library = Library(config['library'])
+    except PermissionError as error:
+        uid = os.getuid() if hasattr(os, 'getuid') else 'current user'
+        gid = os.getgid() if hasattr(os, 'getgid') else 'current group'
+        parser.error(f'Library storage is not accessible: {error.filename or args.config}. '
+            f'Mount the data directory read/write and grant UID/GID {uid}:{gid} '
+            'read/write access to its files and directories. See the Unraid setup in library_server/README.md.')
     config['allow_browser'] = True
     config['encoding_enabled'] = False
-    library = Library(config['library'])
-    if os.name != 'nt':
-        os.chmod(args.config.parent, 0o700)
+    # Bind-mount ownership and permissions belong to the host, not the container.
     with server_lock(library.root):
         return serve(library, config, web_handler)
 

@@ -54,6 +54,21 @@ mkdir -p /mnt/user/appdata/openlips-library
 chown 10001:10001 /mnt/user/appdata/openlips-library
 ```
 
+Bei `Permission denied: /data/server.json` den Container stoppen und die
+Besitzrechte dieses eigenen Appdata-Ordners korrigieren, einschließlich der
+Dateien aus vorherigen Startversuchen:
+
+```sh
+chown -R 10001:10001 /mnt/user/appdata/openlips-library
+chmod u+rwx /mnt/user/appdata/openlips-library
+```
+
+Bei abweichender Zuordnung den tatsächlichen Ordner verwenden. Nicht auf die
+gesamte Appdata-Freigabe anwenden. Das aktuelle Image laden und neu starten;
+die Anwendung verändert nicht mehr die Rechte des eingebundenen Host-Ordners.
+Die Zuordnung von `/data` muss lesend und schreibend bleiben. Vorhandene
+Bibliotheksdateien bleiben erhalten.
+
 Die Vorlage unter
 `/boot/config/plugins/dockerMan/templates-user/my-OpenLips-Library.xml` ablegen
 und unter **Docker > Container hinzufügen** auswählen. Kein privilegierter
