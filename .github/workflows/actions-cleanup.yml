@@ -1,0 +1,63 @@
+name: Actions artifact cleanup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_run:
+    workflows: ['Studio beta builds', 'Library container']
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: actions-artifact-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Never check out or execute code from the triggering workflow.
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo,
+              {owner, repo, per_page: 100});
+            const runs = new Map();
+            const releases = await github.paginate(github.rest.repos.listReleases,
+              {owner, repo, per_page: 100});
+            const platforms = ['windows-x64-setup.exe', 'macos-arm64.dmg',
+              'macos-x64.dmg', 'linux-x64.tar.gz'];
+            let removed = 0, bytes = 0;
+            for (const artifact of artifacts) {
+              const id = artifact.workflow_run?.id;
+              if (!id) continue;
+              if (!runs.has(id)) {
+                runs.set(id, (await github.rest.actions.getWorkflowRun(
+                  {owner, repo, run_id: id})).data);
+              }
+              const run = runs.get(id);
+              if (run.status !== 'completed') continue;
+              const old = Date.now() - Date.parse(artifact.created_at) >= 24 * 60 * 60 * 1000;
+              const intermediate = artifact.name.startsWith('studio-release-');
+              const abandoned = intermediate && ['failure', 'cancelled', 'timed_out'].includes(run.conclusion);
+              const published = intermediate && run.conclusion === 'success' && releases.some(release =>
+                !release.draft && release.target_commitish === run.head_sha &&
+                platforms.every(platform => release.assets.some(asset =>
+                  asset.name.startsWith('OpenLips-Studio-') && asset.name.endsWith(platform) &&
+                  asset.state === 'uploaded' && asset.size > 0)));
+              const dockerRecord = artifact.name.endsWith('.dockerbuild') && run.conclusion === 'success';
+              if (!(old || abandoned || published || dockerRecord)) continue;
+              await github.rest.actions.deleteArtifact({owner, repo, artifact_id: artifact.id});
+              removed += 1;
+              bytes += artifact.size_in_bytes;
+              core.info('Removed Actions artifact: ' + artifact.name);
+            }
+            await core.summary.addHeading('Actions storage cleanup')
+              .addRaw(`${removed} artifacts removed (${(bytes / 1e9).toFixed(3)} GB). ` +
+                'Active runs and release assets were not modified.').write();
