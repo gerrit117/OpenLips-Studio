@@ -68,12 +68,12 @@ jobs:
       - name: Package standalone Basic Pitch plugin
         run: python -m tools.package_basic_pitch_plugin
       - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py tests/test_studio_media.py tests/test_studio_release.py tests/test_studio_plugins.py tests/test_studio_tones.py tests/test_ai_runtime.py tests/test_ai_chart.py tests/test_ai_packaging.py tests/test_xenia_test_launcher.py tests/test_smart_pages.py tests/test_page_recording.py tests/test_lyric_timing.py tests/test_ultrastar_batch.py tests/test_community_client.py tests/test_community_page.py -q
-      - run: python -m pytest tests/test_guided_review.py tests/test_lyrics_search.py -q
-        env:
-          QT_QPA_PLATFORM: offscreen
         env:
           QT_QPA_PLATFORM: offscreen
           OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ runner.os == 'Linux' && 'linux-x64' || runner.os == 'Windows' && 'windows-x64' || matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
+      - run: python -m pytest tests/test_guided_review.py tests/test_lyrics_search.py -q
+        env:
+          QT_QPA_PLATFORM: offscreen
       - name: Build Windows native media encoder
         if: runner.os == 'Windows'
         shell: cmd
