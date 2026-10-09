@@ -25,3 +25,13 @@ def test_launcher_rejects_cmd_expansion(tmp_path):
     path.touch()
     with pytest.raises(ValueError):
         cmd_path(path)
+
+
+def test_amd_archive_uses_portable_stronger_compression(tmp_path):
+    source = tmp_path / 'dist/OpenLipsAI'
+    source.mkdir(parents=True)
+    (source / 'OpenLipsAI.exe').write_bytes(b'synthetic engine' * 100)
+    archive = package('windows-2022', tmp_path / 'dist', tmp_path / 'release', flavor='amd')
+    with zipfile.ZipFile(archive) as stream:
+        assert stream.getinfo('ai/OpenLipsAI.exe').compress_type == zipfile.ZIP_LZMA
+        assert stream.read('ai/OpenLipsAI.exe') == b'synthetic engine' * 100

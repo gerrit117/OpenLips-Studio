@@ -27,12 +27,15 @@ def package(target, dist=Path('dist'), output=Path('release_assets'), flavor='cp
         if path.is_symlink():
             path.resolve(strict=True).relative_to(source.resolve())
     if extension == '.zip':
-        with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED) as stream:
+        compression = zipfile.ZIP_LZMA if flavor == 'amd' else zipfile.ZIP_DEFLATED
+        with zipfile.ZipFile(archive, 'x', compression=compression) as stream:
             for path in sorted(source.rglob('*')):
                 stream.write(path, Path('ai') / path.relative_to(source))
     else:
         with tarfile.open(archive, 'x:gz', dereference=False) as stream:
             stream.add(source, arcname='ai')
+    if archive.stat().st_size >= 2 * 1024**3:
+        raise ValueError('AI archive exceeds GitHub release asset limit (2 GiB)')
     with archive.open('rb') as stream:
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
     archive.with_suffix(archive.suffix + '.sha256').write_text(f'{digest}  {archive.name}\n', encoding='ascii')
