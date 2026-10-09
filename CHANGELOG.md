@@ -1,12 +1,14 @@
 # Changelog
 
-## 0.4.6 Beta 5
+## 0.4.6 Beta 6
 
 - Review AI and Basic Pitch drafts one lyric line at a time, with loop playback,
   separate recording/note volumes, slower playback and undoable chart edits.
 - Use existing LRC anchors for review; offer German/English word alignment for
   line-timed AI input and preserve melismas by default.
 - Reopen guided review from Tools > Charts without running analysis again.
+- Select the compatible CPU inference engine for known-lyric word alignment
+  when the installed AMD runtime lacks the required alignment API.
 - Fix HTTPS certificate errors in LRC search with bundled public CA certificates.
 - Limit Studio release downloads to system installers and the Linux archive.
 

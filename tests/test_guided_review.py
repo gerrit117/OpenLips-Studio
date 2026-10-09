@@ -95,3 +95,35 @@ def test_plain_lrc_does_not_invent_word_timestamps():
     assert reviewed.notes[0].text == 'Hello world'
     assert reviewed.notes[1].text == ''
     assert any('no word anchors' in w for w in reviewed.warnings)
+
+
+def test_word_alignment_routes_amd_to_cpu_engine(tmp_path, monkeypatch):
+    from studio.ai_dialog import AiChartDialog
+    from PySide6.QtCore import QSettings
+    app = QApplication.instance() or QApplication([])
+    cpu = tmp_path / 'cpu' / 'OpenLipsAI.exe'
+    cpu.parent.mkdir()
+    cpu.write_bytes(b'placeholder')
+    amd = tmp_path / 'runtime-amd' / 'OpenLipsAI.exe'
+    amd.parent.mkdir()
+    amd.write_bytes(b'placeholder')
+    media = tmp_path / 'voice.wav'
+    media.write_bytes(b'placeholder')
+    monkeypatch.setattr('studio.ai_runtime.has_amd_gpu', lambda: True)
+    monkeypatch.setattr('studio.ai_runtime.installed_engine', lambda *a, **k: str(cpu))
+    monkeypatch.setattr('studio.ai_runtime.amd_engine', lambda: (_ for _ in ()).throw(AssertionError('AMD worker selected')))
+    monkeypatch.setattr('studio.ai_dialog.ffmpeg_encoder', lambda: 'ffmpeg')
+    monkeypatch.setattr('studio.media_source.analysis_audio_source', lambda *a: str(media))
+    monkeypatch.setattr(QSettings, 'setValue', lambda *a: None)
+    calls = []
+    monkeypatch.setattr('studio.ai_dialog.QProcess.start', lambda self, program, args: calls.append((program, args)))
+    d = AiChartDialog(project())
+    d.input.setText(str(media))
+    d.runtime.setText(str(amd))
+    d.device.setCurrentIndex(d.device.findData('amd'))
+    d.align_lrc.setChecked(True)
+    d.start()
+    assert calls[0][0] == str(cpu)
+    assert calls[0][1][calls[0][1].index('--device') + 1] == 'cpu'
+    assert '--align-lrc' in calls[0][1]
+    d.reject()

@@ -148,9 +148,20 @@ class AiChartDialog(QDialog):
             QMessageBox.warning(self, tr('ai.title'), tr('ai.no_media'))
             return
         runtime = self.runtime.text().strip()
-        from studio.ai_runtime import amd_engine, has_amd_gpu
+        from studio.ai_runtime import amd_engine, has_amd_gpu, installed_engine
         wants_amd = self.device.currentData() == 'amd' or (
             self.device.currentData() == 'auto' and has_amd_gpu())
+        if self.align_lrc.isChecked() and (wants_amd or '-amd' in runtime.lower()):
+            # ROCm's torchaudio 2.9 lacks the CTC alignment API. The independent
+            # CPU engine retains it; do not silently run the incompatible worker.
+            runtime = installed_engine(flavor='cpu')
+            if not runtime and not getattr(sys, 'frozen', False):
+                local = Path(__file__).resolve().parents[1] / 'private/runtime/ai-chart-env/Scripts/python.exe'
+                if local.is_file():
+                    runtime = str(local)
+            self.runtime.setText(runtime)
+            self.device.setCurrentIndex(self.device.findData('cpu'))
+            wants_amd = False
         if wants_amd:
             accelerated = amd_engine()
             if accelerated:
