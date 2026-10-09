@@ -24,7 +24,7 @@ def build(root=Path('.')):
     environment = root / 'private/runtime/usdb-build-env'
     venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
-    subprocess.run([str(python), '-m', 'pip', 'install', 'PySide6>=6.8,<7', 'pyinstaller>=6,<7',
+    subprocess.run([str(python), '-m', 'pip', 'install', 'PySide6==6.11.2', 'pyinstaller>=6,<7',
                     'deno==2.9.7', 'yt-dlp[default]==2026.8.19'], check=True)
     subprocess.run([str(python), 'src/tools/generate_pyside_files.py'], cwd=source, check=True)
     subprocess.run([str(python), '-m', 'pip', 'install', str(source)], check=True)
