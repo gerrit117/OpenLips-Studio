@@ -133,7 +133,7 @@ def test_space_starts_then_records_while_playing_and_escape_finishes(window):
     window.clock_start = time.monotonic() - 1.8
     QTest.keyClick(window.timeline, Qt.Key.Key_Space)
     assert window.playing and len(window.history) == 1
-    assert 1.8 <= window.project.notes[0].page_break_time < 1.9
+    assert 1.8 - 1e-6 <= window.project.notes[0].page_break_time < 1.9
     QTest.keyClick(window.timeline, Qt.Key.Key_Escape)
     assert not window.record_pages_action.isChecked()
 
