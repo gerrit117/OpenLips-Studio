@@ -41,7 +41,7 @@ ai_source_data = [(str(path), 'ai_backend/' + str(path.parent)) for path in map(
     'tools/ai_devices.py', 'tools/ai_transcription.py'))]
 
 a = Analysis(['studio/launcher.py'], pathex=['.'],
-             datas=collect_data_files('qtawesome') + collect_data_files('pyphen') + collect_data_files('swift_f0') + copy_metadata('swift-f0') +
+             datas=collect_data_files('certifi') + collect_data_files('qtawesome') + collect_data_files('pyphen') + collect_data_files('swift_f0') + copy_metadata('swift-f0') +
                    [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.')] + asset_data + notice_data + ai_source_data,
              binaries=media_binaries,
              hiddenimports=['mido', 'studio.dlc_dialog', 'studio.media_dialog', 'studio.plugins', 'studio.plugin_dialog', 'studio.plugin_smoke',

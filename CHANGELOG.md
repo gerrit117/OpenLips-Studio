@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.6 Beta 4
+
+- Fix HTTPS certificate errors in LRC search by bundling public CA certificates
+  alongside system trust, with certificate and hostname verification enabled.
+
 ## 0.4.6 Beta 3
 
 - Add local/remote song libraries with fixed save folders, synchronization,

@@ -1,8 +1,10 @@
 """Optional public LRCLIB lookup, performed only on explicit user request."""
 import json
+import ssl
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import certifi
 from PySide6.QtCore import QThread, Signal
 from studio import __version__
 
@@ -11,7 +13,11 @@ def search_lyrics(title, artist):
     query = urlencode({'track_name': title, 'artist_name': artist})
     request = Request('https://lrclib.net/api/search?' + query,
                       headers={'User-Agent': 'OpenLips-Studio/' + __version__})
-    with urlopen(request, timeout=15) as response:
+    # Frozen Python may lack an OpenSSL CA file. Preserve system trust and
+    # add the bundled public CAs without disabling certificate verification.
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
+    with urlopen(request, timeout=15, context=context) as response:
         payload = response.read(2 * 1024 * 1024 + 1)
     if len(payload) > 2 * 1024 * 1024:
         raise ValueError('Lyrics search response too large')
