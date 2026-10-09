@@ -4,6 +4,13 @@
   branch. Do not create development branches or worktrees by default.
 - Publish downloadable GitHub Releases, not just version tags. Keep changelogs
   in English and user documentation in correct English/German.
+- Keep Studio release downloads limited to the Windows setup executable, macOS
+  Apple Silicon/Intel DMGs and the Linux installation archive. Do not publish
+  duplicate portable archives or standalone checksum files in the main release.
+  Distribute optional AI runtimes and external `.opl` plugins separately. Migrate
+  automatic download clients before removing runtime assets they still need;
+  preserve integrity verification internally. The plugin catalog must not offer
+  already-integrated Studio functions as separately installed plugins.
 - Bump the app version before publishing changed application/build code from
   another commit. Never move an existing release tag or silently replace a
   released version with different source code.
