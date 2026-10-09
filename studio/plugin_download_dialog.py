@@ -95,7 +95,7 @@ class PluginDownloadDialog(QDialog):
         state = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'plugin-state' / plugin.id
         state.mkdir(parents=True, exist_ok=True)
         command = plugin.create_command(self.root / 'unused.json', self.root)
-        arguments = command if plugin.id == 'studio-youtube' else [command[0],
+        arguments = [*command, '--state', str(state)] if plugin.id == 'studio-usdb' else command if plugin.id == 'studio-youtube' else [command[0],
             '--serve', '--output', str(self.root), '--state', str(state)]
         from studio.plugin_rpc import PluginRPC
         env = plugin_process_environment()

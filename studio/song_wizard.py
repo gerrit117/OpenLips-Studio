@@ -21,17 +21,33 @@ class SongWizard(QWizard):
         self.resize(760, 480)
         self.project = None
         self.choice = 'ultrastar'
-        self.modes = ['ultrastar', 'midi-lrc', 'midi', 'lrc', 'scratch']
+        self.modes = ['ultrastar', 'midi-lrc', 'midi', 'lrc', 'usdb', 'scratch']
+        self.usdb_result = None
         page = QWizardPage()
         page.setTitle(tr('wizard.start'))
         row = QHBoxLayout(page)
         self.choices = QListWidget()
-        self.choices.addItems([tr('wizard.' + mode) for mode in self.modes])
+        self.choices.addItems([tr('wizard.only_lrc' if mode == 'lrc' else 'wizard.' + mode) for mode in self.modes])
         self.choices.setFixedWidth(245)
         self.description = QLabel()
         self.description.setWordWrap(True)
         row.addWidget(self.choices)
-        row.addWidget(self.description, 1)
+        detail = QVBoxLayout()
+        detail.addWidget(self.description, 1)
+        self.lrc_sources = QWidget()
+        sources = QHBoxLayout(self.lrc_sources)
+        sources.setContentsMargins(0, 0, 0, 0)
+        self.own_lrc = QPushButton(tr('wizard.own_lrc'))
+        self.find_lrc = QPushButton(tr('wizard.find_lrc'))
+        self.own_lrc.clicked.connect(self.choose_lrc_file)
+        self.find_lrc.clicked.connect(self.find_lrc_file)
+        sources.addWidget(self.own_lrc)
+        sources.addWidget(self.find_lrc)
+        detail.addWidget(self.lrc_sources)
+        self.usdb_start = QPushButton(tr('download.usdb'))
+        self.usdb_start.clicked.connect(self.open_usdb)
+        detail.addWidget(self.usdb_start)
+        row.addLayout(detail, 1)
         self.choices.currentRowChanged.connect(self.choose_mode)
         self.choices.setCurrentRow(0)
         self.addPage(page)
@@ -52,6 +68,10 @@ class SongWizard(QWizard):
             button.clicked.connect(lambda checked=False, e=edit, f=filters: self.browse(e, f))
             layout.addWidget(edit, 1)
             layout.addWidget(button)
+            if key == 'lrc':
+                find = QPushButton(tr('wizard.find_lrc'))
+                find.clicked.connect(self.find_lrc_file)
+                layout.addWidget(find)
             form.addRow(tr(label), widget)
             self.rows[key] = (edit, widget, form.labelForField(widget))
         self.method = QComboBox()
@@ -71,6 +91,35 @@ class SongWizard(QWizard):
     def choose_mode(self, index):
         self.choice = self.modes[index]
         self.description.setText(tr('wizard.' + self.choice + '.description'))
+        self.lrc_sources.setVisible(self.choice in ('lrc', 'midi-lrc'))
+        self.usdb_start.setVisible(self.choice == 'usdb')
+
+    def open_usdb(self):
+        from studio.usdb import dialog
+        try:
+            browser = dialog(StudioProject(), self)
+            browser.accepted_song.connect(lambda project: setattr(self, 'project', project))
+            if browser.exec():
+                if browser.batch_result:
+                    self.usdb_result = browser.batch_result
+                    self.project = browser.batch_result[0][0]
+                if self.project:
+                    self.accept()
+        except Exception as error:
+            QMessageBox.warning(self, 'OpenLips Studio', str(error))
+
+    def choose_lrc_file(self):
+        self.browse(self.rows['lrc'][0], 'LRC (*.lrc)')
+        if self.rows['lrc'][0].text() and self.currentId() == 0:
+            self.next()
+
+    def find_lrc_file(self):
+        from studio.lyrics_lookup_dialog import LyricsLookupDialog
+        dialog = LyricsLookupDialog(self)
+        if dialog.exec() and dialog.lrc_path:
+            self.rows['lrc'][0].setText(str(dialog.lrc_path))
+            if self.currentId() == 0:
+                self.next()
 
     def browse(self, field, filters):
         if field is self.rows['chart'][0]:
@@ -93,6 +142,11 @@ class SongWizard(QWizard):
 
     def validateCurrentPage(self):
         if self.currentId() == 0:
+            if self.choice == 'usdb':
+                if self.project is not None:
+                    return True
+                self.open_usdb()
+                return False
             return True
         try:
             paths = {key: field[0].text().strip() for key, field in self.rows.items()}

@@ -68,6 +68,7 @@ class TimingDialog(QDialog):
         self.table.setHorizontalHeaderLabels([tr('Start'), tr('Laenge'), tr('Text')])
         self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         layout.addWidget(self.table, 1)
         self.seek_bar = QSlider(Qt.Orientation.Horizontal)
         self.seek_bar.setRange(0, 300000)
@@ -79,6 +80,12 @@ class TimingDialog(QDialog):
         self.play.setToolTip(tr('timing.play'))
         self.play.clicked.connect(self.toggle_play)
         transport.addWidget(self.play)
+        self.play_selection = QPushButton(qta.icon('fa5s.step-forward',color='#cdd3d9'), '')
+        self.play_selection.setFixedSize(36,32)
+        self.play_selection.setToolTip(tr('timing.play_selection'))
+        self.play_selection.clicked.connect(self.play_selected)
+        self.play_selection.setEnabled(False)
+        transport.addWidget(self.play_selection)
         self.record = QPushButton(qta.icon('fa5s.record-vinyl',color='#cdd3d9'),tr('timing.record'))
         self.record.setCheckable(True)
         self.record.setToolTip(tr('timing.record_tip'))
@@ -134,6 +141,7 @@ class TimingDialog(QDialog):
         self.text.textChanged.connect(self.assign_text)
         self.group.buttonToggled.connect(lambda button, checked:self.assign_text() if checked else None)
         self.table.itemChanged.connect(self.table_edited)
+        self.table.currentCellChanged.connect(self.selection_changed)
         self.media.errorOccurred.connect(lambda *_:self.status.setText(self.media.errorString()))
         self.click.failed.connect(self.status.setText)
         self.configure_media()
@@ -164,8 +172,12 @@ class TimingDialog(QDialog):
                 self.original = candidate
                 self.configure_media()
 
-    def snapshot(self):
-        self.history.append(copy.deepcopy(self.notes))
+    def state(self, position=None, row=None):
+        return dict(notes=copy.deepcopy(self.notes), position=self.position if position is None else position,
+                    row=self.table.currentRow() if row is None else row)
+
+    def snapshot(self, position=None, row=None):
+        self.history.append(self.state(position, row))
         self.history = self.history[-100:]
         self.future.clear()
 
@@ -175,12 +187,16 @@ class TimingDialog(QDialog):
         self.next_label.setText(tr('timing.next', text=next_text, count=len(self.notes), total=len(units)))
 
     def render(self):
+        selected_row = self.table.currentRow()
         self.rendering = True
         self.table.setRowCount(len(self.notes))
         for row,n in enumerate(self.notes):
             for column,value in enumerate((f'{n.time:.3f}',f'{n.length:.3f}',n.text)):
                 self.table.setItem(row,column,QTableWidgetItem(value))
+        if self.notes:
+            self.table.setCurrentCell(min(max(0, selected_row), len(self.notes)-1), 0)
         self.rendering = False
+        self.play_selection.setEnabled(bool(self.notes) and not self.record.isChecked())
         self.update_next()
 
     def table_edited(self, item):
@@ -189,11 +205,34 @@ class TimingDialog(QDialog):
         try:
             candidate = self.read_rows()
             if candidate != self.notes:
-                self.snapshot()
+                row = item.row()
+                if item.column() == 0 and candidate[row].time != self.notes[row].time:
+                    old = self.notes[row]
+                    end = old.time + old.length
+                    if candidate[row].time >= end:
+                        raise ValueError(tr('timing.before_end'))
+                    candidate[row].length = end-candidate[row].time
+                    if row and abs(self.notes[row-1].time+self.notes[row-1].length-old.time) < .001:
+                        candidate[row-1].length = candidate[row].time-candidate[row-1].time
+                self.snapshot(self.notes[row].time, row)
                 self.notes = candidate
-                self.update_next()
+                self.render()
+                self.seek(self.notes[row].time)
+                self.status.setText(tr('timing.estimated'))
         except ValueError as error:
             self.status.setText(str(error))
+
+    def selection_changed(self, row, *_):
+        self.play_selection.setEnabled(0 <= row < len(self.notes) and not self.record.isChecked())
+        if not self.rendering and not self.record.isChecked() and 0 <= row < len(self.notes):
+            self.seek(self.notes[row].time)
+
+    def play_selected(self):
+        row = self.table.currentRow()
+        if not self.record.isChecked() and 0 <= row < len(self.notes):
+            self.seek(self.notes[row].time)
+            if not self.playing:
+                self.toggle_play()
 
     def read_rows(self):
         notes = copy.deepcopy(self.notes)
@@ -204,6 +243,8 @@ class TimingDialog(QDialog):
             n.validate()
             if n.time>86400 or n.length>86400:
                 raise ValueError('Timing must fit within 24 hours')
+        if any(b.time <= a.time for a,b in zip(notes,notes[1:])):
+            raise ValueError(tr('timing.order'))
         return notes
 
     def assign_text(self):
@@ -226,12 +267,13 @@ class TimingDialog(QDialog):
         self.words.setEnabled(not enabled)
         self.syllables.setEnabled(not enabled)
         self.table.setEnabled(not enabled)
+        self.play_selection.setEnabled(not enabled and 0 <= self.table.currentRow() < len(self.notes))
         if enabled:
             self.table.setFocus()
             if not self.playing:
                 self.toggle_play()
         elif self.notes and self.position > self.notes[-1].time+.001:
-            self.snapshot()
+            self.snapshot(self.notes[-1].time, len(self.notes)-1)
             self.notes[-1].length = round(self.position,3)-self.notes[-1].time
             self.render()
 
@@ -245,8 +287,8 @@ class TimingDialog(QDialog):
         if units and len(self.notes)>=len(units):
             self.record.setChecked(False)
             return
-        self.snapshot()
         onset = round(self.position,3)
+        self.snapshot(onset, len(self.notes))
         if self.notes:
             self.notes[-1].length = onset-self.notes[-1].time
             self.notes[-1].line_break_after = units[len(self.notes)-1].end_line if units else False
@@ -324,15 +366,26 @@ class TimingDialog(QDialog):
 
     def undo(self):
         if self.history:
-            self.future.append(copy.deepcopy(self.notes))
-            self.notes = self.history.pop()
-            self.render()
+            state = self.history.pop()
+            row = state['row']
+            position = self.notes[row].time if 0 <= row < len(self.notes) else state['position']
+            self.future.append(self.state(position, row))
+            self.restore(state)
 
     def redo(self):
         if self.future:
-            self.history.append(copy.deepcopy(self.notes))
-            self.notes = self.future.pop()
-            self.render()
+            state = self.future.pop()
+            row = state['row']
+            position = self.notes[row].time if 0 <= row < len(self.notes) else state['position']
+            self.history.append(self.state(position, row))
+            self.restore(state)
+
+    def restore(self, state):
+        self.notes = state['notes']
+        self.render()
+        if 0 <= state['row'] < len(self.notes):
+            self.table.setCurrentCell(state['row'], 0)
+        self.seek(state['position'])
 
     def retake(self):
         row = self.table.currentRow()

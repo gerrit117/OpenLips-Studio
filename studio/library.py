@@ -11,7 +11,7 @@ import uuid
 from contextlib import contextmanager
 
 from studio import __version__
-from studio.model import load_project, save_project
+from studio.model import load_project, save_project, project_status
 from studio.package_metadata import package_metadata
 from tools.build_dlc import marketplace_filename, verify_stfs
 
@@ -56,13 +56,19 @@ class Library:
                 CREATE TABLE IF NOT EXISTS sync_links (
                     server_id TEXT NOT NULL, kind TEXT NOT NULL, local_id TEXT NOT NULL,
                     remote_id TEXT NOT NULL, PRIMARY KEY(server_id,kind,local_id,remote_id));
+                CREATE TABLE IF NOT EXISTS project_details (project_id TEXT PRIMARY KEY,
+                    modified TEXT NOT NULL, status TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS package_details (package_id TEXT PRIMARY KEY,
+                    built TEXT, precision TEXT NOT NULL, content_id TEXT NOT NULL);
             ''')
 
     def draft_path(self, project):
         import re
         label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_',
                        f'{project.artist} - {project.title}').strip(' .-')[:100] or 'Song'
-        return self.root / 'workspace' / (label + '-' + uuid.uuid4().hex[:12] + '.olp')
+        from datetime import datetime
+        stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        return self.root / 'workspace' / (label + '-' + stamp + '-' + uuid.uuid4().hex[:6] + '.olp')
 
     def sync_links(self, server_id, kind):
         with self.connect() as db:
@@ -147,6 +153,11 @@ class Library:
             payload[field] = digests.get(field, '')
         # Editor UUIDs and import-path labels are not musical identity.
         payload.pop('source', None)
+        payload.pop('created_at', None)
+        payload.pop('modified_at', None)
+        for field in ('album', 'genre', 'year'):
+            if not payload[field]:
+                payload.pop(field)
         for note in payload['notes']:
             note.pop('id', None)
         fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
@@ -156,7 +167,7 @@ class Library:
             existing = db.execute('SELECT id FROM projects WHERE fingerprint=?', (fingerprint,)).fetchone()
             if existing:
                 return existing['id']
-            save_project(project, self.root / 'projects' / (identifier + '.olp'))
+            save_project(project, self.root / 'projects' / (identifier + '.olp'), touch=False)
             db.execute('INSERT INTO projects VALUES (?,?,?,?,?)',
                 (identifier, fingerprint, project.title, project.artist, time.time()))
             source = project.source.lower()
@@ -165,6 +176,8 @@ class Library:
                     'midi' if source.startswith('midi /') or source in ('library mid', 'library midi') else
                     'lrc' if source == 'library lrc' else 'project')
             db.execute('INSERT INTO project_types VALUES (?,?)', (identifier, kind))
+            db.execute('INSERT INTO project_details VALUES (?,?,?)',
+                       (identifier, project.modified_at, project_status(project)))
         return identifier
 
     def project_path(self, identifier):
@@ -189,6 +202,9 @@ class Library:
             db.execute('INSERT OR IGNORE INTO packages VALUES (?,?,?,?,?,?)',
                 (checksum, filename, metadata['title'], target.stat().st_size,
                  json.dumps(metadata['songs'], ensure_ascii=False), time.time()))
+            db.execute('INSERT OR REPLACE INTO package_details VALUES (?,?,?,?)',
+                       (checksum, metadata.get('package_date'), metadata.get('date_precision', 'unknown'),
+                        metadata['content_id']))
             for identifier in project_ids:
                 if not db.execute('SELECT 1 FROM projects WHERE id=?', (identifier,)).fetchone():
                     raise KeyError('Unknown library project')
@@ -197,16 +213,39 @@ class Library:
 
     def projects(self):
         with self.connect() as db:
-            return [dict(row) for row in db.execute('''SELECT id,title,artist,created,
+            result = [dict(row) for row in db.execute('''SELECT id,title,artist,created,
                 COALESCE((SELECT kind FROM project_types t WHERE t.project_id=projects.id), 'project') AS kind,
                 (SELECT count(*) FROM package_projects l WHERE l.project_id=projects.id) AS packages
                 FROM projects ORDER BY artist COLLATE NOCASE,title COLLATE NOCASE''')]
+            for row in result:
+                details = db.execute('SELECT modified,status FROM project_details WHERE project_id=?', (row['id'],)).fetchone()
+                if not details:
+                    try:
+                        project = load_project(self.root / 'projects' / (row['id'] + '.olp'))
+                        details = dict(modified=project.modified_at, status=project_status(project))
+                    except (ValueError, OSError):
+                        details = dict(modified='', status='unreadable')
+                    db.execute('INSERT INTO project_details VALUES (?,?,?)',
+                               (row['id'], details['modified'], details['status']))
+                row.update(dict(details))
+        return result
 
     def packages(self):
         with self.connect() as db:
-            result = [dict(row) for row in db.execute('SELECT * FROM packages ORDER BY title COLLATE NOCASE')]
+            result = [dict(row) for row in db.execute('''SELECT packages.*, d.built, d.precision, d.content_id
+                FROM packages LEFT JOIN package_details d ON d.package_id=packages.id
+                ORDER BY title COLLATE NOCASE''')]
         for row in result:
             row['songs'] = json.loads(row['songs'])
+            if row['precision'] is None:
+                try:
+                    data = package_metadata(self.root / 'publish' / row['filename'])
+                    row.update(built=data.get('package_date'), precision=data.get('date_precision', 'unknown'), content_id=data['content_id'])
+                    with self.connect() as db:
+                        db.execute('INSERT OR REPLACE INTO package_details VALUES (?,?,?,?)',
+                                   (row['id'], row['built'], row['precision'], row['content_id']))
+                except (OSError, ValueError):
+                    row.update(built=None, precision='unknown', content_id='')
         return result
 
     def songs(self):
@@ -254,6 +293,7 @@ class Library:
         with self.connect() as db:
             db.execute('DELETE FROM projects WHERE id=?', (identifier,))
             db.execute('DELETE FROM project_types WHERE project_id=?', (identifier,))
+            db.execute('DELETE FROM project_details WHERE project_id=?', (identifier,))
             db.execute('DELETE FROM package_projects WHERE project_id=?', (identifier,))
             db.execute('DELETE FROM build_cache')
         (self.root / 'projects' / (identifier + '.olp')).unlink(missing_ok=True)

@@ -5,7 +5,7 @@ import uuid
 from PySide6.QtCore import QThread, Signal, Qt, QStandardPaths
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QFileDialog, QTableWidget, QTableWidgetItem, QHeaderView, QLabel, QLineEdit,
-    QProgressBar, QMessageBox)
+    QProgressBar, QMessageBox, QComboBox)
 import qtawesome as qta
 
 from studio.i18n import tr
@@ -64,6 +64,11 @@ class UltraStarBatchDialog(QDialog):
         self.name = QLineEdit('Song Pack')
         self.name.setPlaceholderText(tr('pack.name'))
         layout.addWidget(self.name)
+        self.export_mode = QComboBox()
+        self.export_mode.addItem(tr('pack.title'), 'pack')
+        self.export_mode.addItem(tr('batch.singles'), 'singles')
+        self.export_mode.currentIndexChanged.connect(self.update_buttons)
+        layout.addWidget(self.export_mode)
         row = QHBoxLayout()
         self.open_button = QPushButton(tr('batch.open'))
         self.export_button = QPushButton(tr('pack.title'))
@@ -140,18 +145,28 @@ class UltraStarBatchDialog(QDialog):
         self.files.setEnabled(not busy)
         self.folder.setEnabled(not busy)
         self.table.setEnabled(not busy)
+        self.export_mode.setEnabled(not busy)
+        singles = self.export_mode.currentData() == 'singles'
+        self.name.setVisible(not singles)
         self.open_button.setEnabled(not busy and count > 0)
-        self.export_button.setEnabled(not busy and 1 <= count <= 16)
-        self.export_button.setToolTip(tr('pack.count_limit') if count > 16 else '')
+        self.export_button.setText(tr('batch.singles') if singles else tr('pack.title'))
+        self.export_button.setEnabled(not busy and count > 0 and (singles or count <= 16))
+        self.export_button.setToolTip(tr('pack.count_limit') if not singles and count > 16 else '')
 
     def finish_import(self, export):
         projects = self.selected()
         if not projects:
             return
-        if export and len(projects) > 16:
+        singles = export and self.export_mode.currentData() == 'singles'
+        if export and not singles and len(projects) > 16:
             self.status.setText(tr('pack.count_limit'))
             return
-        if export:
+        from studio.library_page import configured_library
+        library_root = configured_library()
+        if library_root:
+            from studio.library import Library
+            root = Library(library_root).root / 'workspace'
+        elif export:
             root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)) / 'batch-imports' / uuid.uuid4().hex
         else:
             destination = QFileDialog.getExistingDirectory(self, tr('batch.destination'))
@@ -159,13 +174,14 @@ class UltraStarBatchDialog(QDialog):
                 return
             root = Path(destination) / ('OpenLips-' + uuid.uuid4().hex[:12])
         try:
-            root.mkdir(parents=True)
+            root.mkdir(parents=True, exist_ok=True)
             for index, project in enumerate(projects):
-                save_project(project, root / f'{index + 1:04d}.olp')
+                path = Library(library_root).draft_path(project) if library_root else root / f'{index + 1:04d}.olp'
+                save_project(project, path)
         except Exception as error:
             QMessageBox.warning(self, tr('batch.title'), str(error))
             return
-        self.batch_result = (projects, self.name.text().strip() or 'Song Pack', export)
+        self.batch_result = (projects, self.name.text().strip() or 'Song Pack', 'singles' if singles else export)
         self.accept()
 
     def done(self, result):

@@ -104,6 +104,28 @@ def split_note(project, identifier, seconds):
     return right
 
 
+def delete_notes(project, identifiers):
+    """Keep the lyric anchor and ending when removing part of a melisma."""
+    from studio.smart_pages import word_units
+    identifiers = set(identifiers)
+    for unit in word_units(project.ordered()):
+        notes = unit['notes']
+        kept = [n for n in notes if n.id not in identifiers]
+        if not kept or len(kept) == len(notes):
+            continue
+        first = kept[0]
+        if first.text.strip() == '~':
+            prefix = ''.join(n.text for n in notes[:notes.index(first)]
+                             if n.id in identifiers and n.text.strip() != '~')
+            if prefix:
+                first.text = prefix
+        if notes[-1].id in identifiers:
+            kept[-1].end_word = notes[-1].end_word
+            kept[-1].line_break_after = notes[-1].line_break_after
+            kept[-1].page_break_time = notes[-1].page_break_time
+    project.notes[:] = [n for n in project.notes if n.id not in identifiers]
+
+
 def split_words(project, identifier):
     note = next(n for n in project.notes if n.id == identifier)
     words = note.text.split()

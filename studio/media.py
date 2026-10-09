@@ -20,7 +20,7 @@ def native_encoder():
     roots = [Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))]
     for root in roots:
         for path in (root / 'media/transcode_windows.exe',
-                     root / 'private/runtime/og-framing-test/transcode_windows.exe'):
+                     root / 'private/runtime/media/transcode_windows.exe'):
             if path.is_file():
                 return str(path)
     return ''

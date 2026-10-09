@@ -133,7 +133,7 @@ def asset_name(name):
     return name
 
 
-def make_manifest(title, artist, uint_id, duration, assets, *, preview_lyric=''):
+def make_manifest(title, artist, uint_id, duration, assets, *, preview_lyric='', genre='', year='', album=''):
     if not 0 < uint_id <= 0xFFFFFFFF:
         raise ValueError('UintID must be an unused positive 32-bit ID')
     if not title.strip() or not artist.strip() or not math.isfinite(duration) or not 0 < duration < 86400:
@@ -141,8 +141,8 @@ def make_manifest(title, artist, uint_id, duration, assets, *, preview_lyric='')
     content_id = f'{TITLE_ID:08X}{uint_id:08X}'
     root = ET.Element('DLCContents')
     music = ET.SubElement(ET.SubElement(root, 'MusicIndices'), 'MusicIndex')
-    fields = dict(Artist=artist, Title=title, Genre='Pop', Year='2026',
-                  Language='EN', Album='', Length=str(round(duration)), Rating='0',
+    fields = dict(Artist=artist, Title=title, Genre=genre, Year=year,
+                  Language='EN', Album=album, Length=str(round(duration)), Rating='0',
                   LeaderBoardID='0', ChartUri=assets['chart'], AudioUri=assets['audio'],
                   LyricUri=assets['lyric'], AlbumJacketUri=assets['jacket'],
                   PreviewAudioUri=assets['preview_audio'], offerID=f'{uint_id:X}',
@@ -152,8 +152,8 @@ def make_manifest(title, artist, uint_id, duration, assets, *, preview_lyric='')
         ET.SubElement(music, key).text = value
     if 'video' in assets:
         video = ET.SubElement(ET.SubElement(root, 'MusicVideos'), 'MusicVideo')
-        for key, value in dict(Artist=artist, Title=title, Genre='Pop', Year='2026',
-                              Album='', VideoUri=assets['video'],
+        for key, value in dict(Artist=artist, Title=title, Genre=genre, Year=year,
+                              Album=album, VideoUri=assets['video'],
                               PreviewAudioUri=assets['preview_audio'],
                               VideoContentID=content_id, ChartID=content_id + '_00').items():
             ET.SubElement(video, key).text = value
@@ -193,6 +193,7 @@ def build_package(backend, files, manifest, output, display_name, *, canonical_n
         package = temp / 'package.LIVE'
         subprocess.run([str(Path(backend).resolve()), 'build', str(staging), str(package),
                         f'{TITLE_ID:08X}', display_name], check=True, timeout=600)
+        stamp_package_creation(package)
         result = verify_stfs(package)
         extracted = temp / 'roundtrip'
         subprocess.run([str(Path(backend).resolve()), 'extract', str(package), str(extracted)],
@@ -209,6 +210,25 @@ def build_package(backend, files, manifest, output, display_name, *, canonical_n
         os.link(package, output)
     result['output_path'] = str(output)
     return result
+
+
+def stamp_package_creation(path):
+    """Timestamp our generated unsigned header; never alter payload or signatures."""
+    from datetime import datetime, timezone
+    verify_stfs(path)
+    created = datetime.now(timezone.utc).isoformat(timespec='microseconds')
+    description = f'OpenLips Studio; created={created}; unsigned custom song'
+    with Path(path).open('r+b') as stream:
+        header = bytearray(stream.read(0xA000))
+        base = (int.from_bytes(header[0x340:0x344], 'big')+4095) & ~4095
+        stream.seek(0)
+        header = bytearray(stream.read(base))
+        header[0xD11:0xE11] = description.encode('utf-16-be').ljust(256, b'\0')
+        header[0x32C:0x340] = hashlib.sha1(header[0x344:base]).digest()
+        stream.seek(0)
+        stream.write(header)
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def make_pack_manifest(songs, pack_id):
@@ -231,7 +251,8 @@ def make_pack_manifest(songs, pack_id):
             names.add(folded)
         single = ET.fromstring(make_manifest(song['title'], song['artist'],
             song['uint_id'], song['duration'], song['assets'],
-            preview_lyric=song.get('preview_lyric', '')))
+            preview_lyric=song.get('preview_lyric', ''), genre=song.get('genre', ''),
+            year=song.get('year', ''), album=song.get('album', '')))
         music = single.find('MusicIndices/MusicIndex')
         music.find('offerID').text = f'{pack_id:X}'
         music.find('ChartContentID').text = content_id

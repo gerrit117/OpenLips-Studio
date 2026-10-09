@@ -71,6 +71,7 @@ def test_batch_selection_and_pack_limit(tmp_path):
 
 
 def test_batch_project_destination_is_selected_and_cancel_is_safe(tmp_path, monkeypatch):
+    monkeypatch.setattr('studio.library_page.configured_library', lambda: None)
     from studio.ultrastar_batch_dialog import QFileDialog
     app = QApplication.instance() or QApplication([])
     project = load_chart(chart(tmp_path / 'source'))
@@ -85,4 +86,18 @@ def test_batch_project_destination_is_selected_and_cancel_is_safe(tmp_path, monk
     saved = list(tmp_path.glob('OpenLips-*/*.olp'))
     assert len(saved) == 1
     assert saved[0].name == '0001.olp'
+    assert dialog.batch_result[2] is False
+
+
+def test_batch_uses_configured_library_without_a_folder_prompt(tmp_path, monkeypatch):
+    root = tmp_path / 'chosen-library'
+    monkeypatch.setattr('studio.library_page.configured_library', lambda: root)
+    from studio.ultrastar_batch_dialog import QFileDialog
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *a, **kw: pytest.fail('Fixed library prompted'))
+    app = QApplication.instance() or QApplication([])
+    dialog = UltraStarBatchDialog()
+    project = load_chart(chart(tmp_path / 'source'))
+    dialog.receive([('source', project)], [])
+    dialog.finish_import(False)
+    assert len(list((root / 'workspace').glob('*.olp'))) == 1
     assert dialog.batch_result[2] is False

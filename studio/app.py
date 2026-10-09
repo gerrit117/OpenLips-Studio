@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import time
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QEvent
+from PySide6.QtCore import Qt, QTimer, QUrl, QEvent, QSettings
 from PySide6.QtGui import QAction, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
@@ -102,36 +102,52 @@ class StudioWindow(QMainWindow):
         advanced.addAction(tr('Debug-JSON exportieren'), self.export_json)
         advanced.addAction(tr('timing.midi_export'), self.export_midi)
         tools = self.menuBar().addMenu(tr('Werkzeuge'))
+        charts = tools.addMenu(tr('tools.charts'))
+        lyrics = tools.addMenu(tr('tools.lyrics'))
+        media = tools.addMenu(tr('tools.media'))
+        library = tools.addMenu(tr('tools.library'))
         for label, callback in [(tr('MIDI importieren'), self.import_midi),
-                               (tr('UltraStar importieren'), self.import_txt),
-                               (tr('lrc.import'), self.import_lrc),
-                               (tr('wizard.media'), self.load_song_media),
+                               (tr('UltraStar importieren'), self.import_txt)]:
+            charts.addAction(label, callback)
+        charts.addAction(tr('batch.title'), self.import_ultrastar_batch)
+        charts.addAction(tr('download.usdb'), self.open_usdb)
+        charts.addAction(tr('ai.title'), self.ai_chart_dialog)
+        charts.addAction(self.action(tr('chart.incomplete'), 'fa5s.search', self.review_chart))
+        charts.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
+        for label, callback in [(tr('lrc.import'), self.import_lrc),
+                               (tr('Lyrics suchen'), self.search_lyrics),
+                               (tr('lrc.review'), self.review_lrc),
+                               (tr('timing.title'), self.timing_assistant),
+                               (tr('timing.lrc_export'), self.export_lrc)]:
+            lyrics.addAction(label, callback)
+        for label, callback in [(tr('wizard.media'), self.load_song_media),
                                (tr('Cover laden'), self.load_cover),
                                (tr('OG-Medien konvertieren'), self.convert_media)]:
-            tools.addAction(label, callback)
-        tools.addSeparator()
-        tools.addAction(tr('preview.settings'), self.edit_preview)
-        tools.addAction(tr('pages.title'), self.optimize_lyric_pages)
+            media.addAction(label, callback)
+        media.addAction(tr('download.youtube'), self.download_youtube)
+        media.addAction(tr('preview.settings'), self.edit_preview)
+        lyrics.addSeparator()
+        lyrics.addAction(tr('pages.title'), self.optimize_lyric_pages)
         self.smart_pages_action = self.action(tr('pages.smart'), 'fa5s.stream', self.intelligent_lyric_pages)
         self.smart_pages_action.setToolTip(tr('pages.smart'))
-        tools.addAction(self.smart_pages_action)
+        lyrics.addAction(self.smart_pages_action)
         self.record_pages_action = self.action(tr('pages.record'), 'fa5s.keyboard', self.set_page_recording)
         self.record_pages_action.setCheckable(True)
         self.record_pages_action.setToolTip(tr('pages.record_tip'))
-        tools.addAction(self.record_pages_action)
-        self.clear_pages_action = tools.addAction(tr('pages.clear'), self.clear_lyric_pages)
-        tools.addAction(tr('usb.title'), self.install_dlc_usb)
-        tools.addAction(tr('Lyrics suchen'), self.search_lyrics)
-        tools.addAction(tr('lrc.review'), self.review_lrc)
-        tools.addAction(tr('timing.title'), self.timing_assistant)
-        tools.addAction(tr('timing.lrc_export'), self.export_lrc)
-        tools.addAction(tr('ai.title'), self.ai_chart_dialog)
-        tools.addAction(tr('download.youtube'), self.download_youtube)
+        lyrics.addAction(self.record_pages_action)
+        self.clear_pages_action = lyrics.addAction(tr('pages.clear'), self.clear_lyric_pages)
+        library.addAction(tr('usb.title'), self.install_dlc_usb)
+        library.addAction(tr('usb.manage'), self.manage_usb)
+        library.addAction(self.action(tr('xbox.title'), 'fa5s.upload', self.copy_to_xbox))
+        self.library_action = self.action(tr('library.enable'), 'fa5s.archive', self.toggle_library)
+        self.library_action.setCheckable(True)
+        self.library_action.setChecked(QSettings('OpenLips', 'OpenLips Studio').value('library/enabled', False, type=bool))
+        library.addAction(self.library_action)
+        library.addAction(tr('library.directory'), self.configure_library)
         self.plugin_menu = tools.addMenu(tr('plugin.actions'))
         self.plugin_menu.aboutToShow.connect(self.refresh_plugin_actions)
         self.refresh_plugin_actions()
         tools.addAction('Plugins', self.plugins_dialog)
-        tools.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
         languages = self.menuBar().addMenu(tr('ui.language'))
         for label, code in [('English', 'en'), ('Deutsch', 'de')]:
             action = languages.addAction(label)
@@ -170,6 +186,9 @@ class StudioWindow(QMainWindow):
         self.community_page = CommunityPage(lambda: self.project, self)
         self.community_page.song_opened.connect(self.open_downloaded_song)
         self.workspace_tabs.addTab(self.community_page, tr('community.title'))
+        self.library_page = None
+        if self.library_action.isChecked():
+            self.add_library_tab()
         self.workspace_tabs.currentChanged.connect(self.workspace_changed)
         self.setCentralWidget(self.workspace_tabs)
         welcome = QWidget()
@@ -202,11 +221,23 @@ class StudioWindow(QMainWindow):
         self.bpm_edit = QDoubleSpinBox()
         self.bpm_edit.setRange(1, 1000)
         self.bpm_edit.setDecimals(2)
-        self.key_label = QLabel()
+        self.key_label = QLabel(tr('key.title'))
+        self.key_combo = QComboBox()
+        self.key_combo.setMinimumWidth(105)
+        self.key_combo.setMaximumWidth(140)
+        self.key_combo.setToolTip(tr('key.title'))
+        self.key_combo.addItem(tr('key.none'), '')
+        from studio.keys import ROOTS
+        for root in ROOTS:
+            for minor in (False, True):
+                self.key_combo.addItem(f'{root} {tr("key.minor" if minor else "key.major")}',
+                                       root + ('m' if minor else ''))
+        self.key_combo.currentIndexChanged.connect(self.edit_key)
         for label, widget in [(tr('Titel'), self.title_edit), (tr('Artist'), self.artist_edit), ('BPM', self.bpm_edit)]:
             meta.addWidget(QLabel(label))
             meta.addWidget(widget, 1 if isinstance(widget, QLineEdit) else 0)
         meta.addWidget(self.key_label)
+        meta.addWidget(self.key_combo)
         layout.addLayout(meta)
         for widget in (self.title_edit, self.artist_edit, self.bpm_edit):
             widget.editingFinished.connect(self.edit_metadata)
@@ -222,6 +253,7 @@ class StudioWindow(QMainWindow):
         sidebar.setMaximumWidth(320)
         box = QGroupBox(tr('Note / Silbe'))
         form = QFormLayout(box)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.time_edit = QDoubleSpinBox()
         self.length_edit = QDoubleSpinBox()
         for w in (self.time_edit, self.length_edit):
@@ -235,6 +267,12 @@ class StudioWindow(QMainWindow):
         self.pitch_edit.setSpecialValueText(tr('timing.unassigned'))
         self.pitch_edit.valueChanged.connect(self.preview_pitch_change)
         self.pitch_label = QLabel()
+        self.pitch_choices = QComboBox()
+        self.pitch_choices.setPlaceholderText(tr('key.choose_pitch'))
+        self.pitch_choices.setToolTip(tr('key.pitches'))
+        self.pitch_choices.activated.connect(self.choose_scale_pitch)
+        self.word_label = QLabel()
+        self.word_label.setWordWrap(True)
         self.text_edit = QLineEdit()
         self.word_edit = QCheckBox()
         self.phrase_edit = QCheckBox()
@@ -249,6 +287,8 @@ class StudioWindow(QMainWindow):
             ('Text', self.text_edit), (tr('Wortende'), self.word_edit), (tr('Phrasenende'), self.phrase_edit),
             (tr('Seitenzeit festlegen'), self.page_override), (tr('Seitenwechsel'), self.page_edit)]:
             form.addRow(label, widget)
+        form.addRow(tr('key.pitches'), self.pitch_choices)
+        form.addRow(tr('note.word'), self.word_label)
         for widget in (self.time_edit, self.length_edit, self.pitch_edit, self.text_edit):
             widget.editingFinished.connect(self.edit_note)
         self.word_edit.clicked.connect(self.edit_note)
@@ -281,6 +321,8 @@ class StudioWindow(QMainWindow):
         self.lyrics = QTextEdit()
         self.lyrics.setAcceptRichText(False)
         self.lyrics.setMinimumHeight(100)
+        self.lyrics.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.lyrics.customContextMenuRequested.connect(self.lyrics_context_menu)
         side.addWidget(QLabel(tr('Songtext')))
         side.addWidget(self.lyrics, 1)
         self.syllables = QCheckBox(tr('Silben mit | trennen'))
@@ -295,15 +337,17 @@ class StudioWindow(QMainWindow):
         suggest.clicked.connect(self.suggest_text)
         language.addWidget(suggest)
         side.addLayout(language)
-        assign = QPushButton(qta.icon('fa5s.link', color='#cdd3d9'), tr('Ab Auswahl zuordnen'))
-        assign.clicked.connect(self.assign)
-        side.addWidget(assign)
+        self.assign_button = QPushButton(qta.icon('fa5s.link', color='#cdd3d9'), tr('Ab Auswahl zuordnen'))
+        self.assign_button.setToolTip(tr('lyrics.assign_anchor'))
+        self.assign_button.clicked.connect(self.assign)
+        side.addWidget(self.assign_button)
         side_scroll = QScrollArea()
         side_scroll.setWidgetResizable(True)
         side_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         side_scroll.setMinimumWidth(258)
         side_scroll.setMaximumWidth(340)
         side_scroll.setWidget(sidebar)
+        self.side_scroll = side_scroll
         splitter.addWidget(side_scroll)
         splitter.setSizes([900, 280])
         layout.addWidget(splitter, 1)
@@ -413,7 +457,7 @@ class StudioWindow(QMainWindow):
     def change_language(self, value):
         if value == ui_language():
             return
-        if self.community_page.worker:
+        if self.community_page.worker or self.library_busy():
             self.statusBar().showMessage(tr('community.wait'))
             return
         position, selected = self.position, self.timeline.selected_id
@@ -439,17 +483,10 @@ class StudioWindow(QMainWindow):
         self.timeline.update()
 
     def search_lyrics(self):
-        from studio.lyrics_search import LyricsSearch
-        if getattr(self, 'search_worker', None) and self.search_worker.isRunning():
-            return
-        if QMessageBox.question(self, tr('Lyrics suchen'),
-            tr('Titel und Artist an LRCLIB senden? Gefundene Texte bleiben lokal. Bitte Nutzungsrechte beachten.')) != QMessageBox.StandardButton.Yes:
-            return
-        self.search_worker = LyricsSearch(self.title_edit.text(), self.artist_edit.text(), self)
-        self.search_worker.results.connect(self.lyrics_results)
-        self.search_worker.failed.connect(lambda message: self.error(message))
-        self.search_worker.start()
-        self.statusBar().showMessage(tr('Lyrics-Suche laeuft ...'))
+        from studio.lyrics_lookup_dialog import LyricsLookupDialog
+        dialog = LyricsLookupDialog(self, self.title_edit.text(), self.artist_edit.text())
+        if dialog.exec() and dialog.document:
+            self.attempt(lambda: self.accept_lrc(dialog.document, str(dialog.lrc_path)))
 
     def lyrics_results(self, results):
         if not results:
@@ -506,6 +543,12 @@ class StudioWindow(QMainWindow):
             return
         projects, name, export_pack = dialog.batch_result
         self.apply_plugin_song(projects[0])
+        if export_pack == 'singles':
+            from studio.batch_dlc_dialog import SingleDlcBatchDialog
+            export = SingleDlcBatchDialog(projects, self)
+            QTimer.singleShot(0, export.start_or_cancel)
+            export.exec()
+            return
         if export_pack:
             from studio.dlc_dialog import SongPackDialog, DlcDialog
             if len(projects) == 1:
@@ -525,6 +568,19 @@ class StudioWindow(QMainWindow):
         dialog = UltraStarBatchDialog(self)
         if dialog.exec():
             self.finish_usdb_batch(dialog)
+
+    def open_usdb(self):
+        if not self.confirm_discard():
+            return
+        from studio.usdb import dialog
+        try:
+            browser = dialog(self.project, self)
+        except Exception as error:
+            self.error(str(error))
+            return
+        browser.accepted_song.connect(self.apply_plugin_song)
+        browser.exec()
+        self.finish_usdb_batch(browser)
 
     def refresh_plugin_actions(self):
         from PySide6.QtCore import QSettings
@@ -648,11 +704,20 @@ class StudioWindow(QMainWindow):
 
     def refresh(self):
         self.loading = True
-        self.setWindowTitle(f'{self.project.title} {"*" if self.dirty else ""} - OpenLips Studio {DISPLAY_VERSION}')
+        from studio.model import project_status
+        state = tr('library.' + project_status(self.project))
+        self.setWindowTitle(f'{self.project.title} [{state}] {"*" if self.dirty else ""} - OpenLips Studio {DISPLAY_VERSION}')
         self.title_edit.setText(self.project.title)
         self.artist_edit.setText(self.project.artist)
         self.bpm_edit.setValue(self.project.bpm)
-        self.key_label.setText(tr('key.label', key=self.project.key_signature or '-'))
+        from studio.keys import key_info
+        info = key_info(self.project.key_signature)
+        key = info['value'] if info else self.project.key_signature
+        index = self.key_combo.findData(key)
+        if index < 0:
+            self.key_combo.addItem(self.project.key_signature, key)
+            index = self.key_combo.count()-1
+        self.key_combo.setCurrentIndex(index)
         from studio.media import cover_image
         try:
             self.cover_preview.setPixmap(QPixmap.fromImage(cover_image(self.project)).scaled(
@@ -690,6 +755,19 @@ class StudioWindow(QMainWindow):
             w.setEnabled(n is not None)
         self.delete_action.setEnabled(n is not None)
         self.tone_button.setEnabled(n is not None and n.pitch_assigned)
+        from studio.keys import key_pitches
+        pitches = key_pitches(self.project.key_signature)
+        self.pitch_choices.clear()
+        for pitch in range(max(24, self.timeline.low), min(84, self.timeline.high)+1):
+            if pitch % 12 in pitches:
+                self.pitch_choices.addItem(pitch_name(pitch), pitch)
+        self.pitch_choices.setEnabled(n is not None and bool(pitches))
+        self.pitch_choices.setCurrentIndex(self.pitch_choices.findData(n.pitch)
+                                          if n and n.pitch_assigned else -1)
+        from studio.smart_pages import word_units
+        word = next((u['text'] for u in word_units(self.project.ordered())
+                     if n and any(part.id == n.id for part in u['notes'])), '')
+        self.word_label.setText(word)
         if n:
             self.time_edit.setValue(n.time)
             self.length_edit.setValue(n.length)
@@ -769,6 +847,19 @@ class StudioWindow(QMainWindow):
         self.project.title, self.project.artist, self.project.bpm = values
         self.changed()
 
+    def edit_key(self, *_):
+        value = self.key_combo.currentData()
+        if not self.loading and value != self.project.key_signature:
+            self.snapshot()
+            self.project.key_signature = value
+            self.changed()
+
+    def choose_scale_pitch(self, index):
+        pitch = self.pitch_choices.itemData(index)
+        if self.note() and pitch is not None:
+            self.pitch_edit.setValue(pitch)
+            self.edit_note()
+
     def focus_text(self, ident):
         self.select_note(ident)
         self.text_edit.setFocus()
@@ -782,12 +873,7 @@ class StudioWindow(QMainWindow):
         self.changed()
 
     def delete_note(self):
-        n = self.note()
-        if n:
-            self.snapshot()
-            self.project.notes.remove(n)
-            self.timeline.selected_id = ''
-            self.changed()
+        self.timeline.delete_selected()
 
     def undo(self):
         if self.history:
@@ -818,13 +904,35 @@ class StudioWindow(QMainWindow):
             self.changed()
 
     def assign(self):
+        cursor = self.lyrics.textCursor()
+        position = cursor.selectionStart() if cursor.hasSelection() else 0
+        self.assign_from_text_position(position)
+
+    def lyrics_context_menu(self, point):
+        position = self.lyrics.cursorForPosition(point).position()
+        menu = self.lyrics.createStandardContextMenu()
+        menu.addSeparator()
+        action = menu.addAction(qta.icon('fa5s.link', color='#cdd3d9'), tr('lyrics.assign_here'))
+        action.setEnabled(bool(self.project.notes))
+        action.triggered.connect(lambda: self.assign_from_text_position(position))
+        menu.exec(self.lyrics.mapToGlobal(point))
+
+    def assign_from_text_position(self, position):
         if not self.project.notes:
             return
-        self.snapshot()
         ordered = self.project.ordered()
         index = ordered.index(self.note()) if self.note() else 0
-        self.project.draft_lyrics = self.lyrics.toPlainText()
-        count, remaining = assign_lyrics(self.project, self.project.draft_lyrics, index, self.syllables.isChecked())
+        text = self.lyrics.toPlainText()
+        # QTextCursor uses UTF-16 positions, unlike Python's Unicode indices.
+        offset = len(text.encode('utf-16-le')[:position*2].decode('utf-16-le', errors='ignore'))
+        candidate = copy.deepcopy(self.project)
+        candidate.draft_lyrics = text
+        count, remaining = assign_lyrics(candidate, text, index, self.syllables.isChecked(), text_offset=offset)
+        if not count:
+            self.statusBar().showMessage(tr('notes.assigned', count=0, remaining=remaining))
+            return
+        self.snapshot()
+        self.project = candidate
         self.changed()
         self.statusBar().showMessage(tr('notes.assigned', count=count, remaining=remaining))
 
@@ -874,6 +982,10 @@ class StudioWindow(QMainWindow):
         from studio.song_wizard import SongWizard
         wizard = SongWizard(self)
         if wizard.exec() and wizard.project:
+            if wizard.usdb_result:
+                from types import SimpleNamespace
+                self.finish_usdb_batch(SimpleNamespace(batch_result=wizard.usdb_result))
+                return
             self.replace_project(wizard.project)
             self.offer_reference_download()
             if wizard.choice == 'scratch':
@@ -900,6 +1012,72 @@ class StudioWindow(QMainWindow):
         if index != 0:
             self.stop()
             self.record_pages_action.setChecked(False)
+
+    def library_busy(self):
+        page = getattr(self, 'library_page', None)
+        return bool(page and page.worker and page.worker.isRunning())
+
+    def add_library_tab(self):
+        from studio.library_workspace import LibraryWorkspace
+        try:
+            self.library_page = LibraryWorkspace(lambda: self.project, self)
+            self.library_page.project_opened.connect(self.open_library_project)
+            self.library_page.community_upload_requested.connect(self.upload_library_community)
+            self.workspace_tabs.addTab(self.library_page, tr('library.title'))
+        except Exception as error:
+            self.library_page = None
+            self.library_action.setChecked(False)
+            self.statusBar().showMessage(str(error))
+
+    def toggle_library(self, enabled):
+        if self.library_busy():
+            self.library_action.setChecked(True)
+            self.statusBar().showMessage(tr('library.wait'))
+            return
+        settings = QSettings('OpenLips', 'OpenLips Studio')
+        if enabled:
+            if not settings.value('library/root'):
+                from studio.library_setup import LibrarySetupDialog
+                if not LibrarySetupDialog(self).exec():
+                    self.library_action.setChecked(False)
+                    return
+            settings.setValue('library/enabled', True)
+            self.add_library_tab()
+            if self.library_page:
+                self.workspace_tabs.setCurrentWidget(self.library_page)
+            else:
+                settings.setValue('library/enabled', False)
+        else:
+            settings.setValue('library/enabled', False)
+            if self.library_page:
+                self.workspace_tabs.removeTab(self.workspace_tabs.indexOf(self.library_page))
+                self.library_page.deleteLater()
+                self.library_page = None
+
+    def open_library_project(self, path):
+        if self.confirm_discard():
+            # Editing creates a new project/version, never overwrites an archived snapshot.
+            self.attempt(lambda: self.replace_project(load_project(path)))
+            self.workspace_tabs.setCurrentWidget(self.screens)
+
+    def configure_library(self):
+        if self.library_busy():
+            return
+        if self.library_page:
+            self.library_page.change_location()
+        else:
+            from studio.library_setup import LibrarySetupDialog
+            if LibrarySetupDialog(self).exec():
+                self.library_action.setChecked(True)
+                self.toggle_library(True)
+
+    def upload_library_community(self, project):
+        self.workspace_tabs.setCurrentWidget(self.community_page)
+        self.community_page.upload_library_project(project)
+
+    def copy_to_xbox(self):
+        from studio.xbox_dialog import XboxDialog
+        XboxDialog(self).exec()
 
     def open_downloaded_song(self, path):
         if self.confirm_discard():
@@ -933,8 +1111,15 @@ class StudioWindow(QMainWindow):
         if path:
             self.attempt(lambda: self.replace_project(load_project(path), Path(path)))
 
-    def save(self):
-        path = str(self.path) if self.path else QFileDialog.getSaveFileName(self, tr('Projekt speichern'), self.project.title + '.olp', 'OpenLips Studio (*.olp)')[0]
+    def save(self, *, choose_location=False):
+        from studio.library_page import configured_library
+        root = configured_library()
+        path = str(self.path) if self.path else ''
+        if not path and root and not choose_location:
+            from studio.library import Library
+            path = str(Library(root).draft_path(self.project))
+        if not path:
+            path = QFileDialog.getSaveFileName(self, tr('Projekt speichern'), self.project.title + '.olp', 'OpenLips Studio (*.olp)')[0]
         if not path:
             return False
         if not Path(path).suffix:
@@ -944,6 +1129,10 @@ class StudioWindow(QMainWindow):
             save_project(self.project, path)
             self.path, self.dirty = Path(path), False
             self.refresh()
+            if root and self.library_page and not self.library_busy():
+                project = copy.deepcopy(self.project)
+                local = self.library_page.local
+                local.task(lambda progress: local.library.add_project(project, progress))
             return True
         except Exception as exc:
             self.error(exc)
@@ -952,7 +1141,7 @@ class StudioWindow(QMainWindow):
     def save_as(self):
         previous = self.path
         self.path = None
-        if not self.save():
+        if not self.save(choose_location=True):
             self.path = previous
 
     def import_midi(self):
@@ -1030,12 +1219,16 @@ class StudioWindow(QMainWindow):
 
     def export_lrc(self):
         from studio.lyric_timing import write_lrc
+        if not self.review_chart(require_pitch=False):
+            return
         path,_ = QFileDialog.getSaveFileName(self,tr('timing.lrc_export'),'', 'LRC (*.lrc)')
         if path:
             self.attempt(lambda:write_lrc(self.project,path))
 
     def export_midi(self):
         from studio.exporters import export_midi
+        if not self.review_chart(require_text=False):
+            return
         path,_ = QFileDialog.getSaveFileName(self,tr('timing.midi_export'),'', 'MIDI (*.mid)')
         if path:
             self.attempt(lambda:export_midi(self.project,path))
@@ -1134,11 +1327,15 @@ class StudioWindow(QMainWindow):
         return max(self.player.duration(), self.video_player.duration()) / 1000 - self.project.reference_offset
 
     def export_json(self):
+        if not self.review_chart():
+            return
         path, _ = QFileDialog.getSaveFileName(self, tr('Debug-JSON exportieren'), self.project.title + '.json', 'JSON (*.json)')
         if path:
             self.attempt(lambda: export_debug_json(self.project, path))
 
     def export_pair(self):
+        if not self.review_chart():
+            return
         directory = QFileDialog.getExistingDirectory(self, tr('Ausgabe uebergeordnetes Verzeichnis'))
         if not directory:
             return
@@ -1151,7 +1348,45 @@ class StudioWindow(QMainWindow):
 
     def export_dlc(self):
         from studio.dlc_dialog import DlcDialog
+        if not self.review_chart():
+            return
         DlcDialog(self.project, self).exec()
+
+    def review_chart(self, *_, require_text=True, require_pitch=True):
+        from studio.model import incomplete_notes
+        if not incomplete_notes(self.project, require_text=require_text, require_pitch=require_pitch):
+            self.statusBar().showMessage(tr('chart.complete'))
+            return True
+        from studio.chart_review import ChartReviewDialog
+        dialog = ChartReviewDialog([self.project], self, require_text=require_text, require_pitch=require_pitch)
+        if dialog.exec() and dialog.chosen:
+            self.show_chart_note(*dialog.chosen)
+        return False
+
+    def show_chart_note(self, project, identifier):
+        if project != self.project:
+            if not self.confirm_discard():
+                return False
+            self.replace_project(copy.deepcopy(project))
+        note = next((n for n in self.project.notes if n.id == identifier), None)
+        if not note:
+            return False
+        if self.playing:
+            self.toggle_play()
+        self.workspace_tabs.setCurrentWidget(self.screens)
+        self.screens.setCurrentIndex(1)
+        self.timeline.selected_ids = {identifier}
+        self.select_note(identifier)
+        self.seek(note.time)
+        self.timeline.origin = max(0, note.time - max(0, self.timeline.width()-62)*.25/self.timeline.scale)
+        self.timeline.update()
+        if not note.text.strip():
+            self.text_edit.setFocus()
+            self.side_scroll.ensureWidgetVisible(self.text_edit)
+        elif not note.pitch_assigned:
+            self.pitch_edit.setFocus()
+            self.side_scroll.ensureWidgetVisible(self.pitch_edit)
+        return True
 
     def edit_preview(self):
         from studio.preview_dialog import PreviewDialog
@@ -1257,8 +1492,15 @@ class StudioWindow(QMainWindow):
         from studio.usb_dialog import UsbDialog
         UsbDialog(self).exec()
 
+    def manage_usb(self):
+        from studio.usb_dialog import UsbDialog
+        library = self.library_page.library if self.library_page else None
+        UsbDialog(self, library=library, browse=True).exec()
+
     def export_community(self):
         from studio.community_dialog import CommunityExportDialog
+        if not self.review_chart():
+            return
         CommunityExportDialog(self.project, self).exec()
 
     def seek(self, seconds):
@@ -1358,8 +1600,8 @@ class StudioWindow(QMainWindow):
         QMessageBox.critical(self, 'OpenLips Studio', str(exc))
 
     def closeEvent(self, event):
-        if self.community_page.worker:
-            self.statusBar().showMessage(tr('community.wait'))
+        if self.community_page.worker or self.library_busy():
+            self.statusBar().showMessage(tr('library.wait') if self.library_busy() else tr('community.wait'))
             event.ignore()
             return
         if getattr(self, 'search_worker', None) and self.search_worker.isRunning():
@@ -1383,6 +1625,8 @@ def main():
     parser.add_argument('--smoke-plugin', type=Path, help='Test bundled Basic Pitch and GUI acceptance with generated tones')
     parser.add_argument('--smoke-dlc', type=Path, help='Test bundled Windows encoders and STFS with synthetic media')
     parser.add_argument('--smoke-community', action='store_true', help='Capture the community sign-in tab without network requests')
+    parser.add_argument('--smoke-xbox', action='store_true', help='Capture Xbox transfer without connecting')
+    parser.add_argument('--smoke-library', type=Path, help='Capture an isolated local library without changing preferences')
     parser.add_argument('--smoke-timing', action='store_true', help='Capture the lyric-timing dialog using the supplied synthetic project')
     parser.add_argument('--smoke-wizard', action='store_true', help='Capture the LRC-only wizard choice')
     parser.add_argument('--smoke-note-details', action='store_true', help='Select the first synthetic chart note in a screenshot')
@@ -1433,6 +1677,15 @@ def main():
             window.select_note(window.project.notes[0].id)
         if args.smoke_community:
             window.show_community()
+        elif args.smoke_xbox:
+            from studio.xbox_dialog import XboxDialog
+            view = XboxDialog(window)
+            view.show()
+        elif args.smoke_library:
+            from studio.library_page import LibraryPage
+            page = LibraryPage(lambda: window.project, window, root=args.smoke_library)
+            window.workspace_tabs.addTab(page, tr('library.title'))
+            window.workspace_tabs.setCurrentWidget(page)
         elif args.smoke_timing:
             from studio.timing_dialog import TimingDialog
             view = TimingDialog(window.project,window)

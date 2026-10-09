@@ -31,6 +31,13 @@ def export_song(song, output):
         raise ValueError('Selected song exceeds 8 GiB')
     assets.mkdir(parents=True)
     result = dict(format='openlips-plugin-song', schema_version=1)
+    sync_meta = getattr(song, 'sync_meta', None)
+    if sync_meta and sync_meta.meta_tags.video:
+        from service import youtube_url
+        try:
+            result['video_reference'] = youtube_url(sync_meta.meta_tags.video)
+        except ValueError:
+            pass
     try:
         for field, source in sources.items():
             name = field + source.suffix.lower()

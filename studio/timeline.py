@@ -107,17 +107,24 @@ class Timeline(QWidget):
         if not self.project:
             return
         lane = (self.height() - 92) / (self.high - self.low + 1)
+        from studio.keys import key_info, key_pitches
+        key = key_info(self.project.key_signature)
+        guide = key_pitches(self.project.key_signature)
         for pitch in range(self.low, self.high + 1):
             y = 38 + (self.high - pitch) * lane
             background = QColor('#22262b' if pitch % 12 in (1, 3, 6, 8, 10) else '#1c2024')
+            if pitch % 12 in guide:
+                background = QColor('#233832')
             if video:
                 background.setAlpha(130)
             p.fillRect(QRectF(62, y, self.width() - 62, lane), background)
             p.setPen(QColor('#525b64'))
             p.drawLine(62, int(y), self.width(), int(y))
             if lane >= 13:
-                p.setPen(QColor('#a9b1b9'))
+                p.setPen(QColor('#75ded1' if pitch % 12 in guide else '#a9b1b9'))
                 p.drawText(QRectF(3, y, 53, lane), Qt.AlignmentFlag.AlignCenter, pitch_name(pitch))
+            if key and pitch % 12 == key['root']:
+                p.fillRect(QRectF(58, y + 2, 3, max(1, lane - 4)), QColor('#75ded1'))
         beat = 60 / self.project.bpm
         start = int(self.origin / beat)
         count = min(2000, int(self.width() / self.scale / beat) + 3)
@@ -133,12 +140,21 @@ class Timeline(QWidget):
                    n.time <= self.origin + self.width() / self.scale]
         p.save()
         p.setClipRect(QRectF(62, 30, self.width() - 62, self.height() - 30))
+        ordered = self.project.ordered()
+        p.setPen(QPen(QColor('#91b5b3'), 1, Qt.PenStyle.DashLine))
+        for left, right in zip(ordered, ordered[1:]):
+            if right.text.strip() == '~' and not left.end_word and not left.line_break_after:
+                a, b = self.geometry_for(left), self.geometry_for(right)
+                middle = (a.right() + b.left()) / 2
+                p.drawLine(int(a.right()), int(a.center().y()), int(middle), int(a.center().y()))
+                p.drawLine(int(middle), int(a.center().y()), int(middle), int(b.center().y()))
+                p.drawLine(int(middle), int(b.center().y()), int(b.left()), int(b.center().y()))
         for i, n in enumerate(visible):
             r = self.geometry_for(n)
             active = n.time <= self.cursor < n.time + n.length
             chosen = n.id == self.selected_id or n.id in self.selected_ids
             color = '#ef599c' if chosen else '#88929b' if not n.pitch_assigned else '#f4c95d' if active else '#49c6cd'
-            p.setPen(QPen(QColor('#ffffff' if chosen else color), 1,
+            p.setPen(QPen(QColor('#ffffff' if chosen else '#fa7c7c' if not n.text.strip() else color), 1,
                          Qt.PenStyle.SolidLine if n.pitch_assigned else Qt.PenStyle.DashLine))
             p.setBrush(QColor(color))
             p.drawRoundedRect(r, 3, 3)
@@ -185,8 +201,37 @@ class Timeline(QWidget):
                     self.lyric_fields.pop(ident).deleteLater()
 
     def hit(self, pos):
+        if pos.x() < 62 or not 38 <= pos.y() < self.height()-54:
+            return None
         return next((n for n in reversed(self.project.notes)
                      if self.geometry_for(n).adjusted(-3, -4, 3, 4).contains(pos)), None)
+
+    def edge_at(self, note, pos):
+        rect = self.geometry_for(note)
+        margin = min(7, rect.width() / 4)
+        if pos.x() <= rect.left() + margin:
+            return 'left'
+        if pos.x() >= rect.right() - margin:
+            return 'right'
+        return 'move'
+
+    def resized_values(self, note, start, length, delta, edge):
+        end = start + length
+        if edge == 'left':
+            previous = max((n.time+n.length for n in self.project.notes
+                            if n.id != note.id and n.time < start), default=0)
+            value = start + delta
+            if self.snap:
+                value = snap_time(value, self.project.bpm)
+            value = max(0, min(start, previous), min(end-.001, value))
+            return value, end-value
+        following = min((n.time for n in self.project.notes if n.id != note.id and n.time > start),
+                        default=float('inf'))
+        value = end + delta
+        if self.snap:
+            value = snap_time(value, self.project.bpm)
+        value = min(max(end, following), max(start+.001, value))
+        return start, value-start
 
     def mousePressEvent(self, event):
         if not self.project or event.button() != Qt.MouseButton.LeftButton:
@@ -210,8 +255,9 @@ class Timeline(QWidget):
             self.selected_ids = {note.id}
             self.selected_id = note.id
             self.selected.emit(note.id)
-            resize = abs(pos.x() - self.geometry_for(note).right()) < 9
-            self.drag = (note, pos, note.time, note.length, note.pitch, resize, False)
+            mode = self.edge_at(note, pos)
+            self.setCursor(Qt.CursorShape.SizeHorCursor if mode != 'move' else Qt.CursorShape.ClosedHandCursor)
+            self.drag = (note, pos, note.time, note.length, note.pitch, mode, False)
         else:
             self.selected_ids.clear()
             self.selected_id = ''
@@ -220,6 +266,10 @@ class Timeline(QWidget):
         self.update()
 
     def keyPressEvent(self, event):
+        if self.project and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self.delete_selected()
+            event.accept()
+            return
         if self.project and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
             identifiers = self.selected_ids or {self.selected_id}
             notes = [n for n in self.project.notes if n.id in identifiers]
@@ -247,6 +297,17 @@ class Timeline(QWidget):
         if note.pitch_assigned:
             self.pitch_preview.emit(note.pitch)
 
+    def delete_selected(self):
+        from studio.lyric_timing import delete_notes
+        identifiers = self.selected_ids or {self.selected_id}
+        if self.project and any(n.id in identifiers for n in self.project.notes):
+            self.before_edit.emit()
+            delete_notes(self.project, identifiers)
+            self.selected_id = ''
+            self.selected_ids.clear()
+            self.edited.emit()
+            self.selected.emit('')
+
     def contextMenuEvent(self, event):
         if not self.project:
             return
@@ -271,11 +332,22 @@ class Timeline(QWidget):
         split = menu.addAction(tr('timing.split'))
         split.setEnabled(note.time+.001 <= seconds <= note.time+note.length-.001)
         split.triggered.connect(lambda: self.split_selected(note.id, seconds))
+        melisma = menu.addAction(tr('note.add_melisma'))
+        melisma.setEnabled(note.length >= .002)
+        melisma.triggered.connect(lambda: self.add_melisma(note.id, seconds))
         words = menu.addAction(tr('timing.split_words'))
         words.setEnabled(len(note.text.split()) > 1 and note.length/len(note.text.split()) >= .001)
         words.setToolTip(tr('timing.estimated'))
         words.triggered.connect(lambda: self.split_selected(note.id))
+        menu.addSeparator()
+        menu.addAction(tr('Note loeschen'), self.delete_selected)
         menu.exec(event.globalPos())
+
+    def add_melisma(self, identifier, seconds=None):
+        note = next(n for n in self.project.notes if n.id == identifier)
+        if seconds is None or not note.time+.001 <= seconds <= note.time+note.length-.001:
+            seconds = note.time + note.length/2
+        self.split_selected(identifier, seconds)
 
     def split_selected(self, identifier, seconds=None):
         from studio.lyric_timing import split_note, split_words
@@ -291,28 +363,41 @@ class Timeline(QWidget):
 
     def mouseMoveEvent(self, event):
         if self.drag:
-            n, start, time, length, pitch, resize, begun = self.drag
+            n, start, time, length, pitch, mode, begun = self.drag
             if not begun and (event.position() - start).manhattanLength() < 4:
+                return
+            delta = (event.position().x() - start.x()) / self.scale
+            if mode != 'move':
+                value, duration = self.resized_values(n, time, length, delta, mode)
+                new_pitch = n.pitch
+            else:
+                value = max(0, time + delta)
+                if self.snap:
+                    value = snap_time(value, self.project.bpm)
+                duration = length
+                lane = (self.height() - 92) / (self.high - self.low + 1)
+                new_pitch = max(0, min(127, pitch - round((event.position().y() - start.y()) / lane)))
+            if (n.time, n.length, n.pitch) == (value, duration, new_pitch):
                 return
             if not begun:
                 self.before_edit.emit()
-                self.drag = (n, start, time, length, pitch, resize, True)
-            delta = (event.position().x() - start.x()) / self.scale
-            value = max(.02 if resize else 0, (length if resize else time) + delta)
-            if self.snap:
-                value = snap_time(value, self.project.bpm)
-            if resize:
-                n.length = max(.02, value)
-            else:
-                n.time = value
-                lane = (self.height() - 92) / (self.high - self.low + 1)
-                n.pitch = max(0, min(127, pitch - round((event.position().y() - start.y()) / lane)))
-                if round((event.position().y() - start.y()) / lane):
-                    n.pitch_assigned = True
+                self.drag = (n, start, time, length, pitch, mode, True)
+            n.time, n.length, n.pitch = value, duration, new_pitch
+            if new_pitch != pitch:
+                n.pitch_assigned = True
+            if mode == 'left':
+                ordered = self.project.ordered()
+                index = ordered.index(n)
+                if index:
+                    previous = ordered[index-1]
+                    if previous.page_break_time is not None and previous.page_break_time > n.time:
+                        previous.page_break_time = None
             self.update()
         elif self.project:
             n = self.hit(event.position())
             self.setToolTip(f'{pitch_name(n.pitch) if n.pitch_assigned else tr("timing.unassigned")} / {n.time:.3f}s / {n.length:.3f}s / {n.text}' if n else '')
+            self.setCursor(Qt.CursorShape.SizeHorCursor if n and self.edge_at(n, event.position()) != 'move'
+                           else Qt.CursorShape.OpenHandCursor if n else Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event):
         if self.drag and self.drag[-1]:
@@ -320,6 +405,12 @@ class Timeline(QWidget):
             if self.drag[0].pitch != self.drag[4]:
                 self.pitch_preview.emit(self.drag[0].pitch)
         self.drag = None
+        self.unsetCursor()
+
+    def leaveEvent(self, event):
+        if not self.drag:
+            self.unsetCursor()
+        super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if not self.project:

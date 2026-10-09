@@ -16,24 +16,34 @@ class FakeFTP:
     def __init__(self):
         self.files = {}
         self.corrupt = False
+        self.directory = '/'
 
     def cwd(self, path):
+        self.directory = path if path.startswith('/') else self.directory.rstrip('/') + '/' + path
+
+    def mkd(self, path):
         pass
 
+    def absolute(self, path):
+        return path if path.startswith('/') else self.directory.rstrip('/') + '/' + path
+
     def nlst(self):
-        return list(self.files)
+        return [name for name in self.files if name.rsplit('/', 1)[0] == self.directory.rstrip('/')]
 
-    def storbinary(self, command, stream):
-        self.files[command[5:]] = stream.read()
+    def storbinary(self, command, stream, blocksize=8192, callback=None):
+        assert len(command[5:].rsplit('/', 1)[-1]) <= 42, 'Xbox FATX filename exceeds 42 characters'
+        self.files[self.absolute(command[5:])] = stream.read()
+        if callback:
+            callback(self.files[self.absolute(command[5:])])
 
-    def retrbinary(self, command, callback):
-        callback(b'corrupted' if self.corrupt else self.files[command[5:]])
+    def retrbinary(self, command, callback, blocksize=8192):
+        callback(b'corrupted' if self.corrupt else self.files[self.absolute(command[5:])])
 
     def rename(self, old, new):
-        self.files[new] = self.files.pop(old)
+        self.files[self.absolute(new)] = self.files.pop(self.absolute(old))
 
     def delete(self, name):
-        self.files.pop(name, None)
+        self.files.pop(self.absolute(name), None)
 
 
 class DLC(unittest.TestCase):
@@ -129,9 +139,9 @@ class DLC(unittest.TestCase):
             source = Path(tmp) / 'test.LIVE'
             source.write_bytes(b'synthetic')
             ftp = FakeFTP()
-            with patch('tools.build_dlc.verify_stfs'):
+            with patch('tools.build_dlc.verify_stfs', return_value={'sha256': hashlib.sha256(b'synthetic').hexdigest()}):
                 upload_package(ftp, source, xbox_path(source))
-                self.assertEqual(ftp.files, {'test.LIVE': b'synthetic'})
+                self.assertEqual(ftp.files, {'/' + xbox_path(source): b'synthetic'})
                 with self.assertRaises(FileExistsError):
                     upload_package(ftp, source, xbox_path(source))
                 ftp = FakeFTP()

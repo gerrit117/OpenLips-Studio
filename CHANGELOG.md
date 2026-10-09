@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.6 Beta 3
+
+- Add local/remote song libraries with fixed save folders, synchronization,
+  dated project versions, unfinished-project status and duplicate-save detection.
+- Browse Xbox USB contents by song/pack names, compare local and USB versions,
+  remove selected packages with confirmation, and copy verified DLCs by USB or FTP.
+- Integrate USDB search, account sign-in and batch downloads into Studio;
+  import charts, covers and media without launching a separate Syncer window.
+- Export UltraStar batches as either song packs or individual DLCs.
+- Find timed lyrics directly in the creation wizard and group tools by task.
+- Resize/delete note blocks, create linked melismas, select major/minor keys
+  and reassign lyrics from a chosen note and source-text position.
+- Replay corrected timing positions and seek on timing undo/redo; list incomplete
+  notes and jump directly to the affected chart before export.
+- Prepare Community uploads from library projects and preserve YouTube references.
+  Fix community exports ending at the final note and Xbox FTP temporary filenames.
+- Preserve album/genre/year metadata and record precise build dates in new DLCs.
+- Provide a Docker LAN library and native Xbox-client source; improve retail
+  console networking diagnostics. Large AI components remain optional downloads.
+- Build native Windows, macOS Apple Silicon/Intel and Linux downloads automatically,
+  including the integrated USDB runtime, installers and checksums.
+
 ## 0.4.0 Beta
 
 - Add an LRC-only song-creation route with editable, unpitched lyric blocks.

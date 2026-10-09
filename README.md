@@ -70,15 +70,18 @@ Some foundations are already in place:
 - **Start with timed lyrics.** Choose LRC only to create grey lyric blocks without inventing pitches. Assign the melody yourself, adjust durations, split a line into estimated word blocks or split a word across several pitches. Save an unfinished draft and return to it later.
 - **Record lyric timing.** No LRC? Paste the words into the Timing Assistant and tap Space during playback. Choose words or explicitly divided syllables, listen back with timing ticks, correct a fragment or re-record from it. Reference audio and ticks have separate volume controls. No AI model is needed.
 - **Start from a recording.** Enable Basic Pitch in the plugin manager, choose an audio file and adjust detection sensitivity, note duration and pitch limits. Review the locally generated draft, save it as MIDI or take its notes into the editor. The analysis can be cancelled; replacing notes can be undone. Isolated vocals work better than a full mix. This is not automatic vocal separation or lyric transcription.
-- **Work on the chart.** Create, delete, move or resize notes, change their pitch, assign lyric fragments, set word and phrase endings, and adjust page changes. Undo and redo are available.
+- **Work on the chart.** Create, delete, move or resize either note edge, change pitch, assign lyric fragments and add linked melisma segments. Choose a major/minor key for scale guides and suggested pitches. Undo and redo are available, including timestamp navigation in the Timing Assistant.
+- **Repair lyrics and incomplete notes.** Reassign from a selected chart note and marked text position without starting over. Missing text or pitches are listed with note numbers and times, with a direct jump to the correction.
 - **Create a draft from audio.** Optional local vocal separation, pitch detection and lyric recognition produce an editable chart. Review the result before using it: singing recognition still makes substantial mistakes. Small-model pitch analysis is bundled; the heavier AI engine is a separate download.
 - **Keep synchronized lyrics.** Import LRC files and synchronized LRCLIB results, preview line/word timestamps and save them with the project. Export enhanced LRC and, once pitches are assigned, MIDI. Ordinary LRC gives line starts, not exact word lengths; timing and melody still need review.
+- **Find lyrics before creating a project.** The LRC and MIDI + LRC wizard choices offer an existing file or an online LRCLIB search. Tools are grouped into Charts, Lyrics, Media and Library/Xbox.
 - **Check the timing.** Play reference audio or video alongside the chart. Adjust playback speed, zoom in and shift notes and page changes together when the chart needs a timing correction.
 - **Check the pitch.** Audition selected notes with a reference tone or enable note tones during playback. Missing optional AI components are downloaded and verified automatically on first use.
 - **Save your progress.** An `.olp` project lets you leave a song unfinished and return to it later. Referenced media stays separate.
 - **Prepare the presentation.** Choose a cover or generate a simple one. On Windows, DLC export converts the selected video or audio and creates full xWMA audio plus a 15-second preview starting at the first lyric. Video songs also get a small menu preview video. The media tools and STFS backend are included.
 - **Export and experiment.** Save a media-free `.ols` Community song or a DLC package. Custom DLC has been recognized and played in Number One Hits on a modified Xbox 360 in user testing; DLC discovery in Xenia remains under investigation.
 - **Group songs and transfer them.** Export a named song pack from saved projects, or copy a verified DLC directly to an Xbox USB drive with a visible `Content` folder. See the [pack and USB guide](docs/song_packs_usb.md) for current limits and testing status.
+- **Track your versions.** The local library shows save/build dates, unfinished projects and the latest saved song version. Xbox USB storage lists real pack/song names and compares packages with the local library. Source genre, year and album are retained where available.
 - **Community: coming soon.** Studio already has a tab prepared for sign-in, browsing, ratings, comments and `.ols` uploads/downloads. The website is not publicly available yet; these online features will open with its launch.
 
 ![The OpenLips Studio chart editor](assets/screenshots/studio-editor.png)
@@ -145,6 +148,8 @@ The technical material lives in [`docs/`](docs/). Start with:
 - [Song-file structures](docs/structures.md) and the [structural reader](docs/og_ixb_reader.md).
 - [Page timing and projects](docs/studio_pages_and_community.md).
 - [Community sign-in, downloads and uploads](docs/studio_community.md).
+- [Optional library, Copy to Xbox and headless LAN worker](docs/xbox_library_server.md) (local development build; not yet published).
+- [Self-hosted Docker library and Studio remote access](library_server/README.md) (local development build).
 - [Research and command-line tools](docs/research_overview.md).
 
 The research records both findings and open questions. Reading a format is not the same as safely writing every variant of it.

@@ -32,6 +32,9 @@ class LyricsSearch(QThread):
 
     def run(self):
         try:
-            self.results.emit(search_lyrics(self.title, self.artist))
+            results = search_lyrics(self.title, self.artist)
+            if not self.isInterruptionRequested():
+                self.results.emit(results)
         except Exception as exc:
-            self.failed.emit(str(exc))
+            if not self.isInterruptionRequested():
+                self.failed.emit(str(exc))

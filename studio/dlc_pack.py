@@ -58,11 +58,13 @@ def build_projects_dlc(projects, output, progress=lambda message: None, *, pack_
                 raise ValueError(tr('pack.size_limit'))
             song_id = (pack_id | (index << 28)) if pack_name is not None else 0x73000000 | secrets.randbits(24)
             songs.append(dict(title=project.title, artist=project.artist,
+                              genre=project.genre, year=project.year, album=project.album,
                               uint_id=song_id, duration=duration, assets=assets,
                               preview_lyric=preview_lyrics(project)))
         manifest = make_pack_manifest(songs, pack_id) if pack_name is not None else make_manifest(
             songs[0]['title'], songs[0]['artist'], songs[0]['uint_id'], songs[0]['duration'], songs[0]['assets'],
-            preview_lyric=songs[0]['preview_lyric'])
+            preview_lyric=songs[0]['preview_lyric'], genre=songs[0]['genre'],
+            year=songs[0]['year'], album=songs[0]['album'])
         progress(tr('export.packaging'))
         return build_package(backend, files, manifest, output, pack_name or projects[0].title,
                              canonical_name=True)

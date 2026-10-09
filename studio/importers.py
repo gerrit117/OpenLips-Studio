@@ -153,6 +153,8 @@ def import_ultrastar(path):
         return ''
     from studio.media_reference import metadata_reference
     return StudioProject(title=source.title or Path(path).stem, artist=source.artist or '',
+                         album=source.metadata.get('ALBUM', ''), genre=source.metadata.get('GENRE', ''),
+                         year=source.metadata.get('YEAR', ''),
                          bpm=source.bpm, source='UltraStar TXT',
                          audio_path=local_asset('AUDIO', 'MP3'), video_path=local_asset('VIDEO'),
                          cover_path=local_asset('COVER'),

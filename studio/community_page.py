@@ -42,13 +42,17 @@ class ProjectUploadDialog(QDialog):
         self.fields = {}
         for key, label in [('album','export.album'), ('genre','export.genre'),
                            ('language','export.language'), ('youtube','export.reference')]:
-            field = QLineEdit(project.video_reference if key == 'youtube' else '')
+            from studio.exporters import community_reference
+            field = QLineEdit(community_reference(project) if key == 'youtube' else '')
+            if key == 'youtube':
+                field.setPlaceholderText('https://www.youtube.com/watch?v=...')
             self.fields[key] = field
             form.addRow(tr(label), field)
         self.duration = QDoubleSpinBox()
         self.duration.setRange(.001, 1800)
         self.duration.setDecimals(3)
-        self.duration.setValue(max(project.duration + 2, .001))
+        from studio.exporters import community_duration
+        self.duration.setValue(community_duration(project))
         form.addRow(tr('export.duration'), self.duration)
         self.rights = QCheckBox(tr('community.rights'))
         self.rights.setStyleSheet('QCheckBox { spacing: 8px; }')
@@ -76,6 +80,7 @@ class CommunityPage(QWidget):
         self.pages = 1
         self.rows = []
         self.selected = None
+        self.pending_upload = None
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 12, 18, 12)
         account = QHBoxLayout()
@@ -274,7 +279,10 @@ class CommunityPage(QWidget):
         self.authenticated = self.phase == 'authenticated'
         if self.authenticated:
             self.account_label.setText('OpenLips Community · ' + result['username'])
-            self.reload()
+            if self.pending_upload is not None:
+                QTimer.singleShot(0, self.upload_project)
+            else:
+                self.reload()
         else:
             self.status.setText(tr('community.' + self.phase))
 
@@ -375,9 +383,13 @@ class CommunityPage(QWidget):
         self.run_job(lambda _: self.client.upload(path, rights=rights, description=description), self.uploaded)
 
     def upload_project(self):
-        project = copy.deepcopy(self.project_provider())
+        if not self.authenticated or self.worker:
+            self.status.setText(tr('community.signin_notice'))
+            return
+        project = copy.deepcopy(self.pending_upload if self.pending_upload is not None else self.project_provider())
         dialog = ProjectUploadDialog(project, self)
         if not dialog.exec():
+            self.pending_upload = None
             return
         options = {key: field.text().strip() for key, field in dialog.fields.items()}
         duration = dialog.duration.value()
@@ -389,6 +401,15 @@ class CommunityPage(QWidget):
                 return self.client.upload(path, rights=True)
         self.run_job(prepare, self.uploaded)
 
+    def upload_library_project(self, project):
+        self.pending_upload = copy.deepcopy(project)
+        self.library.setCurrentIndex(1)
+        if self.authenticated and not self.worker:
+            self.upload_project()
+        else:
+            self.status.setText(tr('community.signin_notice'))
+
     def uploaded(self, result):
+        self.pending_upload = None
         self.status.setText(tr('community.uploaded'))
         self.rights.setChecked(False)

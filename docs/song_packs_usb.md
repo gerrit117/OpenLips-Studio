@@ -103,6 +103,19 @@ not manufacture a full video or generic-video reference for them.
 
 ## USB storage and safeguards
 
+**Library > Xbox USB storage** lists package display names, expandable song
+lists, embedded build dates and USB file dates. It compares packages against
+the selected local library and can remove an explicitly selected whole package
+after confirmation. New Studio packages use precise UTC header timestamps;
+older dates may be unknown or only minute-accurate. Copy time is not assumed
+to be build time. Matching covers the complete artist/title song set, not a
+single song coincidentally present in two different packs.
+
+Read-only inventory also supports CON/PIRS and dual-copy STFS tables. This
+does not extend the unsigned LIVE authoring/copy verifier or validate Microsoft
+signatures. Read-only FAT drives can be listed, but cannot be copied to or
+deleted from. Other titles, saves and profiles are never removed.
+
 For the modern visible Content layout, the installation path is:
 
 ```text

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 import json
 import math
 import os
@@ -99,6 +100,11 @@ class StudioProject:
     preview_start: float | None = None
     preview_length: float = 15.0
     page_layout_mode: str = 'source'
+    album: str = ''
+    genre: str = ''
+    year: str = ''
+    created_at: str = ''
+    modified_at: str = ''
 
     def validate(self):
         if not math.isfinite(self.bpm) or not 1 <= self.bpm <= 1000:
@@ -111,7 +117,7 @@ class StudioProject:
             raise ValueError('Preview start must be finite and nonnegative')
         if not math.isfinite(self.preview_length) or not 0 < self.preview_length <= 3600:
             raise ValueError('Preview length must be in 0..3600 seconds')
-        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'cover_path', 'source', 'draft_lyrics', 'video_reference'):
+        for name in ('title', 'artist', 'key_signature', 'audio_path', 'video_path', 'cover_path', 'source', 'draft_lyrics', 'video_reference', 'album', 'genre', 'year', 'created_at', 'modified_at'):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"Project {name} must be text")
         if len(self.notes) > 100000:
@@ -164,9 +170,13 @@ class StudioProject:
         return project
 
 
-def save_project(project, path):
+def save_project(project, path, *, touch=True):
     path = Path(path).resolve()
+    now = datetime.now(timezone.utc).isoformat(timespec='microseconds')
+    created = project.created_at or now
+    modified = now if touch else project.modified_at or created
     data = project.to_payload()
+    data.update(created_at=created, modified_at=modified)
     for field in ('audio_path', 'video_path', 'cover_path'):
         if not getattr(project, field):
             continue
@@ -186,6 +196,7 @@ def save_project(project, path):
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        project.created_at, project.modified_at = created, modified
     finally:
         if temporary and temporary.exists():
             temporary.unlink()
@@ -196,6 +207,10 @@ def load_project(path):
     if path.stat().st_size > 64 * 1024 * 1024:
         raise ValueError("Project exceeds the 64 MiB safety limit")
     project = StudioProject.from_payload(json.loads(path.read_text(encoding='utf-8')))
+    if not project.modified_at:
+        project.modified_at = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+    if not project.created_at:
+        project.created_at = project.modified_at
     for field in ('audio_path', 'video_path', 'cover_path'):
         value = getattr(project, field)
         if value and not Path(value).is_absolute():
@@ -203,8 +218,33 @@ def load_project(path):
     return project
 
 
+def project_status(project):
+    """Structural readiness, not a claim about the musical quality of a chart."""
+    if not project.notes or incomplete_notes(project) or not project.artist.strip() or not project.title.strip():
+        return 'draft'
+    end = 0.0
+    for note in project.ordered():
+        if not 24 <= note.pitch <= 84 or note.time < end - .001:
+            return 'draft'
+        end = note.time + note.length
+    return 'ready' if project.audio_path or project.video_path else 'needs_media'
+
+
 def pitch_name(pitch):
     return f"{('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')[pitch % 12]}{pitch // 12 - 1}"
+
+
+def incomplete_notes(project, *, require_text=True, require_pitch=True):
+    problems = []
+    for number, note in enumerate(project.ordered(), 1):
+        reasons = []
+        if require_text and not note.text.strip():
+            reasons.append('missing_text')
+        if require_pitch and not note.pitch_assigned:
+            reasons.append('missing_pitch')
+        if reasons:
+            problems.append((number, note, tuple(reasons)))
+    return problems
 
 
 def snap_time(seconds, bpm, division=4):
@@ -212,7 +252,7 @@ def snap_time(seconds, bpm, division=4):
     return max(0.0, round(seconds / step) * step)
 
 
-def assign_lyrics(project, text, start_index=0, syllabify=False):
+def assign_lyrics(project, text, start_index=0, syllabify=False, *, text_offset=0):
     """Explicit spaces separate words; | or soft hyphens separate syllables.
 
     Never invent phonetic syllables. Newlines create phrase boundaries.
@@ -221,22 +261,43 @@ def assign_lyrics(project, text, start_index=0, syllabify=False):
     import re
     if start_index < 0:
         raise ValueError('Start index must be nonnegative')
+    if not isinstance(text_offset, int) or not 0 <= text_offset <= len(text):
+        raise ValueError('Text offset must point inside the lyrics')
     fragments = []
-    for line in text.splitlines():
+    offset = 0
+    for line in text.splitlines(keepends=True):
         line_fragments = []
-        for word in line.split():
-            pieces = re.split(r'[|\u00ad]', word) if syllabify else [word]
-            pieces = [p for p in pieces if p]
+        for word in re.finditer(r'\S+', line):
+            pieces = list(re.finditer(r'[^|\u00ad]+', word.group())) if syllabify else [word]
             for i, piece in enumerate(pieces):
-                line_fragments.append((piece, i == len(pieces) - 1, False))
+                begin = word.start()+piece.start() if syllabify else word.start()
+                end = word.start()+piece.end() if syllabify else word.end()
+                line_fragments.append((piece.group(), i == len(pieces)-1, False, offset+begin, offset+end))
         if line_fragments:
             last = line_fragments[-1]
-            line_fragments[-1] = (last[0], last[1], True)
+            line_fragments[-1] = (last[0], last[1], True, last[3], last[4])
         fragments.extend(line_fragments)
-    notes = project.ordered()[start_index:]
-    for note, (fragment, end_word, phrase) in zip(notes, fragments):
-        note.text, note.end_word, note.line_break_after = fragment, end_word, phrase
-    return min(len(notes), len(fragments)), max(0, len(fragments) - len(notes))
+        offset += len(line)
+    fragments = [f for f in fragments if f[4] > text_offset]
+    ordered = project.ordered()
+    while 0 < start_index < len(ordered) and ordered[start_index].text.strip() == '~':
+        start_index -= 1
+    notes = ordered[start_index:]
+    groups = []
+    for note in notes:
+        if groups and note.text.strip() == '~':
+            groups[-1].append(note)
+        else:
+            groups.append([note])
+    for group, (fragment, end_word, phrase, _, _) in zip(groups, fragments):
+        group[0].text = fragment
+        for index, note in enumerate(group):
+            note.end_word = end_word if index == len(group)-1 else False
+            if project.page_layout_mode != 'manual':
+                note.line_break_after = phrase and index == len(group)-1
+                if not note.line_break_after:
+                    note.page_break_time = None
+    return min(len(groups), len(fragments)), max(0, len(fragments)-len(groups))
 
 
 def suggest_syllables(text, language='en_US'):

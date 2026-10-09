@@ -27,6 +27,7 @@ def run(app, window, directory):
             video_path=str(source), notes=[EditorNote(1, .5, 60, 'Test'), EditorNote(2, 1, 64, 'song')])
         output = directory
         worker = PackageWorker(project, output, window)
+        worker.library_root = None
         window.dlc_smoke_worker = worker
         def failed(message):
             (directory / 'failure.txt').write_text(message, encoding='utf-8')

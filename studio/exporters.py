@@ -8,12 +8,31 @@ from tools.write_template_chart import Note, SongChart, _validate_note
 from tools.build_owned_chart import build_owned_pair
 
 
-def export_community_song(project, path, *, duration, youtube=None, album='', genre='', language=''):
+def community_reference(project):
+    from studio.media_reference import reference_video
+    return reference_video(project.video_reference)
+
+
+def community_duration(project):
+    return max(project.duration + 2.0, .001)
+
+
+def export_community_song(project, path, *, duration, youtube=None, album=None, genre=None, language=''):
     from tools.song_bundle import encode_bundle
     from studio.media import write_cover
     chart = internal_chart(project)
+    import math
+    if not math.isfinite(duration) or duration < project.duration - .001:
+        from studio.i18n import tr
+        raise ValueError(tr('export.duration_short', seconds=project.duration))
+    if youtube is None:
+        youtube = community_reference(project)
+    album = project.album if album is None else album
+    genre = project.genre if genre is None else genre
+    # Only the chart sentinel needs to follow a note at the exact media end.
+    chart_duration = max(duration, project.duration + .001)
     chart_bytes, lyric_bytes = build_owned_pair(chart, 'community_song', 'community_song.xWMA',
-                                               bpm=project.bpm, song_duration=duration)
+                                               bpm=project.bpm, song_duration=chart_duration)
     with tempfile.TemporaryDirectory(prefix='openlips-cover-') as temp:
         cover = write_cover(project, Path(temp) / 'cover.jpg').read_bytes()
     data = encode_bundle(chart_bytes, lyric_bytes, cover,

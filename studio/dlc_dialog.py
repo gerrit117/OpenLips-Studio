@@ -13,6 +13,7 @@ class PackageWorker(QThread):
     completed = Signal(str)
     failed = Signal(str)
     progress = Signal(str)
+    archive_warning = Signal(str)
 
     def __init__(self, project, output, parent, *, projects=None, pack_name=None, optimize_pages=None):
         super().__init__(parent)
@@ -20,12 +21,24 @@ class PackageWorker(QThread):
         self.projects = copy.deepcopy(projects) if projects is not None else [self.project]
         self.pack_name = pack_name
         self.optimize_pages = optimize_pages
+        from studio.library_page import configured_library
+        self.library_root = configured_library()
 
     def run(self):
         try:
             from studio.dlc_pack import build_projects_dlc
             result = build_projects_dlc(self.projects, self.output, self.progress.emit,
                                         pack_name=self.pack_name, optimize_pages=self.optimize_pages)
+            if self.library_root:
+                try:
+                    from studio.library import Library
+                    self.progress.emit(tr('library.archiving'))
+                    library = Library(self.library_root)
+                    identifiers = [library.add_project(p, self.progress.emit) for p in self.projects]
+                    package_id = library.add_package(result['output_path'], identifiers, self.progress.emit)
+                    library.record_build(package_id, identifiers, self.pack_name, self.optimize_pages)
+                except Exception as error:
+                    self.archive_warning.emit(tr('library.archive_failed', error=str(error)))
             self.completed.emit(result['output_path'])
         except Exception as error:
             self.failed.emit(str(error))
@@ -54,6 +67,11 @@ class DlcDialog(QDialog):
         self.usb_button.setVisible(False)
         self.usb_button.clicked.connect(self.copy_to_usb)
         layout.addWidget(self.usb_button)
+        self.xbox_button = QPushButton(qta.icon('fa5s.upload', color='#cdd3d9'), tr('xbox.title'))
+        self.xbox_button.setVisible(False)
+        self.xbox_button.clicked.connect(self.copy_to_xbox)
+        layout.addWidget(self.xbox_button)
+        self.archive_message = ''
         self.output_path = None
         self.editable_controls = [self.preview_button]
 
@@ -73,6 +91,19 @@ class DlcDialog(QDialog):
     def start_build(self, projects, pack_name=None):
         if self.worker and self.worker.isRunning():
             return
+        from studio.model import incomplete_notes
+        if any(incomplete_notes(project) for project in projects):
+            from studio.chart_review import ChartReviewDialog
+            review = ChartReviewDialog(projects, self)
+            self.status.setText(tr('chart.incomplete'))
+            if review.exec() and review.chosen:
+                host = self.parent()
+                while host is not None and not hasattr(host, 'show_chart_note'):
+                    host = host.parent()
+                if host is not None:
+                    self.reject()
+                    host.show_chart_note(*review.chosen)
+            return
         try:
             for project in projects:
                 try:
@@ -85,7 +116,8 @@ class DlcDialog(QDialog):
         except Exception as error:
             self.status.setText(str(error))
             return
-        path = QFileDialog.getExistingDirectory(self, tr('export.dlc_directory'))
+        from studio.library_setup import export_directory
+        path = export_directory() or QFileDialog.getExistingDirectory(self, tr('export.dlc_directory'))
         if not path:
             return
         automatic = self.optimize_pages.isChecked() if hasattr(self,'optimize_pages') else None
@@ -94,22 +126,30 @@ class DlcDialog(QDialog):
         self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(self.success)
         self.worker.failed.connect(self.failure)
+        self.archive_message = ''
+        self.worker.archive_warning.connect(lambda message: setattr(self, 'archive_message', message))
         self.progress.setRange(0, 0)
         self.save_button.setEnabled(False)
         for widget in self.editable_controls:
             widget.setEnabled(False)
         self.usb_button.setVisible(False)
+        self.xbox_button.setVisible(False)
         self.worker.start()
 
     def success(self, path):
         self.output_path = path
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.status.setText(tr('export.saved', path=path))
+        self.status.setText(tr('export.saved', path=path) + ('\n' + self.archive_message if self.archive_message else ''))
         self.save_button.setEnabled(True)
         for widget in self.editable_controls:
             widget.setEnabled(True)
         self.usb_button.setVisible(True)
+        self.xbox_button.setVisible(True)
+
+    def copy_to_xbox(self):
+        from studio.xbox_dialog import XboxDialog
+        XboxDialog(self, self.output_path).exec()
 
     def copy_to_usb(self):
         from studio.usb_dialog import UsbDialog

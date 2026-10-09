@@ -65,6 +65,7 @@ def import_community(path, *, storage_root=None):
               if chart.is_a(record, 'ixSeqTempoCode') and 'm_Tempo' in chart.members(record)]
     metadata = bundle.manifest['metadata']
     project = StudioProject(title=metadata['title'], artist=metadata['artist'], notes=notes,
+                            album=metadata.get('album', ''), genre=metadata.get('genre', ''),
                             source='OpenLips Song', video_reference=bundle.manifest['media']['reference_video'] or '',
                             reference_offset=bundle.manifest['media']['offset_seconds'],
                             bpm=tempos[0] if tempos else 120)

@@ -37,8 +37,10 @@ class Service:
         self.user = None
 
     def handle(self, request):
-        from usdb_syncer import usdb_scraper as scraper
         operation = request['operation']
+        if operation == 'capabilities':
+            return {'protocol': 2, 'operations': ['login', 'search', 'download', 'download_batch', 'youtube']}
+        from usdb_syncer import usdb_scraper as scraper
         if operation == 'login':
             import requests
             session = requests.Session()

@@ -2,7 +2,7 @@
 from PySide6.QtWidgets import (QDialog, QFormLayout, QLineEdit, QDoubleSpinBox,
                                QCheckBox, QPushButton, QFileDialog, QMessageBox)
 from studio.i18n import tr
-from studio.exporters import export_community_song
+from studio.exporters import export_community_song, community_duration, community_reference
 
 
 class CommunityExportDialog(QDialog):
@@ -16,14 +16,17 @@ class CommunityExportDialog(QDialog):
         for key, label in (('album', 'export.album'), ('genre', 'export.genre'),
                            ('language', 'export.language'), ('youtube', 'export.reference')):
             control = QLineEdit()
+            if key in ('album', 'genre'):
+                control.setText(getattr(project, key))
             self.fields[key] = control
             if key == 'youtube':
-                control.setText(project.video_reference)
+                control.setText(community_reference(project))
+                control.setPlaceholderText('https://www.youtube.com/watch?v=...')
             layout.addRow(tr(label), control)
         self.duration = QDoubleSpinBox()
         self.duration.setDecimals(3)
         self.duration.setRange(.001, 1800)
-        self.duration.setValue(max(project.duration, .001))
+        self.duration.setValue(community_duration(project))
         layout.addRow(tr('export.duration'), self.duration)
         self.rights = QCheckBox(tr('export.rights'))
         layout.addRow(self.rights)

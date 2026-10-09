@@ -38,6 +38,9 @@ class SongImport:
         if self.paths['chart'].suffix.lower() != '.txt' or self.paths['chart'].stat().st_size > 16 * 1024 * 1024:
             raise ValueError('Expected an UltraStar TXT up to 16 MiB')
         self.project = self._project(self.paths)
+        from studio.media_reference import reference_video
+        self.video_reference = reference_video(data.get('video_reference', '')) or self.project.video_reference
+        self.project.video_reference = self.video_reference
 
     @staticmethod
     def _project(paths):
@@ -66,4 +69,6 @@ class SongImport:
             # Parse the copied TXT before publishing to catch an invalidated source.
             self._project({k: staging / v for k, v in names.items()})
             staging.rename(target)
-        return self._project({k: target / v for k, v in names.items()})
+        project = self._project({k: target / v for k, v in names.items()})
+        project.video_reference = self.video_reference
+        return project
