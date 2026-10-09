@@ -111,17 +111,31 @@ class LibraryClient:
     def upload_media(self, identifier, field, path):
         return self.upload_file(f'/api/v1/projects/{identifier}/media/{field}', path)
 
-    def upload_file(self, endpoint, path):
+    def upload_file(self, endpoint, path, *, progress=lambda message: None):
         if not endpoint.startswith('/api/v1/') or any(c in endpoint for c in '\r\n'):
             raise ValueError('Invalid API endpoint')
         path = Path(path)
         connection = self.connect()
         try:
             with path.open('rb') as stream:
-                connection.request('POST', endpoint, stream,
-                    headers={'Host': f'{self.address}:{self.port}', 'Authorization': 'Bearer ' + self.token,
-                        'Content-Length': str(path.stat().st_size), 'Content-Type': 'application/octet-stream',
-                        'X-File-Name': 'media' + path.suffix.lower()})
+                total = path.stat().st_size
+                connection.putrequest('POST', endpoint, skip_host=True)
+                headers = {'Host': f'{self.address}:{self.port}',
+                    'Content-Length': str(total), 'Content-Type': 'application/octet-stream',
+                    'X-File-Name': 'media' + path.suffix.lower()}
+                if self.token:
+                    headers['Authorization'] = 'Bearer ' + self.token
+                for key, value in headers.items():
+                    connection.putheader(key, value)
+                connection.endheaders()
+                sent, last_percent = 0, -1
+                while chunk := stream.read(1024 * 1024):
+                    connection.send(chunk)
+                    sent += len(chunk)
+                    percent = int(100 * sent / max(total, 1))
+                    if percent != last_percent:
+                        progress(f'{path.name}: {percent}%')
+                        last_percent = percent
                 response = connection.getresponse()
                 result = json.loads(response.read(8192))
                 if response.status >= 400:

@@ -250,6 +250,41 @@ def test_transfer_cancellation_never_publishes(tmp_path, native_package):
     assert not ftp.files
 
 
+def test_finished_dlc_upload_sync_download_and_copy(tmp_path, native_package):
+    from studio.library_sync import sync_library, copy_packages
+    from studio.library_client import LibraryClient
+    local, remote = Library(tmp_path / 'local'), Library(tmp_path / 'remote')
+    identifier = local.add_package(native_package)
+    settings = create_config(tmp_path / 'sync.json', remote.root, lan_open=True)
+    manager = JobManager(remote, settings)
+    http = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(remote, settings, manager))
+    thread = threading.Thread(target=http.serve_forever, daemon=True)
+    thread.start()
+    client = LibraryClient(f'http://127.0.0.1:{http.server_address[1]}')
+    try:
+        result = sync_library(local, client)
+        assert not result['errors'] and result['uploaded'] == 1
+        assert remote.package_path(identifier).read_bytes() == native_package.read_bytes()
+        result = sync_library(local, client)
+        assert result['uploaded'] == result['downloaded'] == 0
+        second = Library(tmp_path / 'second')
+        result = sync_library(second, client)
+        assert not result['errors'] and result['downloaded'] == 1
+        assert second.package_path(identifier).read_bytes() == native_package.read_bytes()
+        outputs = copy_packages(second, [identifier], tmp_path / 'copies')
+        assert outputs[0].read_bytes() == native_package.read_bytes()
+        assert copy_packages(second, [identifier], tmp_path / 'copies') == outputs
+        outputs[0].write_bytes(b'User file')
+        with pytest.raises(FileExistsError):
+            copy_packages(second, [identifier], tmp_path / 'copies')
+        assert outputs[0].read_bytes() == b'User file'
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join(5)
+        manager.close()
+
+
 def test_export_archives_only_when_enabled(tmp_path, native_package, monkeypatch):
     from PySide6.QtWidgets import QApplication
     from studio.dlc_dialog import PackageWorker

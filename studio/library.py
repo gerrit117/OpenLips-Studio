@@ -28,7 +28,7 @@ class Library:
     def __init__(self, root):
         self.root = Path(root).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        for name in ('projects', 'media', 'publish', '.staging'):
+        for name in ('projects', 'media', 'publish', '.staging', 'workspace'):
             path = self.root / name
             if path.is_symlink():
                 raise ValueError('Library directories must not be symbolic links')
@@ -53,7 +53,26 @@ class Library:
                 CREATE TABLE IF NOT EXISTS artifacts (id TEXT PRIMARY KEY, filename TEXT UNIQUE NOT NULL,
                     kind TEXT NOT NULL, project_id TEXT NOT NULL, bytes INTEGER NOT NULL, created REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS project_types (project_id TEXT PRIMARY KEY, kind TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS sync_links (
+                    server_id TEXT NOT NULL, kind TEXT NOT NULL, local_id TEXT NOT NULL,
+                    remote_id TEXT NOT NULL, PRIMARY KEY(server_id,kind,local_id,remote_id));
             ''')
+
+    def draft_path(self, project):
+        import re
+        label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_',
+                       f'{project.artist} - {project.title}').strip(' .-')[:100] or 'Song'
+        return self.root / 'workspace' / (label + '-' + uuid.uuid4().hex[:12] + '.olp')
+
+    def sync_links(self, server_id, kind):
+        with self.connect() as db:
+            return [(row['local_id'], row['remote_id']) for row in db.execute(
+                'SELECT local_id,remote_id FROM sync_links WHERE server_id=? AND kind=?', (server_id, kind))]
+
+    def link_remote(self, server_id, kind, local_id, remote_id):
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO sync_links VALUES (?,?,?,?)',
+                       (server_id, kind, local_id, remote_id))
 
     @contextmanager
     def connect(self):
@@ -161,7 +180,11 @@ class Library:
         def validate_copy(temporary, checksum):
             if checksum != verified['sha256'] or verify_stfs(temporary)['sha256'] != checksum:
                 raise ValueError('Source package changed during archiving')
-        target, checksum = self.store_file(path, 'publish', filename, progress, validate_copy)
+        target = self.root / 'publish' / filename
+        if Path(path).resolve() == target and not Path(path).is_symlink():
+            checksum = verified['sha256']
+        else:
+            target, checksum = self.store_file(path, 'publish', filename, progress, validate_copy)
         with self.connect() as db:
             db.execute('INSERT OR IGNORE INTO packages VALUES (?,?,?,?,?,?)',
                 (checksum, filename, metadata['title'], target.stat().st_size,

@@ -286,7 +286,8 @@ def upload_package(ftp, package, remote, *, progress=None, cancelled=lambda: Fal
     except ftplib.error_perm:
         ftp.mkd(staging)
         ftp.cwd(staging)
-    temporary = '.openlips-' + uuid.uuid4().hex + '.tmp'
+    # FATX limits each filename to 42 characters, including its extension.
+    temporary = 'ol-' + uuid.uuid4().hex + '.tmp'
     total = Path(package).stat().st_size
     sent, received = 0, 0
 

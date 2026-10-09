@@ -61,6 +61,43 @@ and select it under Docker > Add Container.
 
 ## Updates and backups
 
+### Unraid cannot find the edit/update configuration
+
+DockerMan stores its template on the Unraid boot device, **not** inside `/data`.
+A container created directly through Docker/Compose can lack that template.
+Run in the Unraid terminal, using the actual container name:
+
+```sh
+curl -fL https://raw.githubusercontent.com/gerrit117/OpenLips-Studio/main/library_server/unraid/recover-template.sh -o /tmp/openlips-recover.sh
+bash /tmp/openlips-recover.sh openlips
+```
+
+Replace `openlips` with the name from the Docker page. The helper reads
+`docker inspect` and reconstructs the name, port, paths and user in
+`/boot/config/plugins/dockerMan/templates-user/my-<Name>.xml`, backing up an
+existing template first. It does not restart the container or change song files.
+Refresh Docker, then **Edit > Apply** to adopt the template. Unexpected mounts
+or old network settings require manual review. A working `/api/v1/status`
+only confirms the library service, not Unraid's Docker manager.
+
+### Studio synchronization
+
+Choose a root in **Tools > Library > Choose library folder**. Editing files go
+to `workspace`, immutable versions to `projects`, shared media to `media`, and
+ready DLCs to `publish`. Library-enabled DLC export builds directly in `publish`
+instead of keeping an extra export copy. Existing folders are never moved or
+deleted automatically.
+
+Connect the remote HTTP address and select **Synchronize library**. Projects
+with covers/media and finished DLCs are added in both directions; unchanged
+entries are skipped. Optional automatic synchronization runs every 60 seconds
+while Studio is connected. This is additive, not a deletion mirror: edits are
+new versions and removed entries can return from the other peer. Saved
+`workspace/*.olp` files are indexed; arbitrary loose files are not auto-imported.
+Community `.ols` uploads still require sign-in and rights confirmation, and
+never contain audio/video. A standalone DLC cannot replace an editable source
+project for community export.
+
 Relevant main-branch changes automatically build and test Linux amd64 before
 publishing latest. Immutable sha-<full-commit> tags allow rollback.
 Pull updates and recreate the container; retain the data volume.

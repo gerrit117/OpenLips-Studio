@@ -1,5 +1,13 @@
 # Library Changelog
 
+## Studio Library Exchange
+
+- Import a project and its media atomically, avoiding partially uploaded project versions.
+- Add resumable, additive Studio synchronization for projects, covers, source media and ready DLCs.
+- Stream DLC/project uploads with progress and verify downloaded package checksums.
+- Provide a non-destructive Unraid DockerMan template-recovery helper based on actual container settings.
+- Use the mapped HTTP port in the Unraid WebUI link.
+
 ## Unified Song Catalog
 
 - List uploaded DLC songs alongside editable projects in the Songs view.

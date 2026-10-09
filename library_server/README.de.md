@@ -64,6 +64,48 @@ ablegen und unter Docker > Container hinzufügen auswählen.
 
 ## Updates und Sicherungen
 
+### Unraid findet beim Bearbeiten/Updaten keine Konfiguration
+
+Die DockerMan-Vorlage liegt auf dem Unraid-Boot-Stick, **nicht** in `/data`.
+Bei einem direkt per Docker/Compose angelegten Container kann diese Vorlage
+fehlen. Im Unraid-Terminal den tatsächlichen Container-Namen verwenden:
+
+```sh
+curl -fL https://raw.githubusercontent.com/gerrit117/OpenLips-Studio/main/library_server/unraid/recover-template.sh -o /tmp/openlips-recover.sh
+bash /tmp/openlips-recover.sh openlips
+```
+
+`openlips` durch den Namen aus der Docker-Übersicht ersetzen. Die Hilfe liest
+`docker inspect`, übernimmt den Namen, Port, Pfade und Benutzer und erstellt
+`/boot/config/plugins/dockerMan/templates-user/my-<Name>.xml`. Eine bestehende
+Vorlage wird zuvor gesichert. Container und Songdateien bleiben unverändert.
+Danach Docker neu laden, **Bearbeiten** öffnen und **Anwenden**. Unbekannte
+Mounts oder alte Netzwerkeinstellungen werden nicht blind ersetzt.
+Bleibt die WebUI hängen, Docker-Status und Unraid-Systemprotokoll prüfen;
+ein funktionierendes `/api/v1/status` bestätigt nur den Bibliotheksdienst,
+nicht den Zustand von Unraids Docker-Verwaltung.
+
+### Studio synchronisieren
+
+Im Studio-Menü **Werkzeuge > Bibliothek > Bibliotheksordner wählen** den
+gewünschten Hauptordner festlegen. `workspace` enthält bearbeitbare `.olp`,
+`projects` unveränderliche Projektstände, `media` gemeinsame Mediendaten und
+`publish` fertige DLCs. Export bei aktivierter Bibliothek verwendet `publish`
+direkt statt einer zusätzlichen Exportkopie. Alte Ordner werden nicht gelöscht
+oder automatisch verschoben.
+
+In **Remote-Bibliothek** die HTTP-Adresse verbinden und **Bibliothek
+synchronisieren** wählen. Projekte einschließlich Cover/Medien sowie fertige
+DLCs werden in beide Richtungen ergänzt. **Automatisch synchronisieren**
+wiederholt dies im verbundenen Studio alle 60 Sekunden. Es ist kein
+Löschabgleich: Änderungen bleiben als Projektversionen erhalten, entfernte
+Songs können beim nächsten Abgleich aus der anderen Bibliothek zurückkommen.
+Aus dem Dateisystem neu gespeicherte `workspace/*.olp` werden dabei erfasst.
+Beliebige lose Dateien in anderen Ordnern werden nicht automatisch importiert.
+Community `.ols`-Uploads brauchen weiterhin Anmeldung und Rechtebestätigung;
+das Paket enthält keine Audio-/Videodateien. Reine DLCs sind kein Ersatz für
+ein bearbeitbares Community-Projekt.
+
 Relevante Änderungen auf main bauen und testen automatisch Linux amd64,
 bevor latest veröffentlicht wird. Unveränderliche sha-<vollständiger-Commit>-
 Tags erlauben die Rückkehr zu einem früheren Stand.

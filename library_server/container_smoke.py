@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import io
+import zipfile
 import time
 import urllib.request
 
@@ -70,6 +72,15 @@ def main():
         project = api('import', {'name': 'demo.txt', 'data': base64.b64encode(text.encode()).decode()})['id']
         songs = api('library')['songs']
         assert len(songs) == 1 and songs[0]['project_id'] == project and songs[0]['kind'] == 'ultrastar'
+        portable = api('projects/' + project)['project']
+        bundle = io.BytesIO()
+        with zipfile.ZipFile(bundle, 'w', compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr('project.json', json.dumps(portable))
+        request = urllib.request.Request(BASE + '/api/v1/project-bundles', data=bundle.getvalue(),
+            headers={'Content-Type': 'application/octet-stream'})
+        with opener.open(request, timeout=10) as response:
+            assert json.load(response)['id'] == project
+        assert len(api('library')['projects']) == 1
         for kind in ('midi', 'lrc', 'chart'):
             job(project, kind)
         subprocess.run(['docker', 'restart', NAME], check=True)

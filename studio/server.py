@@ -275,6 +275,29 @@ def handler_for(library, config, manager, auth=None):
                 except (ValueError, KeyError, TypeError, UnicodeError) as error:
                     self.reply(400, {'error': str(error)[:500]})
                 return
+            if self.path == '/api/v1/project-bundles':
+                try:
+                    import tempfile
+                    import zipfile
+                    from studio.library_bundle import BUNDLE_LIMIT, import_bundle
+                    length = int(self.headers.get('Content-Length', '0'))
+                    if not 0 < length <= BUNDLE_LIMIT:
+                        raise ValueError('Invalid project bundle size')
+                    with tempfile.TemporaryDirectory(dir=library.root / '.staging') as folder:
+                        path = Path(folder) / 'project.zip'
+                        with path.open('xb') as stream:
+                            remaining = length
+                            while remaining:
+                                chunk = self.rfile.read(min(65536, remaining))
+                                if not chunk:
+                                    raise ValueError('Incomplete project bundle upload')
+                                stream.write(chunk)
+                                remaining -= len(chunk)
+                        identifier = import_bundle(library, path)
+                    self.reply(201, {'id': identifier})
+                except (ValueError, OSError, KeyError, TypeError, zipfile.BadZipFile) as error:
+                    self.reply(400, {'error': str(error)[:500]})
+                return
             if self.path == '/api/v1/packages':
                 try:
                     import tempfile
