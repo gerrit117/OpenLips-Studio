@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 from urllib.parse import urlparse
@@ -33,6 +34,9 @@ class GitHub:
         return response.json() if response.content else None
 
     def release(self, tag, assets, *, draft=False):
+        for asset in map(Path, assets):
+            if not re.fullmatch(r'OpenLips-Studio-[0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[0-9]+)?-(?:windows-x64-setup\.exe|macos-(?:arm64|x64)\.dmg|linux-x64\.tar\.gz)', asset.name):
+                raise ValueError('Main releases only accept system installation downloads: ' + asset.name)
         sha = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
         if self.call('GET', 'commits/main')['sha'] != sha:
             raise ValueError('Push this commit to main before releasing')
@@ -47,7 +51,7 @@ class GitHub:
                 raise ValueError('Release targets another commit')
         notes = Path('CHANGELOG.md').read_text(encoding='utf-8').split('\n## ', 2)[1]
         body = notes.split('\n', 1)[1].strip() + '\n\n'
-        body += ('Windows installer and portable build; native macOS Apple Silicon/Intel DMGs and Linux archives are added by the automated build. '
+        body += ('Windows setup, macOS Apple Silicon/Intel DMGs and Linux installation archive. '
                  'Large AI runtimes are optional downloads. Final media encoding currently requires Windows; macOS/Linux need compatible game media. '
                  'The Community website is not yet publicly available. No original game or song media are distributed.')
         if not existing:

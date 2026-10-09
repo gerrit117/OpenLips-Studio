@@ -74,6 +74,13 @@ def run(app, window, output):
             assert dialog.export_button.isEnabled()
             dialog.input.setText(source.name)
             assert dialog.grab().save(str(output / 'plugins.png'))
+            def accept_review():
+                from studio.guided_review import GuidedReviewDialog
+                review = app.activeModalWidget()
+                if isinstance(review, GuidedReviewDialog):
+                    assert review.grab().save(str(output / 'guided-review.png'))
+                    review.accept()
+            QTimer.singleShot(100, accept_review)
             dialog.apply_result()
             assert window.project.notes
             assert window.project.title == 'Plugin Test'

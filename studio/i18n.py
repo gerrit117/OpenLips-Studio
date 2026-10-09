@@ -5,6 +5,17 @@ _language = None
 
 # Source labels are retained as keys for compatibility with older UI code.
 CATALOG = {
+    'review.title': ('Review draft', 'Entwurf prüfen'),
+    'review.loop': ('Loop line', 'Zeile wiederholen'),
+    'review.both': ('Recording + notes', 'Aufnahme + Noten'),
+    'review.recording': ('Recording', 'Aufnahme'),
+    'review.notes': ('Note tones', 'Notentöne'),
+    'review.previous': ('Previous line', 'Vorherige Zeile'),
+    'review.next': ('Next line', 'Nächste Zeile'),
+    'review.checked': ('Reviewed', 'Geprüft'),
+    'review.apply': ('Apply corrections', 'Korrekturen übernehmen'),
+    'review.no_text': ('No lyric text assigned', 'Kein Songtext zugeordnet'),
+    'review.check': ('{count} short or unpitched notes to check', '{count} kurze Noten oder Noten ohne Tonhöhe prüfen'),
     'library.date': ('Last saved / built', 'Zuletzt gespeichert / erstellt'),
     'library.status': ('Status', 'Status'),
     'library.latest': ('Latest saved version', 'Neuester gespeicherter Stand'),

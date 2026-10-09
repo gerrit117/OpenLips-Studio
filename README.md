@@ -27,6 +27,17 @@ That's also why I want to open it up now. I'd love for OpenLips to become more t
 
 ## Help shape it
 
+AI and Basic Pitch drafts now open a line-by-line review before adoption. With
+timed lyrics, each line becomes a review segment: loop the recording and note
+tones, adjust their volumes separately, slow playback and edit notes directly.
+Corrections can be undone or cancelled without changing the original project.
+Reopen this view at **Tools > Charts > Review draft**. German/English word
+alignment is available for line-timed AI input; existing word-timed LRC files
+keep their supplied anchors. Basic Pitch uses supplied anchors without inventing
+missing word timestamps. No Apple Music subscription is needed.
+
+![Line-by-line draft review](assets/screenshots/studio-guided-review.png)
+
 Something doesn't work? Please [report it](https://github.com/gerrit117/OpenLips-Studio/issues). Tell us what you tried, what happened, which version you used and, if possible, how to reproduce it. Please don't attach copyrighted songs or original game files to public reports.
 
 Ideas, corrections to the documentation, testing on other systems and [pull requests](https://github.com/gerrit117/OpenLips-Studio/pulls) are all welcome. You don't need to write code to contribute. Early feedback is how this project gets better, not an interruption to its development.

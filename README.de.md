@@ -1,5 +1,16 @@
 [English](README.md) | [Deutsch](README.de.md)
 
+KI- und Basic-Pitch-Entwürfe lassen sich vor der Übernahme zeilenweise prüfen:
+Aufnahme und Notentöne in Schleife hören, getrennt in der Lautstärke regeln,
+langsamer abspielen und die Noten direkt bearbeiten. Änderungen sind rückgängig
+machbar; Abbrechen lässt das Original unverändert. Die Ansicht ist auch unter
+**Werkzeuge > Charts > Entwurf prüfen** erreichbar. Zeilengetimte KI-Eingaben
+können mit deutscher oder englischer Wortausrichtung verarbeitet werden.
+Vorhandene Wort-Zeitstempel bleiben erhalten. Basic Pitch nutzt vorhandene Anker,
+ohne fehlende Wort-Zeitstempel zu erfinden. Ein Apple-Music-Abo ist nicht nötig.
+
+![Zeilenweise Entwurfsprüfung](assets/screenshots/studio-guided-review-de.png)
+
 ![OpenLips](assets/branding/concept-01/openlips-logo-light.png#gh-light-mode-only)
 ![OpenLips](assets/branding/concept-01/openlips-logo-dark.png#gh-dark-mode-only)
 

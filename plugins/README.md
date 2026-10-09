@@ -18,6 +18,13 @@ Install the matching package using **Werkzeuge > Plugins > .opl installieren**,
 then explicitly enable it. Plugins execute with your user permissions, not in a
 security sandbox. Only use trusted code. Declared permissions are informational.
 
+Basic Pitch packages: [Windows](https://github.com/gerrit117/OpenLips-Studio/releases/download/v0.4.6-beta.3/Basic-Pitch-0.4.0-2-windows-x64.opl),
+[macOS Apple Silicon](https://github.com/gerrit117/OpenLips-Studio/releases/download/v0.4.6-beta.3/Basic-Pitch-0.4.0-2-macos-arm64.opl),
+[macOS Intel](https://github.com/gerrit117/OpenLips-Studio/releases/download/v0.4.6-beta.3/Basic-Pitch-0.4.0-2-macos-x64.opl),
+[Linux](https://github.com/gerrit117/OpenLips-Studio/releases/download/v0.4.6-beta.3/Basic-Pitch-0.4.0-2-linux-x64.opl).
+These existing downloads remain available for compatibility; new Studio releases
+list only the system installation files.
+
 See [the plugin developer guide](../docs/studio_plugins.md) for the manifest,
 process protocol, packaging, UI integration, trust model and extension limits.
 Generated models/runtimes/packages belong in ignored build/output directories,

@@ -175,7 +175,7 @@ class PluginDialog(QDialog):
         buttons = QHBoxLayout()
         self.run_button = QPushButton(qta.icon('fa5s.play', color='#cdd3d9'), tr('Analysieren'))
         self.cancel_button = QPushButton(qta.icon('fa5s.stop', color='#cdd3d9'), tr('Abbrechen'))
-        self.apply_button = QPushButton(qta.icon('fa5s.check', color='#cdd3d9'), tr('Noten übernehmen'))
+        self.apply_button = QPushButton(qta.icon('fa5s.headphones', color='#cdd3d9'), tr('review.title'))
         self.export_button = QPushButton(qta.icon('fa5s.file-export', color='#cdd3d9'), tr('MIDI speichern'))
         self.run_button.clicked.connect(self.run_plugin)
         self.cancel_button.clicked.connect(self.cancel)
@@ -260,7 +260,7 @@ class PluginDialog(QDialog):
         self.runtime_label.setVisible(self.runtime.isVisibleTo(self))
         self.status.setText(tr('Bereit') if self.plugin else tr('Zum Verwenden aktivieren'))
         self.run_button.setText(tr('Öffnen') if self.plugin and self.plugin.interactive else tr('Analysieren'))
-        self.apply_button.setText(tr('Song übernehmen') if self.plugin and self.plugin.result_type == 'song-import' else tr('Noten übernehmen'))
+        self.apply_button.setText(tr('Song übernehmen') if self.plugin and self.plugin.result_type == 'song-import' else tr('review.title'))
         self.update_buttons()
 
     def enable_selected(self, checked):
@@ -573,6 +573,12 @@ class PluginDialog(QDialog):
                 return
             self.accepted_song.emit(result)
         else:
+            from studio.guided_review import GuidedReviewDialog, review_draft
+            dialog = GuidedReviewDialog(review_draft(self.result, self.project), self)
+            if not dialog.exec():
+                return
+            self.result.notes = dialog.project.notes
+            self.result.warnings = dialog.project.warnings
             self.accepted_project.emit(self.result)
         self.accept()
 

@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLineEdit, QPushButton, QFileDialog, QComboBox, QCheckBox, QSpinBox,
     QTableWidget, QTableWidgetItem, QPlainTextEdit, QMessageBox, QDialogButtonBox, QProgressBar, QLabel)
 import qtawesome as qta
-from studio.i18n import tr
+from studio.i18n import tr, language
 from studio.model import load_project, pitch_name
 from studio.media import ffmpeg_encoder
 
@@ -21,6 +21,7 @@ class AiChartDialog(QDialog):
         available = self.screen().availableGeometry()
         self.resize(min(960, available.width() - 60), min(780, available.height() - 60))
         self.result_project, self.worker, self.downloader = None, None, None
+        self.reference_project = project
         self.cpu_retry, self.cancelled = False, False
         self.project_audio = project.audio_path
         self.folder = tempfile.TemporaryDirectory(prefix='openlips-ai-review-')
@@ -59,7 +60,7 @@ class AiChartDialog(QDialog):
         self.separate = QCheckBox(tr('ai.separate'))
         self.transcribe = QCheckBox(tr('ai.transcribe'))
         self.word_notes = QCheckBox(tr('ai.word_notes'))
-        self.word_notes.setChecked(True)
+        self.word_notes.setChecked(False)
         self.align_lrc = QCheckBox(tr('ai.align_lrc'))
         self.model = QComboBox()
         self.model.addItems(['tiny', 'base', 'small', 'medium', 'large-v3'])
@@ -67,6 +68,10 @@ class AiChartDialog(QDialog):
         self.language = QComboBox()
         for label, value in [(tr('ai.auto'), ''), ('English', 'en'), ('Deutsch', 'de')]:
             self.language.addItem(label, value)
+        self.language.setCurrentIndex(self.language.findData('de' if language() == 'de' else 'en'))
+        if self.lrc.text():
+            from studio.lrc import read_lrc
+            self.align_lrc.setChecked(all(not cue.words for cue in read_lrc(self.lrc.text()).cues))
         self.device = QComboBox()
         for label, value in [(tr('ai.auto'), 'auto'), ('CPU', 'cpu'), ('AMD Radeon (ROCm)', 'amd'),
                              ('NVIDIA CUDA', 'cuda'), ('Apple Metal', 'mps')]:
@@ -103,9 +108,9 @@ class AiChartDialog(QDialog):
         root.addWidget(self.log)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr('ai.cancel'))
-        self.accept_button = buttons.addButton(tr('ai.accept'), QDialogButtonBox.ButtonRole.AcceptRole)
+        self.accept_button = buttons.addButton(tr('review.title'), QDialogButtonBox.ButtonRole.AcceptRole)
         self.accept_button.setEnabled(False)
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self.review_result)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
         self.run.clicked.connect(self.start)
@@ -118,6 +123,23 @@ class AiChartDialog(QDialog):
         path, _ = QFileDialog.getOpenFileName(self, tr('Projekt oeffnen'), widget.text(), filter)
         if path:
             widget.setText(path)
+            if widget is self.lrc:
+                try:
+                    from studio.lrc import read_lrc
+                    self.align_lrc.setChecked(all(not cue.words for cue in read_lrc(path).cues))
+                except (ValueError, OSError):
+                    pass
+
+    def review_result(self):
+        if not self.result_project:
+            return
+        from studio.guided_review import GuidedReviewDialog, review_draft
+        candidate = review_draft(self.result_project, self.reference_project)
+        audio = Path(self.folder.name) / 'reference.wav'
+        dialog = GuidedReviewDialog(candidate, self, audio_path=str(audio) if audio.is_file() else None)
+        if dialog.exec():
+            self.result_project.notes = dialog.project.notes
+            self.accept()
 
     def start(self):
         if self.downloader and self.downloader.isRunning():

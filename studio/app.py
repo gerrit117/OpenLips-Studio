@@ -112,6 +112,7 @@ class StudioWindow(QMainWindow):
         charts.addAction(tr('batch.title'), self.import_ultrastar_batch)
         charts.addAction(tr('download.usdb'), self.open_usdb)
         charts.addAction(tr('ai.title'), self.ai_chart_dialog)
+        charts.addAction(self.action(tr('review.title'), 'fa5s.headphones', self.guided_review))
         charts.addAction(self.action(tr('chart.incomplete'), 'fa5s.search', self.review_chart))
         charts.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
         for label, callback in [(tr('lrc.import'), self.import_lrc),
@@ -510,6 +511,7 @@ class StudioWindow(QMainWindow):
             self.lyrics.setPlainText(result.get('plainLyrics') or '')
 
     def ai_chart_dialog(self):
+        self.stop()
         from studio.ai_dialog import AiChartDialog
         dialog = AiChartDialog(self.project, self)
         if dialog.exec() and dialog.result_project:
@@ -531,6 +533,7 @@ class StudioWindow(QMainWindow):
             self.changed()
 
     def plugins_dialog(self):
+        self.stop()
         from studio.plugin_dialog import PluginDialog
         dialog = PluginDialog(self.project, self)
         dialog.accepted_project.connect(self.apply_plugin_notes)
@@ -852,6 +855,17 @@ class StudioWindow(QMainWindow):
         if not self.loading and value != self.project.key_signature:
             self.snapshot()
             self.project.key_signature = value
+            self.changed()
+
+    def guided_review(self):
+        from studio.guided_review import GuidedReviewDialog
+        if not self.project.notes:
+            return
+        self.stop()
+        dialog = GuidedReviewDialog(self.project, self)
+        if dialog.exec() and dialog.project.notes != self.project.notes:
+            self.snapshot()
+            self.project.notes = dialog.project.notes
             self.changed()
 
     def choose_scale_pitch(self, index):

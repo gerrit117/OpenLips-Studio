@@ -68,6 +68,9 @@ jobs:
       - name: Package standalone Basic Pitch plugin
         run: python -m tools.package_basic_pitch_plugin
       - run: python -m pytest tests/test_studio.py tests/test_studio_timeline.py tests/test_studio_pages.py tests/test_studio_media.py tests/test_studio_release.py tests/test_studio_plugins.py tests/test_studio_tones.py tests/test_ai_runtime.py tests/test_ai_chart.py tests/test_ai_packaging.py tests/test_xenia_test_launcher.py tests/test_smart_pages.py tests/test_page_recording.py tests/test_lyric_timing.py tests/test_ultrastar_batch.py tests/test_community_client.py tests/test_community_page.py -q
+      - run: python -m pytest tests/test_guided_review.py tests/test_lyrics_search.py -q
+        env:
+          QT_QPA_PLATFORM: offscreen
         env:
           QT_QPA_PLATFORM: offscreen
           OPENLIPS_SMOKE_PLUGIN: release_assets/Basic-Pitch-0.4.0-2-${{ runner.os == 'Linux' && 'linux-x64' || runner.os == 'Windows' && 'windows-x64' || matrix.os == 'macos-14' && 'macos-arm64' || 'macos-x64' }}.opl
@@ -196,36 +199,24 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: studio-release-${{ matrix.os }}
-          path: release_assets/*
-          retention-days: 14
+          path: |
+            release_assets/OpenLips-Studio-*-windows-x64-setup.exe
+            release_assets/OpenLips-Studio-*-macos-*.dmg
+            release_assets/OpenLips-Studio-*-linux-x64.tar.gz
+          retention-days: 1
       - name: Preserve synthetic smoke diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: studio-diagnostics-${{ matrix.os }}
+          retention-days: 1
           path: |
             private/gui-plugin-smoke/*.txt
             private/gui-plugin-smoke/*.log
             private/gui-plugin-app-bundle-smoke/*.txt
             private/gui-plugin-app-bundle-smoke/*.log
-  amd-ai:
-    runs-on: windows-2022
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r requirements-ai-amd-windows.txt pyinstaller
-      - run: python -m tools.collect_runtime_notices --out build/amd-ai-licenses
-      - run: python -m PyInstaller --noconfirm AIWorker.spec
-      - run: python -m tools.package_ai_runtime --target windows-2022 --flavor amd
-      - uses: actions/upload-artifact@v4
-        with:
-          name: studio-release-amd-ai
-          path: release_assets/*
-          retention-days: 14
   release:
-    needs: [desktop, amd-ai]
+    needs: [desktop]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -249,8 +240,9 @@ jobs:
             if (!/^\d+\.\d+\.\d+(b\d+)?$/.test(version)) throw new Error('Invalid release version');
             const tag = 'v' + version.replace(/b(\d+)$/, '-beta.$1');
             const owner = context.repo.owner, repo = context.repo.repo;
-            const files = fs.readdirSync('release_assets').filter(name => /\.(zip|tar\.gz|opl|exe|dmg|sha256)$/.test(name));
-            if (files.length !== 32) throw new Error('Expected 16 binaries/archives and 16 checksum files (Studio, plugins, CPU/AMD AI engines, installers)');
+            const prefix = 'OpenLips-Studio-' + version.replace(/b(\d+)$/, '-beta.$1') + '-';
+            const files = ['windows-x64-setup.exe', 'macos-arm64.dmg', 'macos-x64.dmg', 'linux-x64.tar.gz'].map(name => prefix + name);
+            if (files.some(name => !fs.existsSync('release_assets/' + name))) throw new Error('Missing system installation download');
             let release;
             try {
               release = (await github.rest.repos.getReleaseByTag({owner, repo, tag})).data;
@@ -267,12 +259,12 @@ jobs:
                 // Keep Beta in the title/tag; GitHub prereleases cannot be Latest in the sidebar.
                 prerelease: false, draft: true,
                 body: fs.readFileSync('CHANGELOG.md', 'utf8').split(/^## /m)[1].split(/^## /m)[0].replace(/^[^\n]*\n/, '').trim() + '\n\n' +
-                      'Native Windows installer, macOS DMGs (Apple Silicon / Intel), and portable archives. Basic Pitch remains a separate .opl plugin. Optional OpenLips-AI archives contain the independent inference engine, installed automatically when needed. A separate Windows AMD ROCm engine accelerates separation and transcription on supported Radeon GPUs. No separate Python installation is needed. SwiftF0 and FFmpeg are bundled; larger separation/transcription models download on first use.\n\n' +
+                      'Windows setup, macOS DMGs (Apple Silicon / Intel), and the Linux installation archive. Optional AI engines download automatically when needed. Basic Pitch is available through the plugins directory.\n\n' +
                       'AI drafts require manual review, especially sung lyrics. Custom DLC has been played in Number One Hits on a modified Xbox 360; Xenia DLC discovery remains under investigation. Final media encoding currently requires Windows. macOS/Linux game export needs already-compatible media.\n\n' +
                       'Technical documentation: https://github.com/' + owner + '/' + repo + '/tree/' + tag + '/docs'
               })).data;
             }
-            const existing = (await github.rest.repos.listReleaseAssets({owner, repo, release_id: release.id})).data;
+            const existing = await github.paginate(github.rest.repos.listReleaseAssets, {owner, repo, release_id: release.id, per_page: 100});
             for (const name of files) {
               const old = existing.find(asset => asset.name === name);
               if (old) {

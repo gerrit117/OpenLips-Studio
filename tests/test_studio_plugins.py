@@ -111,9 +111,11 @@ def test_plugin_api_and_worker_selection(tmp_path, monkeypatch):
     assert plugin.create_command('request', 'output')[0] == str(worker)
 
 
-def test_dialog_process_success_and_explicit_acceptance(tmp_path):
+def test_dialog_process_success_and_explicit_acceptance(tmp_path, monkeypatch):
     from PySide6.QtCore import QSettings
     from studio.plugin_dialog import PluginDialog
+    from studio.guided_review import GuidedReviewDialog
+    monkeypatch.setattr(GuidedReviewDialog, 'exec', lambda d: (d.accept(), d.result())[1])
     app = qt_app()
     settings = plugin_settings(tmp_path / 'settings.ini')
     dialog = PluginDialog(StudioProject(), settings=settings)
