@@ -151,11 +151,12 @@ def import_ultrastar(path):
             if candidate.is_file():
                 return str(candidate)
         return ''
+    from studio.media_reference import metadata_reference
     return StudioProject(title=source.title or Path(path).stem, artist=source.artist or '',
                          bpm=source.bpm, source='UltraStar TXT',
                          audio_path=local_asset('AUDIO', 'MP3'), video_path=local_asset('VIDEO'),
                          cover_path=local_asset('COVER'),
-                         video_reference=source.metadata.get('VIDEO', ''),
+                         video_reference=metadata_reference(source.metadata),
                          warnings=source.warnings,
                          notes=[EditorNote(**{k: n[k] for k in ('time', 'length', 'pitch', 'text',
                                                'end_word', 'line_break_after')},
