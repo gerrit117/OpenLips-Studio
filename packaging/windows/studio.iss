@@ -23,6 +23,7 @@ DefaultGroupName=OpenLips Studio
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
+UsePreviousPrivileges=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
@@ -69,15 +70,13 @@ german.LegacyFailed=Die bisherige Installation konnte nicht deinstalliert werden
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
-  Key, OldDir, OldVersion, Uninstaller: String;
+  Key, OldDir, Uninstaller: String;
   ExitCode: Integer;
 begin
   Result := '';
   Key := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{68C8FD2C-BC7D-453E-9FD1-1D658E247AEA}_is1';
-  { Only migrate the known 0.3.0 per-user install, never recursively delete folders. }
+  { Migrate only the registered, known per-user location via its uninstaller. }
   if RegQueryStringValue(HKCU, Key, 'InstallLocation', OldDir) and
-     RegQueryStringValue(HKCU, Key, 'DisplayVersion', OldVersion) and
-     (OldVersion = '0.3.0-beta.1') and
      (CompareText(RemoveBackslashUnlessRoot(OldDir),
        ExpandConstant('{localappdata}\Programs\OpenLips Studio')) = 0) and
      (CompareText(RemoveBackslashUnlessRoot(OldDir), ExpandConstant('{app}')) <> 0) then

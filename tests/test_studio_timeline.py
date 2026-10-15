@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QPointF
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -48,5 +49,66 @@ def test_inline_lyric_field_commits_with_undo():
     assert note.text == 'Hello'
     window.undo()
     assert window.project.notes[0].text == 'Sing'
+    window.dirty = False
+    window.close()
+
+
+def test_follow_survives_cursor_scroll_and_pause():
+    app = QApplication.instance() or QApplication([])
+    window = StudioWindow()
+    window.replace_project(demo_project())
+    window.show()
+    app.processEvents()
+    window.seek(12)
+    assert window.timeline.origin > 0
+    assert window.follow_box.isChecked() and window.timeline.follow
+    window.toggle_play()
+    window.toggle_play()
+    window.toggle_play()
+    assert window.follow_box.isChecked() and window.timeline.follow
+    window.toggle_play()
+    window.scroll_to(1000)
+    assert window.follow_box.isChecked() and window.timeline.follow
+    event = QWheelEvent(QPointF(100,100), QPointF(100,100), QPoint(), QPoint(0,-120),
+                       Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                       Qt.ScrollPhase.NoScrollPhase, False)
+    window.timeline.wheelEvent(event)
+    assert window.follow_box.isChecked() and window.timeline.follow
+    window.toggle_play()
+    assert window.timeline.follow
+    window.toggle_play()
+    window.follow_box.setChecked(False)
+    window.toggle_play()
+    assert not window.timeline.follow
+    window.stop()
+    window.dirty = False
+    window.close()
+
+
+def test_playback_keys_do_not_steal_spaces_from_text_or_page_recording():
+    app = QApplication.instance() or QApplication([])
+    window = StudioWindow()
+    window.replace_project(demo_project())
+    window.show()
+    app.processEvents()
+    window.timeline.setFocus()
+    QTest.keyClick(window.timeline, Qt.Key.Key_Space)
+    assert window.playing
+    QTest.keyClick(window.timeline, Qt.Key.Key_Space)
+    assert not window.playing
+    window.title_edit.setFocus()
+    QTest.keyClick(window.title_edit, Qt.Key.Key_Space)
+    assert not window.playing
+    QTest.keyClick(window.title_edit, Qt.Key.Key_F5)
+    assert window.playing
+    QTest.keyClick(window.title_edit, Qt.Key.Key_F5)
+    assert not window.playing
+    window.record_pages_action.trigger()
+    window.timeline.setFocus()
+    QTest.keyClick(window.timeline, Qt.Key.Key_F5)
+    assert window.playing and window.record_pages_action.isChecked()
+    QTest.keyClick(window.timeline, Qt.Key.Key_F5)
+    assert not window.playing and window.record_pages_action.isChecked()
+    window.stop()
     window.dirty = False
     window.close()

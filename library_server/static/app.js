@@ -10,8 +10,12 @@ const words = {
   local:['Private library · Home network · No analytics','Private Bibliothek · Heimnetz · Keine Analyse'],
   search:['Search songs and artists','Songs und Interpreten suchen'],download:['Download','Herunterladen'],revoke:['Revoke','Trennen'],
   active:['Active','Aktiv'],revoked:['Revoked','Getrennt'],notes:['Notes','Noten'],media:['Media','Medien'],missing:['Not stored','Nicht vorhanden'],
-  imported:['Song imported','Song hinzugefügt'],saved:['Saved as a new project version','Als neuer Projektstand gespeichert'],queued:['Job queued','Auftrag gestartet'],
-  confirm:['Remove this project snapshot? Shared media and already built DLCs will be retained.','Diesen Projektstand entfernen? Gemeinsame Medien und bereits gebaute DLCs bleiben erhalten.'],
+  imported:['Song imported','Song hinzugefügt'],saved:['Project updated','Projekt aktualisiert'],queued:['Job queued','Auftrag gestartet'],
+  removeDlc:['Delete DLC package','DLC-Paket löschen'],delete:['Delete','Löschen'],
+  confirmDlc:['Delete this entire DLC package, including every song in the pack? Editable source projects are kept.',
+    'Dieses komplette DLC-Paket mit allen enthaltenen Songs löschen? Bearbeitbare Quellprojekte bleiben erhalten.'],
+  confirm:['Delete this project and its generated OLS/MIDI/LRC exports? Shared media and already built DLCs are kept.',
+    'Dieses Projekt und seine erzeugten OLS/MIDI/LRC-Exporte löschen? Gemeinsame Medien und bereits gebaute DLCs bleiben erhalten.'],
   uploading:['Uploading…','Wird hochgeladen …'],working:['Working…','Wird verarbeitet …'],pairing:['Pairing code (valid for 5 minutes, one device):','Kopplungscode (5 Minuten gültig, ein Gerät):'],
   fingerprint:['Certificate SHA-256','Zertifikat SHA-256'],tooLarge:['Use a song file up to 16 MiB.','Eine Songdatei bis 16 MiB verwenden.'],
   language:['Language','Sprache'],theme:['Switch dark/light mode','Dunklen/hellen Modus wechseln'],logout:['Sign out','Abmelden'],refresh:['Refresh','Aktualisieren'],
@@ -100,7 +104,9 @@ function renderOutputs() {
   $('output-rows').replaceChildren();
   for(const record of [...catalog.packages.map(p=>({...p,kind:'DLC',endpoint:'packages'})),...catalog.artifacts.map(a=>({...a,title:catalog.projects.find(p=>p.id===a.project_id)?.title || a.filename,endpoint:'artifacts'}))]) {
     const row=el('tr',null); for(const value of [record.title,kindName(record.kind),`${(record.bytes/1048576).toFixed(1)} MiB`]) row.append(el('td',value));
-    const cell=el('td',null); const button=action('download','',()=>download(`${record.endpoint}/${record.id}`,record.filename)); button.title=t('download');button.setAttribute('aria-label',t('download'));cell.append(button); row.append(cell); $('output-rows').append(row);
+    const cell=el('td',null); const button=action('download','',()=>download(`${record.endpoint}/${record.id}`,record.filename)); button.title=t('download');button.setAttribute('aria-label',t('download'));cell.append(button);
+    const remove=action('trash-2','',async()=>{if(!confirm(t(record.endpoint==='packages'?'confirmDlc':'delete')))return;await api(`${record.endpoint}/${record.id}`,{method:'DELETE'});clearSelection();await refresh();});
+    remove.classList.add('danger');remove.title=t('delete');remove.setAttribute('aria-label',t('delete'));cell.append(remove);row.append(cell); $('output-rows').append(row);
   } icons();
 }
 async function jobs() {
@@ -136,6 +142,9 @@ $('import').addEventListener('click',()=>$('song-file').click());
 $('import-dlc').addEventListener('click',()=>$('dlc-file').click());
 $('dlc-file').addEventListener('change',()=>run(async()=>{const file=$('dlc-file').files[0];if(!file)return;message(t('uploading'));const result=await api('packages',{method:'POST',body:file,headers:{'Content-Type':'application/octet-stream'}});await refresh();const song=catalog.songs.find(p=>p.package_id===result.id);if(song)await selectSong(song.key);document.querySelector('[data-tab="songs"]').click();message(t('dlcImported'));$('dlc-file').value='';}));
 $('download-package').addEventListener('click',()=>run(async()=>{const song=catalog.songs.find(p=>p.key===selectedSong);if(song?.package_id)await download('packages/'+song.package_id,song.filename);}));
+function clearSelection(){selected=null;selectedSong=null;details=null;$('song-controls').hidden=true;$('package-controls').hidden=true;$('song-title').textContent=t('select');$('song-artist').textContent='';if(coverURL)URL.revokeObjectURL(coverURL);coverURL=null;$('cover').src='/logo-light.png';}
+const removePackage=action('trash-2',t('removeDlc'),async()=>{const song=catalog.songs.find(p=>p.key===selectedSong);if(!song?.package_id||!confirm(t('confirmDlc')))return;await api('packages/'+song.package_id,{method:'DELETE'});clearSelection();await refresh();});
+removePackage.id='remove-package';removePackage.classList.add('danger');removePackage.querySelector('span').dataset.i18n='removeDlc';$('package-controls').append(removePackage);
 $('song-file').addEventListener('change',()=>run(async()=>{const file=$('song-file').files[0];if(!file)return;if(file.size>16*1048576)throw new Error(t('tooLarge'));message(t('uploading'));
   const bytes=new Uint8Array(await file.arrayBuffer());let binary='';for(let n=0;n<bytes.length;n+=8192)binary+=String.fromCharCode(...bytes.subarray(n,n+8192));
   const result=await api('import',{method:'POST',json:{name:file.name,data:btoa(binary)}});await refresh();await select(result.id);message(t('imported'));$('song-file').value='';
@@ -146,7 +155,7 @@ $('media-file').addEventListener('change',()=>run(async()=>{const file=$('media-
 const lyricButton=action('captions','LRC',()=>$('lyric-file').click());document.querySelector('.media-actions').append(lyricButton);
 $('lyric-file').addEventListener('change',()=>run(async()=>{const file=$('lyric-file').files[0];if(!file||!selected)return;if(file.size>2*1048576)throw new Error(t('tooLarge'));const text=await file.text();const bytes=new TextEncoder().encode(text);let binary='';for(let n=0;n<bytes.length;n+=8192)binary+=String.fromCharCode(...bytes.subarray(n,n+8192));const result=await api(`projects/${selected}/lyrics`,{method:'POST',json:{data:btoa(binary)}});await refresh();await select(result.id);message(t('saved'));$('lyric-file').value='';}));
 document.querySelectorAll('[data-job]').forEach(button=>button.addEventListener('click',()=>run(async()=>{if(!selected)return;await api('jobs',{method:'POST',json:{projects:[selected],kind:button.dataset.job}});await jobs();message(t('queued'));})));
-$('remove').addEventListener('click',()=>run(async()=>{if(!selected||!confirm(t('confirm')))return;await api('projects/'+selected,{method:'DELETE'});selected=null;selectedSong=null;details=null;$('song-controls').hidden=true;$('song-title').textContent=t('select');$('song-artist').textContent='';await refresh();message('');}));
+$('remove').addEventListener('click',()=>run(async()=>{if(!selected||!confirm(t('confirm')))return;await api('projects/'+selected,{method:'DELETE'});clearSelection();await refresh();message('');}));
 $('pair').addEventListener('click',()=>run(async()=>{const result=await api('pairing',{method:'POST',json:{}});$('pair-code').textContent=t('pairing')+' '+result.code;$('pair-code').hidden=false;setTimeout(()=>{$('pair-code').hidden=true;$('pair-code').textContent='';},result.expires_in*1000);}));
 language();
 run(async()=>{identity=await api('identity');if(identity.auth_required===false)await enter();else $('signin').hidden=false;});

@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.4.6 Beta 14
+
+- Update the same library project on Save, including workspace and external
+  project files; queue saves while another library operation is running.
+- Delete local or remote projects and DLC packages from library controls and
+  context menus. Keep shared media and external original files.
+- Optionally propagate explicit local deletions to linked remote libraries;
+  do not restore deleted entries during sync or delete unrelated remote content.
+- Sync edits to existing projects without creating new versions, and rebuild
+  cached DLCs after their source projects change.
+
+## 0.4.6 Beta 13
+
+- Always offer per-user or all-user installation during interactive Windows
+  upgrades. Migrate existing per-user installs when switching to Program Files,
+  retaining projects and settings.
+
+## 0.4.6 Beta 12
+
+- Drag the playback cursor continuously with audio preview, independently of the
+  beat grid, in the editor and guided review. Preserve selection and restore the
+  previous playback state after releasing the cursor.
+
+## 0.4.6 Beta 11
+
+- Update library artist, title and project status when saving an existing library
+  project, preserving its identity and package links without creating a copy.
+- Refresh outdated library metadata from saved project files.
+- Choose whether pasted passages include lyrics or only notes.
+
+## 0.4.6 Beta 10
+
+- Separate chart selection from playback seeking; use Shift-click to seek and
+  Ctrl-click endpoints to select complete chronological note ranges.
+- Create new notes at one grid subdivision and insert at the selected chart cell.
+- Move lyrics by word or shift the sequence from selection without losing text.
+- Highlight overlapping notes, select hidden layers and review/remove duplicates.
+- Ask whether pasted passages replace existing destination notes or overlay them.
+- Preserve pending artist and title edits when saving without leaving the field.
+
+## 0.4.6 Beta 9
+
+- Copy/paste selected note passages in the editor and guided draft review,
+  preserving relative timing, pitches, lyrics and melismas with fresh note IDs.
+- Paste at the playback cursor or an empty chart position, including across
+  projects; keep existing notes intact and make insertion undoable.
+
+## 0.4.6 Beta 8
+
+- Keep cursor following active during playback and across pause/resume; distinguish
+  automatic scrollbar updates from manual navigation.
+- Add F5 play/pause in the editor, lyric timing and guided review. Space toggles
+  editor playback outside recording and retains its timing/page recording role.
+
+## 0.4.6 Beta 7
+
+- Add a persistent beat grid with manual/estimated BPM, independent phase offset,
+  subdivisions, triplets and audible ticks in the editor and review workflows.
+- Cut selected notes at grid lines, quantize boundaries and optionally trim
+  monophonic overlaps without changing source media.
+- Link consecutive notes as one melisma without duplicating the lyric word.
+- Create lyric-timing grid drafts and snap recorded lyric taps when enabled.
+
 ## 0.4.6 Beta 6
 
 - Review AI and Basic Pitch drafts one lyric line at a time, with loop playback,

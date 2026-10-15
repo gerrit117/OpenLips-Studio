@@ -42,6 +42,8 @@ class StudioWindow(QMainWindow):
         self.rate = 1.0
         from studio.tone_preview import TonePreview
         self.tones = TonePreview(self)
+        from studio.beat_dialog import GridMetronome
+        self.metronome = GridMetronome(self)
         self.tones.failed.connect(lambda message: self.statusBar().showMessage(message))
         self.sounding_note = None
         self.player = QMediaPlayer(self)
@@ -112,8 +114,10 @@ class StudioWindow(QMainWindow):
         charts.addAction(tr('batch.title'), self.import_ultrastar_batch)
         charts.addAction(tr('download.usdb'), self.open_usdb)
         charts.addAction(tr('ai.title'), self.ai_chart_dialog)
+        charts.addAction(self.action(tr('beat.title'), 'fa5s.th', self.beat_grid_dialog))
         charts.addAction(self.action(tr('review.title'), 'fa5s.headphones', self.guided_review))
         charts.addAction(self.action(tr('chart.incomplete'), 'fa5s.search', self.review_chart))
+        charts.addAction(self.action(tr('notes.conflicts'),'fa5s.layer-group',self.review_conflicts))
         charts.addAction(tr('Alle Noten zeitlich verschieben'), self.shift_all_notes)
         for label, callback in [(tr('lrc.import'), self.import_lrc),
                                (tr('Lyrics suchen'), self.search_lyrics),
@@ -156,6 +160,9 @@ class StudioWindow(QMainWindow):
             action.setChecked(ui_language() == code)
             action.triggered.connect(lambda checked=False, value=code: self.change_language(value))
         edit = self.menuBar().addMenu(tr('Bearbeiten'))
+        edit.addAction(self.action(tr('notes.copy'), 'fa5s.copy', self.copy_notes, QKeySequence.StandardKey.Copy))
+        edit.addAction(self.action(tr('notes.paste'), 'fa5s.paste', self.paste_notes, QKeySequence.StandardKey.Paste))
+        edit.addSeparator()
         self.undo_action = self.action(tr('Rueckgaengig'), 'fa5s.undo', self.undo, QKeySequence.StandardKey.Undo)
         self.redo_action = self.action(tr('Wiederholen'), 'fa5s.redo', self.redo, QKeySequence.StandardKey.Redo)
         self.delete_action = self.action(tr('Note loeschen'), 'fa5s.trash-alt', self.delete_note, QKeySequence.StandardKey.Delete)
@@ -326,6 +333,18 @@ class StudioWindow(QMainWindow):
         self.lyrics.customContextMenuRequested.connect(self.lyrics_context_menu)
         side.addWidget(QLabel(tr('Songtext')))
         side.addWidget(self.lyrics, 1)
+        shift_row = QHBoxLayout()
+        self.lyric_shift_mode = QComboBox()
+        self.lyric_shift_mode.addItem(tr('lyrics.one_word'),False)
+        self.lyric_shift_mode.addItem(tr('lyrics.suffix'),True)
+        shift_row.addWidget(self.lyric_shift_mode,1)
+        for key,icon,direction in [('lyrics.left','fa5s.arrow-left',-1),('lyrics.right','fa5s.arrow-right',1)]:
+            button = QPushButton(qta.icon(icon,color='#cdd3d9'),'')
+            button.setToolTip(tr(key))
+            button.setFixedSize(36,30)
+            button.clicked.connect(lambda checked=False,d=direction:self.timeline.shift_lyrics(d,self.lyric_shift_mode.currentData()))
+            shift_row.addWidget(button)
+        side.addLayout(shift_row)
         self.syllables = QCheckBox(tr('Silben mit | trennen'))
         side.addWidget(self.syllables)
         language = QHBoxLayout()
@@ -362,6 +381,7 @@ class StudioWindow(QMainWindow):
         self.play_button.setToolTip(tr('Wiedergabe / Pause'))
         self.play_button.setFixedWidth(44)
         self.play_button.clicked.connect(self.toggle_play)
+        self.play_button.setToolTip(tr('transport.toggle_tip'))
         self.stop_button = QPushButton(qta.icon('fa5s.stop', color='#cdd3d9'), '')
         self.stop_button.setToolTip(tr('Stopp'))
         self.stop_button.clicked.connect(self.stop)
@@ -373,11 +393,12 @@ class StudioWindow(QMainWindow):
         transport.addWidget(self.clock_label)
         self.follow_box = QCheckBox(tr('Cursor folgen'))
         self.follow_box.setChecked(True)
-        self.follow_box.toggled.connect(lambda v: setattr(self.timeline, 'follow', v))
+        self.follow_box.toggled.connect(self.set_follow)
         transport.addWidget(self.follow_box)
         snap = QCheckBox(tr('Raster'))
         snap.setChecked(True)
-        snap.toggled.connect(lambda v: setattr(self.timeline, 'snap', v))
+        self.snap_check = snap
+        snap.toggled.connect(self.set_grid_snap)
         transport.addWidget(snap)
         self.hear_notes = QCheckBox(tr('tone.playback'))
         self.hear_notes.toggled.connect(self.toggle_note_tones)
@@ -438,6 +459,9 @@ class StudioWindow(QMainWindow):
         self.timeline.edited.connect(self.changed)
         self.timeline.edit_text.connect(self.focus_text)
         self.timeline.seek.connect(self.seek)
+        self.timeline.scrub_started.connect(self.begin_scrub)
+        self.timeline.scrub_moved.connect(self.scrub_to)
+        self.timeline.scrub_finished.connect(self.end_scrub)
         self.statusBar().showMessage(tr('Bereit'))
         self.lyrics.textChanged.connect(self.draft_changed)
 
@@ -523,6 +547,9 @@ class StudioWindow(QMainWindow):
             self.project.warnings = result.warnings
             if result.lyric_reference:
                 self.project.lyric_reference = result.lyric_reference
+            if result.beat_enabled:
+                from studio.beat_dialog import copy_grid
+                copy_grid(result, self.project)
             if result.draft_lyrics:
                 self.project.draft_lyrics = result.draft_lyrics
             self.project.audio_path = result.audio_path
@@ -688,6 +715,9 @@ class StudioWindow(QMainWindow):
         self.project.notes = copy.deepcopy(result.notes)
         self.project.source = result.source
         self.project.warnings = list(result.warnings)
+        if result.beat_enabled:
+            from studio.beat_dialog import copy_grid
+            copy_grid(result, self.project)
         if not self.project.audio_path and not self.project.video_path:
             self.project.audio_path = result.audio_path
             self.configure_media()
@@ -704,6 +734,25 @@ class StudioWindow(QMainWindow):
         self.dirty = True
         self.screens.setCurrentIndex(1)
         self.refresh()
+
+    def copy_notes(self):
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QLineEdit, QTextEdit, QPlainTextEdit)):
+            focus.copy()
+        elif self.workspace_tabs.currentWidget() is self.screens:
+            self.timeline.copy_notes()
+
+    def paste_notes(self):
+        focus = QApplication.focusWidget()
+        if isinstance(focus, (QLineEdit, QTextEdit, QPlainTextEdit)):
+            focus.paste()
+        elif self.workspace_tabs.currentWidget() is self.screens:
+            self.timeline.paste_notes()
+
+    def set_grid_snap(self, enabled):
+        self.timeline.snap = enabled
+        if not self.loading:
+            self.project.beat_snap = enabled
 
     def refresh(self):
         self.loading = True
@@ -733,6 +782,9 @@ class StudioWindow(QMainWindow):
         self.reference_label.setText(' / '.join(names) or tr('Keine Referenz'))
         self.reference_label.setToolTip('\n'.join(p for p in (self.project.audio_path, self.project.video_path) if p))
         self.timeline.set_project(self.project)
+        if self.project.beat_enabled:
+            self.timeline.snap = self.project.beat_snap
+        self.snap_check.setChecked(self.timeline.snap)
         self.undo_action.setEnabled(bool(self.history))
         self.redo_action.setEnabled(bool(self.future))
         self.smart_pages_action.setEnabled(bool(self.project.notes))
@@ -863,9 +915,21 @@ class StudioWindow(QMainWindow):
             return
         self.stop()
         dialog = GuidedReviewDialog(self.project, self)
-        if dialog.exec() and dialog.project.notes != self.project.notes:
+        if dialog.exec() and dialog.project != self.project:
             self.snapshot()
             self.project.notes = dialog.project.notes
+            from studio.beat_dialog import copy_grid
+            copy_grid(dialog.project, self.project)
+            self.changed()
+
+    def beat_grid_dialog(self):
+        from studio.beat_dialog import BeatGridDialog
+        self.stop()
+        dialog = BeatGridDialog(self.project, self)
+        if dialog.exec():
+            self.snapshot()
+            self.project = dialog.project
+            self.timeline.snap = self.project.beat_snap
             self.changed()
 
     def choose_scale_pitch(self, index):
@@ -880,11 +944,7 @@ class StudioWindow(QMainWindow):
         self.text_edit.selectAll()
 
     def add_note(self):
-        self.snapshot()
-        n = EditorNote(self.position, 60 / self.project.bpm, 60)
-        self.project.notes.append(n)
-        self.timeline.selected_id = n.id
-        self.changed()
+        self.timeline.create_note()
 
     def delete_note(self):
         self.timeline.delete_selected()
@@ -970,6 +1030,15 @@ class StudioWindow(QMainWindow):
         if not isinstance(project, StudioProject):
             raise ValueError('Importer must return a StudioProject')
         project.validate()
+        if path:
+            from studio.library_page import configured_library
+            root = configured_library()
+            if root:
+                from studio.library import Library
+                try:
+                    Library(root).bind_source(project,path)
+                except (OSError,ValueError):
+                    pass
         self.stop()
         self.record_pages_action.setChecked(False)
         self.project, self.path = project, path
@@ -1029,7 +1098,36 @@ class StudioWindow(QMainWindow):
 
     def library_busy(self):
         page = getattr(self, 'library_page', None)
-        return bool(page and page.worker and page.worker.isRunning())
+        return bool(getattr(self, 'library_save_queue', {}) or
+                    (page and page.worker and page.worker.isRunning()))
+
+    def queue_library_save(self, root, path, project, *, new_copy=False):
+        if not hasattr(self, 'library_save_queue'):
+            self.library_save_queue = {}
+            self.library_save_timer = QTimer(self)
+            self.library_save_timer.setInterval(100)
+            self.library_save_timer.timeout.connect(self.flush_library_saves)
+        key = (str(root),str(path))
+        previous = self.library_save_queue.get(key)
+        self.library_save_queue[key] = (copy.deepcopy(project),new_copy or bool(previous and previous[1]))
+        self.library_save_timer.start()
+        self.flush_library_saves()
+
+    def flush_library_saves(self):
+        page = self.library_page
+        if page and page.worker and page.worker.isRunning():
+            return
+        if not self.library_save_queue:
+            self.library_save_timer.stop()
+            return
+        root,path = next(iter(self.library_save_queue))
+        project,new_copy = self.library_save_queue.pop((root,path))
+        from studio.library import Library
+        library = Library(root)
+        if page:
+            page.local.task(lambda progress: library.save_source(project,path,progress,new_copy=new_copy))
+        else:
+            library.save_source(project,path,new_copy=new_copy)
 
     def add_library_tab(self):
         from studio.library_workspace import LibraryWorkspace
@@ -1126,6 +1224,7 @@ class StudioWindow(QMainWindow):
             self.attempt(lambda: self.replace_project(load_project(path), Path(path)))
 
     def save(self, *, choose_location=False):
+        self.edit_metadata()
         from studio.library_page import configured_library
         root = configured_library()
         path = str(self.path) if self.path else ''
@@ -1141,12 +1240,16 @@ class StudioWindow(QMainWindow):
         try:
             self.project.draft_lyrics = self.lyrics.toPlainText()
             save_project(self.project, path)
+            managed = False
+            if root:
+                from studio.library import Library
+                managed = Library(root).refresh_project(path, self.project)
             self.path, self.dirty = Path(path), False
             self.refresh()
-            if root and self.library_page and not self.library_busy():
-                project = copy.deepcopy(self.project)
-                local = self.library_page.local
-                local.task(lambda progress: local.library.add_project(project, progress))
+            if managed and self.library_page:
+                self.library_page.local.refresh()
+            elif root:
+                self.queue_library_save(root, path, self.project, new_copy=choose_location)
             return True
         except Exception as exc:
             self.error(exc)
@@ -1366,7 +1469,22 @@ class StudioWindow(QMainWindow):
             return
         DlcDialog(self.project, self).exec()
 
+    def review_conflicts(self):
+        from studio.note_conflicts import NoteConflictsDialog
+        if self.playing:
+            self.toggle_play()
+        dialog = NoteConflictsDialog(self.project,self)
+        if dialog.exec() and dialog.project != self.project:
+            self.snapshot()
+            self.project = dialog.project
+            self.changed()
+
     def review_chart(self, *_, require_text=True, require_pitch=True):
+        from studio.note_editing import conflicts
+        if conflicts(self.project):
+            self.review_conflicts()
+            if conflicts(self.project):
+                return False
         from studio.model import incomplete_notes
         if not incomplete_notes(self.project, require_text=require_text, require_pitch=require_pitch):
             self.statusBar().showMessage(tr('chart.complete'))
@@ -1459,13 +1577,17 @@ class StudioWindow(QMainWindow):
             self.statusBar().showMessage(tr('pages.cleared'))
 
     def eventFilter(self, watched, event):
-        if (event.type() == QEvent.Type.KeyPress and self.record_pages_action.isChecked()
+        if (event.type() == QEvent.Type.KeyPress
                 and isinstance(watched, QWidget) and watched.window() is self
                 and self.workspace_tabs.currentWidget() is self.screens
                 and QApplication.activeModalWidget() is None
                 and QApplication.activePopupWidget() is None
                 and event.modifiers() == Qt.KeyboardModifier.NoModifier):
-            if event.key() == Qt.Key.Key_Escape:
+            if event.key() == Qt.Key.Key_F5:
+                if not event.isAutoRepeat():
+                    self.toggle_play()
+                return True
+            if event.key() == Qt.Key.Key_Escape and self.record_pages_action.isChecked():
                 self.record_pages_action.setChecked(False)
                 return True
             focus = QApplication.focusWidget()
@@ -1475,7 +1597,7 @@ class StudioWindow(QMainWindow):
                 return super().eventFilter(watched, event)
             if event.key() == Qt.Key.Key_Space:
                 if not event.isAutoRepeat():
-                    if self.playing:
+                    if self.record_pages_action.isChecked() and self.playing:
                         self.tick()
                         if self.playing:
                             self.record_page_switch()
@@ -1517,6 +1639,33 @@ class StudioWindow(QMainWindow):
             return
         CommunityExportDialog(self.project, self).exec()
 
+    def begin_scrub(self):
+        self.scrub_resume = self.playing
+        if self.playing:
+            self.toggle_play()
+
+    def scrub_to(self, seconds):
+        self.seek(seconds)
+        if self.position + self.project.reference_offset >= 0:
+            if self.project.audio_path:
+                self.player.play()
+            if self.project.video_path:
+                self.video_player.play()
+        if self.hear_notes.isChecked():
+            note = next((n for n in self.project.ordered() if n.pitch_assigned and
+                         n.time <= self.position < n.time+n.length), None)
+            if note:
+                self.tones.play(note.pitch, .15)
+
+    def end_scrub(self):
+        self.player.pause()
+        self.video_player.pause()
+        self.tones.stop()
+        if self.scrub_resume:
+            self.toggle_play()
+        else:
+            self.update_cursor()
+
     def seek(self, seconds):
         self.tones.stop()
         self.sounding_note = None
@@ -1524,6 +1673,7 @@ class StudioWindow(QMainWindow):
         self.clock_start = time.monotonic() - self.position / self.rate
         media_position = max(0, round((self.position + self.project.reference_offset) * 1000))
         self.player.setPosition(media_position)
+        self.metronome.stop()
         self.video_player.setPosition(media_position)
         self.update_cursor()
 
@@ -1534,10 +1684,12 @@ class StudioWindow(QMainWindow):
             self.player.pause()
             self.video_player.pause()
             self.tones.stop()
+            self.metronome.stop()
             self.sounding_note = None
         else:
             if self.position >= max(self.project.duration, self.media_duration()):
                 self.seek(0)
+            self.timeline.follow = self.follow_box.isChecked()
             self.playing = True
             self.clock_start = time.monotonic() - self.position / self.rate
             self.seek(self.position)
@@ -1551,6 +1703,7 @@ class StudioWindow(QMainWindow):
 
     def stop(self):
         self.tones.stop()
+        self.metronome.stop()
         self.sounding_note = None
         self.playing = False
         if hasattr(self, 'timer'):
@@ -1579,15 +1732,23 @@ class StudioWindow(QMainWindow):
         if self.position > max(self.project.duration, self.media_duration()) + .1:
             self.toggle_play()
         self.update_note_tones()
+        if self.playing:
+            self.metronome.tick(self.project, self.position)
         self.update_cursor()
 
     def update_cursor(self):
         self.timeline.set_cursor(self.position)
         self.clock_label.setText(f'{int(self.position // 60):02d}:{self.position % 60:06.3f}')
+        blocked = self.scroll.blockSignals(True)
         self.scroll.setValue(round(self.timeline.origin / max(1, self.project.duration) * 100000))
+        self.scroll.blockSignals(blocked)
+
+    def set_follow(self, enabled):
+        self.timeline.follow = enabled
+        if enabled:
+            self.update_cursor()
 
     def scroll_to(self, value):
-        self.follow_box.setChecked(False)
         self.timeline.origin = value / 100000 * max(1, self.project.duration)
         self.timeline.update()
 
@@ -1638,6 +1799,7 @@ def main():
     parser.add_argument('--smoke-test', type=Path, help='Write a synthetic UI screenshot and exit')
     parser.add_argument('--smoke-plugin', type=Path, help='Test bundled Basic Pitch and GUI acceptance with generated tones')
     parser.add_argument('--smoke-dlc', type=Path, help='Test bundled Windows encoders and STFS with synthetic media')
+    parser.add_argument('--smoke-beat', type=Path, help='Test bundled tempo detection with synthetic beats')
     parser.add_argument('--smoke-community', action='store_true', help='Capture the community sign-in tab without network requests')
     parser.add_argument('--smoke-xbox', action='store_true', help='Capture Xbox transfer without connecting')
     parser.add_argument('--smoke-library', type=Path, help='Capture an isolated local library without changing preferences')
@@ -1678,7 +1840,10 @@ def main():
     if args.project:
         window.attempt(lambda: window.replace_project(load_project(args.project), args.project))
     window.show()
-    if args.smoke_dlc:
+    if args.smoke_beat:
+        from studio.beat_smoke import run
+        QTimer.singleShot(150, lambda: run(app, window, args.smoke_beat))
+    elif args.smoke_dlc:
         from studio.dlc_smoke import run
         QTimer.singleShot(150, lambda: run(app, window, args.smoke_dlc))
     elif args.smoke_plugin:

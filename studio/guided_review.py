@@ -42,7 +42,8 @@ def review_lines(project):
     if group:
         groups.append(group)
     return [(g[0].time, max(n.time + n.length for n in g),
-             ' '.join(n.text for n in g if n.text.strip())) for g in groups]
+             ''.join(n.text.replace('~', '') + (' ' if n.end_word else '') for n in g).strip())
+            for g in groups]
 
 
 def review_draft(result, reference):
@@ -123,6 +124,8 @@ class GuidedReviewDialog(QDialog):
         self.player = QMediaPlayer(self)
         self.player.setAudioOutput(self.audio)
         self.tones = TonePreview(self)
+        from studio.beat_dialog import GridMetronome
+        self.metronome = GridMetronome(self)
         self.offset = 0 if audio_path else project.reference_offset
         source = audio_path or project.audio_path or project.video_path
         if source:
@@ -146,6 +149,10 @@ class GuidedReviewDialog(QDialog):
         transport.addWidget(self.speed)
         root.addLayout(transport)
         controls = QHBoxLayout()
+        grid = QPushButton(qta.icon('fa5s.th', color='#cdd3d9'), '')
+        grid.setToolTip(tr('beat.title'))
+        grid.clicked.connect(self.configure_grid)
+        controls.addWidget(grid)
         for label, icon, callback in [('review.previous', 'fa5s.chevron-left', lambda: self.navigate(-1)),
                                      ('review.next', 'fa5s.chevron-right', lambda: self.navigate(1)),
                                      ('Rueckgaengig', 'fa5s.undo', self.undo),
@@ -170,12 +177,18 @@ class GuidedReviewDialog(QDialog):
         self.timeline.selected.connect(self.preview_selected)
         self.timeline.pitch_preview.connect(lambda pitch: self.preview_tone(pitch))
         self.timeline.seek.connect(self.seek)
+        self.timeline.scrub_started.connect(self.begin_scrub)
+        self.timeline.scrub_moved.connect(self.scrub_to)
+        self.timeline.scrub_finished.connect(self.end_scrub)
         self.list.currentRowChanged.connect(self.select_line)
         self.timer = QTimer(self)
         self.timer.setInterval(20)
         self.timer.timeout.connect(self.tick)
-        for key, callback in [('Space', self.toggle_play), ('Ctrl+Z', self.undo), ('Ctrl+Shift+Z', self.redo)]:
+        self.play.setToolTip(tr('transport.toggle_tip'))
+        for key, callback in [('Space', self.toggle_play), ('F5', self.toggle_play), ('Ctrl+Z', self.undo), ('Ctrl+Shift+Z', self.redo)]:
             shortcut = QShortcut(QKeySequence(key), self)
+            if key in ('Space', 'F5'):
+                shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback)
         if self.lines:
             self.list.setCurrentRow(0)
@@ -197,8 +210,12 @@ class GuidedReviewDialog(QDialog):
         self.seek(self.position)
 
     def refresh(self):
+        from studio.beat_dialog import copy_grid
+        copy_grid(self.project, self.view)
+        self.timeline.snap = self.project.beat_enabled and self.project.beat_snap
         self.view.notes = [n for n in self.project.ordered()
                            if n.time < self.end and n.time + n.length > self.start]
+        self.visible_ids = {n.id for n in self.view.notes}
         self.timeline.set_project(self.view)
         self.timeline.origin = max(0, self.start - .25)
         self.timeline.scale = max(12, (self.timeline.width() - 85) / max(1, self.end - self.start + .5))
@@ -212,33 +229,42 @@ class GuidedReviewDialog(QDialog):
             self.refresh()
 
     def snapshot(self):
-        self.history.append(copy.deepcopy(self.project.notes))
+        self.history.append(copy.deepcopy(self.project))
         self.history = self.history[-100:]
         self.future.clear()
 
     def edited(self):
         # Timeline replaces its filtered list when merging/deleting notes.
-        visible = {n.id for n in self.project.notes if n.time < self.end and n.time + n.length > self.start}
-        original = {n.id for n in self.view.notes}
-        self.project.notes = [n for n in self.project.notes if n.id not in visible or n.id in original]
+        updates = {n.id: n for n in self.view.notes}
+        self.project.notes = [updates.get(n.id, n) for n in self.project.notes
+                              if n.id not in self.visible_ids or n.id in updates]
         known = {n.id for n in self.project.notes}
         self.project.notes.extend(n for n in self.view.notes if n.id not in known)
         self.refresh()
         self.reviewed.discard(self.list.currentRow())
         self.checked.setChecked(False)
 
+    def configure_grid(self):
+        from studio.beat_dialog import BeatGridDialog
+        self.stop()
+        dialog = BeatGridDialog(self.project, self, identifiers=self.visible_ids)
+        if dialog.exec():
+            self.snapshot()
+            self.project = dialog.project
+            self.refresh()
+
     def undo(self):
         if self.history:
             self.stop()
-            self.future.append(copy.deepcopy(self.project.notes))
-            self.project.notes = self.history.pop()
+            self.future.append(copy.deepcopy(self.project))
+            self.project = self.history.pop()
             self.refresh()
 
     def redo(self):
         if self.future:
             self.stop()
-            self.history.append(copy.deepcopy(self.project.notes))
-            self.project.notes = self.future.pop()
+            self.history.append(copy.deepcopy(self.project))
+            self.project = self.future.pop()
             self.refresh()
 
     def mark_checked(self, value):
@@ -264,6 +290,25 @@ class GuidedReviewDialog(QDialog):
         if not self.playing:
             self.tones.play(pitch, .4)
 
+    def begin_scrub(self):
+        self.scrub_resume = self.playing
+        self.stop()
+
+    def scrub_to(self, seconds):
+        self.seek(seconds)
+        if not self.player.source().isEmpty() and self.position+self.offset >= 0:
+            self.player.play()
+        if self.mode.currentData() != 'recording':
+            note = next((n for n in self.view.ordered() if n.pitch_assigned and
+                         n.time <= self.position < n.time+n.length), None)
+            if note:
+                self.tones.play(note.pitch, .15)
+
+    def end_scrub(self):
+        self.stop()
+        if self.scrub_resume:
+            self.toggle_play()
+
     def seek(self, seconds):
         self.position = max(0, seconds)
         self.clock = time.monotonic()
@@ -272,6 +317,7 @@ class GuidedReviewDialog(QDialog):
         self.sounding = None
         self.tones.stop()
         self.timeline.set_cursor(self.position)
+        self.metronome.stop()
 
     def set_mode(self):
         self.audio.setMuted(self.mode.currentData() == 'notes')
@@ -313,6 +359,7 @@ class GuidedReviewDialog(QDialog):
                 self.stop()
             return
         self.timeline.set_cursor(self.position)
+        self.metronome.tick(self.project, self.position)
         note = next((n for n in self.view.ordered() if n.pitch_assigned and
                      n.time <= self.position < n.time + n.length), None)
         identity = (note.id, note.pitch) if note else None
@@ -327,6 +374,7 @@ class GuidedReviewDialog(QDialog):
         self.timer.stop()
         self.player.pause()
         self.tones.stop()
+        self.metronome.stop()
         self.sounding = None
         self.play.setIcon(qta.icon('fa5s.play', color='#cdd3d9'))
 

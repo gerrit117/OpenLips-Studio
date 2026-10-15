@@ -21,6 +21,21 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
+def test_f5_pauses_recording_without_creating_timestamp(app):
+    dialog = TimingDialog(StudioProject(draft_lyrics='one two'))
+    dialog.show()
+    app.processEvents()
+    dialog.record.setChecked(True)
+    assert dialog.playing
+    QTest.keyClick(dialog.table, Qt.Key.Key_F5)
+    assert not dialog.playing and dialog.record.isChecked()
+    QTest.keyClick(dialog.table, Qt.Key.Key_Space)
+    assert dialog.notes == []
+    QTest.keyClick(dialog.table, Qt.Key.Key_F5)
+    assert dialog.playing and dialog.record.isChecked()
+    dialog.reject()
+
+
 def test_word_and_explicit_syllable_units():
     units = text_units('Hel|lo world\nNext line','syllable')
     assert [(u.text,u.end_word,u.end_line) for u in units] == [

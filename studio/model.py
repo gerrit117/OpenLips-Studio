@@ -105,10 +105,21 @@ class StudioProject:
     year: str = ''
     created_at: str = ''
     modified_at: str = ''
+    beat_offset: float = 0.0
+    beat_division: int = 4
+    beat_enabled: bool = False
+    beat_snap: bool = True
+    beat_ticks: bool = False
 
     def validate(self):
         if not math.isfinite(self.bpm) or not 1 <= self.bpm <= 1000:
             raise ValueError("BPM must be in 1..1000")
+        if not math.isfinite(self.beat_offset) or abs(self.beat_offset) > 86400:
+            raise ValueError('Invalid beat grid offset')
+        if type(self.beat_division) is not int or self.beat_division not in (1, 2, 3, 4, 6, 8):
+            raise ValueError('Invalid beat subdivision')
+        if any(not isinstance(v, bool) for v in (self.beat_enabled, self.beat_snap, self.beat_ticks)):
+            raise ValueError('Invalid beat grid switches')
         if self.page_layout_mode not in ('source', 'automatic', 'manual'):
             raise ValueError('Invalid page layout mode')
         if not math.isfinite(self.reference_offset) or abs(self.reference_offset) > 86400:
@@ -144,7 +155,7 @@ class StudioProject:
         return max((n.time + n.length for n in self.notes), default=0.0)
 
     def lyric_text(self):
-        return ''.join(n.text + ('\n' if n.line_break_after else ' ' if n.end_word else '')
+        return ''.join(n.text.replace('~', '') + ('\n' if n.line_break_after else ' ' if n.end_word else '')
                        for n in self.ordered()).rstrip()
 
     def to_payload(self):

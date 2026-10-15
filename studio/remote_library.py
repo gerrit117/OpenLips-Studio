@@ -70,7 +70,8 @@ class RemoteLibraryPage(QWidget):
                                     ('remote.upload', 'fa5s.upload', self.upload_current),
                                     ('remote.upload_dlc', 'fa5s.box', self.upload_packages),
                                     ('remote.chart', 'fa5s.file-export', self.export_chart),
-                                    ('xbox.title', 'fa5s.upload', self.copy_package)]):
+                                    ('xbox.title', 'fa5s.upload', self.copy_package),
+                                    ('library.delete', 'fa5s.trash-alt', self.delete_selected)]):
             if index == 3:
                 layout.addLayout(row)
                 row = QHBoxLayout()
@@ -89,6 +90,12 @@ class RemoteLibraryPage(QWidget):
         sync_row.addWidget(self.auto_sync)
         sync_row.addStretch()
         layout.addLayout(sync_row)
+        self.delete_remote = QCheckBox(tr('remote.delete_local'))
+        self.delete_remote.setToolTip(tr('remote.delete_warning'))
+        self.delete_remote.toggled.connect(self.change_delete_policy)
+        self.connections.currentIndexChanged.connect(self.load_delete_policy)
+        layout.addWidget(self.delete_remote)
+        self.load_delete_policy()
         self.sync_timer = QTimer(self)
         self.sync_timer.setInterval(60000)
         self.sync_timer.timeout.connect(self.auto_synchronize)
@@ -97,7 +104,40 @@ class RemoteLibraryPage(QWidget):
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.status)
-        self.controls = [self.connections, self.connect_button, self.discover_button, self.found, self.url, self.pair_button, self.sync_button, *self.actions]
+        self.controls = [self.connections, self.connect_button, self.discover_button, self.found, self.url, self.pair_button, self.sync_button, self.delete_remote, *self.actions]
+
+    def load_delete_policy(self):
+        profile = self.connections.currentData() or {}
+        key = 'library/delete_remote/' + profile.get('server_id','none')
+        blocked = self.delete_remote.blockSignals(True)
+        self.delete_remote.setChecked(QSettings('OpenLips','OpenLips Studio').value(key,False,type=bool))
+        self.delete_remote.blockSignals(blocked)
+
+    def change_delete_policy(self, enabled):
+        if enabled and QMessageBox.question(self,tr('remote.sync'),tr('remote.delete_warning'),
+            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            self.delete_remote.blockSignals(True)
+            self.delete_remote.setChecked(False)
+            self.delete_remote.blockSignals(False)
+            return
+        profile = self.connections.currentData() or {}
+        QSettings('OpenLips','OpenLips Studio').setValue('library/delete_remote/' + profile.get('server_id','none'),enabled)
+
+    def delete_selected(self):
+        item = self.tree.currentItem()
+        if not item or not self.client or self.worker and self.worker.isRunning():
+            return
+        kind, record = item.data(0,Qt.ItemDataRole.UserRole)
+        if QMessageBox.question(self,tr('library.delete'),tr('remote.delete_confirm',name=item.text(1)),
+            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        client = self.client
+        def remove():
+            client.request('DELETE',f'/api/v1/{kind}/{record["id"]}')
+            return client.request('GET','/api/v1/library')
+        self.task(remove,self.received)
 
     def context_menu(self, pos):
         item = self.tree.itemAt(pos)
@@ -115,6 +155,7 @@ class RemoteLibraryPage(QWidget):
         else:
             menu.addAction(tr('library.open'), self.open_project)
         menu.addSeparator()
+        menu.addAction(tr('library.delete'),self.delete_selected)
         menu.addAction(tr('remote.sync'), self.synchronize)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
@@ -128,6 +169,11 @@ class RemoteLibraryPage(QWidget):
     def task(self, callback, result, *, progress=False):
         if self.worker and self.worker.isRunning():
             return
+        parent = self.parent()
+        owner = self.window()
+        if owner and hasattr(owner,'library_busy') and owner.library_busy():
+            self.status.setText(tr('library.wait'))
+            return
         self.worker = LibraryTask(callback if progress else lambda report: callback(), self)
         self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(result)
@@ -137,6 +183,9 @@ class RemoteLibraryPage(QWidget):
             widget.setEnabled(False)
         self.status.setText(tr('remote.working'))
         self.worker.start()
+        if parent and hasattr(parent,'local'):
+            parent.local.update_commands()
+            self.worker.finished.connect(parent.local.update_commands)
 
     def discover(self):
         from studio.library_discovery import discover
@@ -346,12 +395,16 @@ class RemoteLibraryPage(QWidget):
         if not self.client or not self.get_library or (self.worker and self.worker.isRunning()):
             return
         parent = self.parent()
+        owner = self.window()
+        if owner and hasattr(owner,'library_busy') and owner.library_busy():
+            return
         if hasattr(parent, 'local') and parent.local.worker and parent.local.worker.isRunning():
             return
         client, library = self.client, self.get_library()
+        propagate_deletions = self.delete_remote.isChecked()
         def sync(progress):
             from studio.library_sync import sync_library
-            result = sync_library(library, client, progress)
+            result = sync_library(library, client, progress, propagate_deletions=propagate_deletions)
             return client.request('GET', '/api/v1/library'), result
         def done(value):
             catalog, result = value

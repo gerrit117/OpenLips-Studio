@@ -89,7 +89,7 @@ nicht den Zustand von Unraids Docker-Verwaltung.
 
 Im Studio-Menü **Werkzeuge > Bibliothek > Bibliotheksordner wählen** den
 gewünschten Hauptordner festlegen. `workspace` enthält bearbeitbare `.olp`,
-`projects` unveränderliche Projektstände, `media` gemeinsame Mediendaten und
+`projects` indizierte Projekte, `media` gemeinsame Mediendaten und
 `publish` fertige DLCs. Export bei aktivierter Bibliothek verwendet `publish`
 direkt statt einer zusätzlichen Exportkopie. Alte Ordner werden nicht gelöscht
 oder automatisch verschoben.
@@ -97,9 +97,17 @@ oder automatisch verschoben.
 In **Remote-Bibliothek** die HTTP-Adresse verbinden und **Bibliothek
 synchronisieren** wählen. Projekte einschließlich Cover/Medien sowie fertige
 DLCs werden in beide Richtungen ergänzt. **Automatisch synchronisieren**
-wiederholt dies im verbundenen Studio alle 60 Sekunden. Es ist kein
-Löschabgleich: Änderungen bleiben als Projektversionen erhalten, entfernte
-Songs können beim nächsten Abgleich aus der anderen Bibliothek zurückkommen.
+wiederholt dies im verbundenen Studio alle 60 Sekunden. Speichern aktualisiert
+denselben Projekteintrag; „Speichern unter“ kann eine getrennte Kopie erstellen.
+Lokal ausdrücklich gelöschte Einträge werden nicht wieder heruntergeladen.
+Pro Remote-Verbindung ist **Lokale Löschungen auch auf diese Remote-Bibliothek
+übertragen** optional aktivierbar. Das betrifft auch vorgemerkte frühere
+Löschungen, aber nur verknüpfte Kopien, keine fremden Remote-Inhalte. Fehlgeschlagene
+Löschungen werden später erneut versucht. Reines Löschen auf dem Server entfernt
+keine lokalen Kopien; diese können wieder hochgeladen werden. Projekte und ganze
+DLC-Pakete lassen sich über Schaltflächen und Kontextmenüs in Studio und über die
+WebUI löschen. Gemeinsame Medien und externe Originaldateien bleiben erhalten.
+Für Projektaktualisierung und DLC-Löschen auch den Library-Server aktualisieren.
 Aus dem Dateisystem neu gespeicherte `workspace/*.olp` werden dabei erfasst.
 Beliebige lose Dateien in anderen Ordnern werden nicht automatisch importiert.
 Community `.ols`-Uploads brauchen weiterhin Anmeldung und Rechtebestätigung;

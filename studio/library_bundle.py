@@ -34,7 +34,7 @@ def write_bundle(project, target, progress=lambda message: None):
                 archive.write(path, field + extension)
 
 
-def import_bundle(library, source):
+def import_bundle(library, source, *, identifier=None):
     with zipfile.ZipFile(source) as archive:
         members = archive.infolist()
         names = [entry.filename for entry in members]
@@ -72,4 +72,4 @@ def import_bundle(library, source):
                 else:
                     validate_media_header(target, field)
                 setattr(project, field + '_path', str(target))
-            return library.add_project(project)
+            return library.add_project(project, identifier=identifier)

@@ -139,6 +139,8 @@ class AiChartDialog(QDialog):
         dialog = GuidedReviewDialog(candidate, self, audio_path=str(audio) if audio.is_file() else None)
         if dialog.exec():
             self.result_project.notes = dialog.project.notes
+            from studio.beat_dialog import copy_grid
+            copy_grid(dialog.project, self.result_project)
             self.accept()
 
     def start(self):

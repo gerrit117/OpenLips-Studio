@@ -578,6 +578,8 @@ class PluginDialog(QDialog):
             if not dialog.exec():
                 return
             self.result.notes = dialog.project.notes
+            from studio.beat_dialog import copy_grid
+            copy_grid(dialog.project, self.result)
             self.result.warnings = dialog.project.warnings
             self.accepted_project.emit(self.result)
         self.accept()

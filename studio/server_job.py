@@ -41,10 +41,11 @@ def main(argv=None):
                     ('ready', 'Chart/lyrics ready', package_id, args.job))
             return 0
         from studio.dlc_pack import build_projects_dlc
+        revisions = {identifier: library.revision(identifier) for identifier in request['projects']}
         projects = [load_project(library.project_path(identifier)) for identifier in request['projects']]
         with tempfile.TemporaryDirectory(prefix='openlips-server-') as folder:
             result = build_projects_dlc(projects, folder, report, pack_name=request.get('pack_name'), optimize_pages=True)
-            package_id = library.add_package(result['output_path'], request['projects'])
+            package_id = library.add_package(result['output_path'], request['projects'], revisions=revisions)
             library.record_build(package_id, request['projects'], request.get('pack_name'), True)
         with library.connect() as db:
             db.execute('UPDATE jobs SET state=?,progress=?,package_id=? WHERE id=?',

@@ -1,7 +1,7 @@
 """Horizontal karaoke editor: playback scrolls the notes to the left."""
-from PySide6.QtCore import Qt, QRectF, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QWidget, QLineEdit, QMenu
+from PySide6.QtCore import Qt, QRectF, Signal, QMimeData
+from PySide6.QtGui import QColor, QPainter, QPen, QKeySequence
+from PySide6.QtWidgets import QWidget, QLineEdit, QMenu, QApplication
 
 from studio.i18n import tr
 from studio.model import EditorNote, pitch_name, snap_time, merge_selection
@@ -47,6 +47,9 @@ class Timeline(QWidget):
     before_edit = Signal()
     edit_text = Signal(str)
     seek = Signal(float)
+    scrub_started = Signal()
+    scrub_moved = Signal(float)
+    scrub_finished = Signal()
     pitch_preview = Signal(int)
 
     def __init__(self, parent=None):
@@ -54,6 +57,9 @@ class Timeline(QWidget):
         self.project = None
         self.selected_id = ''
         self.selected_ids = set()
+        self.selection_anchor = ''
+        self.target = None
+        self.conflicts = {}
         self.scale = 100.0
         self.origin = 0.0
         self.cursor = 0.0
@@ -61,6 +67,7 @@ class Timeline(QWidget):
         self.snap = True
         self.low, self.high = 48, 78
         self.drag = None
+        self.cursor_drag = False
         self.video_frame = None
         self.show_video = True
         self.lyric_fields = {}
@@ -70,12 +77,16 @@ class Timeline(QWidget):
 
     def set_project(self, project):
         if self.project is not project:
+            self.target = None
+            self.selection_anchor = ''
             self.selected_ids.clear()
             for field in self.lyric_fields.values():
                 field.hide()
                 field.deleteLater()
             self.lyric_fields.clear()
         self.project = project
+        from studio.note_editing import conflicts
+        self.conflicts = conflicts(project)
         self.selected_ids.intersection_update(n.id for n in project.notes)
         pitches = [n.pitch if n.pitch_assigned else 60 for n in project.notes]
         self.low = max(0, min(pitches, default=54) - 4)
@@ -90,7 +101,7 @@ class Timeline(QWidget):
 
     def set_cursor(self, seconds):
         self.cursor = seconds
-        if self.follow:
+        if self.follow and not self.cursor_drag:
             self.origin = max(0, seconds - max(0, self.width() - 62) * .25 / self.scale)
         self.update()
 
@@ -125,39 +136,50 @@ class Timeline(QWidget):
                 p.drawText(QRectF(3, y, 53, lane), Qt.AlignmentFlag.AlignCenter, pitch_name(pitch))
             if key and pitch % 12 == key['root']:
                 p.fillRect(QRectF(58, y + 2, 3, max(1, lane - 4)), QColor('#75ded1'))
-        beat = 60 / self.project.bpm
-        start = int(self.origin / beat)
-        count = min(2000, int(self.width() / self.scale / beat) + 3)
-        for i in range(start, start + count):
-            x = 62 + (i * beat - self.origin) * self.scale
-            p.setPen(QColor('#434a51' if i % 4 == 0 else '#2c3238'))
+        from studio.beat_grid import points
+        try:
+            grid = points(self.project, self.origin, self.origin + self.width() / self.scale)
+        except ValueError:
+            grid = []
+        for i, seconds in grid:
+            x = 62 + (seconds - self.origin) * self.scale
+            p.setPen(QColor('#434a51' if i % self.project.beat_division == 0 else '#2c3238'))
             p.drawLine(int(x), 30, int(x), self.height() - 40)
-            if i % 4 == 0:
+            if i % (self.project.beat_division * 4) == 0:
                 p.setPen(QColor('#b6bec6'))
-                p.drawText(int(x) + 4, 20, f'{i * beat:.1f}s')
+                p.drawText(int(x) + 4, 20, f'{seconds:.1f}s')
         visible = [n for n in self.project.ordered()
                    if n.time + n.length >= self.origin and
                    n.time <= self.origin + self.width() / self.scale]
         p.save()
         p.setClipRect(QRectF(62, 30, self.width() - 62, self.height() - 30))
         ordered = self.project.ordered()
+        if self.target is not None and not self.selected_ids:
+            start,length,pitch = self.target
+            rect = self.geometry_for(EditorNote(start,length,pitch))
+            p.fillRect(rect,QColor(73,198,205,45))
+            p.setPen(QPen(QColor('#75ded1'),1,Qt.PenStyle.DashLine))
+            p.drawRect(rect)
         p.setPen(QPen(QColor('#91b5b3'), 1, Qt.PenStyle.DashLine))
         for left, right in zip(ordered, ordered[1:]):
-            if right.text.strip() == '~' and not left.end_word and not left.line_break_after:
+            if right.text.strip() in ('', '~') and not left.end_word and not left.line_break_after:
                 a, b = self.geometry_for(left), self.geometry_for(right)
                 middle = (a.right() + b.left()) / 2
                 p.drawLine(int(a.right()), int(a.center().y()), int(middle), int(a.center().y()))
                 p.drawLine(int(middle), int(a.center().y()), int(middle), int(b.center().y()))
                 p.drawLine(int(middle), int(b.center().y()), int(b.left()), int(b.center().y()))
-        for i, n in enumerate(visible):
+        for i, n in enumerate(sorted(visible, key=lambda n: n.id == self.selected_id or n.id in self.selected_ids)):
             r = self.geometry_for(n)
             active = n.time <= self.cursor < n.time + n.length
             chosen = n.id == self.selected_id or n.id in self.selected_ids
             color = '#ef599c' if chosen else '#88929b' if not n.pitch_assigned else '#f4c95d' if active else '#49c6cd'
-            p.setPen(QPen(QColor('#ffffff' if chosen else '#fa7c7c' if not n.text.strip() else color), 1,
+            p.setPen(QPen(QColor('#ffffff' if chosen else '#ff9b5a' if n.id in self.conflicts else '#fa7c7c' if not n.text.strip() else color), 2 if n.id in self.conflicts else 1,
                          Qt.PenStyle.SolidLine if n.pitch_assigned else Qt.PenStyle.DashLine))
             p.setBrush(QColor(color))
             p.drawRoundedRect(r, 3, 3)
+            if n.id in self.conflicts:
+                p.setPen(QColor('#ff9b5a'))
+                p.drawText(int(r.right())+2,int(r.top())+10,'!')
             next_x = self.geometry_for(visible[i + 1]).x() if i + 1 < len(visible) else r.right() + 80
             width = max(0, min(max(r.width(), 35), next_x - r.x() - 5))
         try:
@@ -222,50 +244,153 @@ class Timeline(QWidget):
                             if n.id != note.id and n.time < start), default=0)
             value = start + delta
             if self.snap:
-                value = snap_time(value, self.project.bpm)
+                value = self.snap_value(value)
             value = max(0, min(start, previous), min(end-.001, value))
             return value, end-value
         following = min((n.time for n in self.project.notes if n.id != note.id and n.time > start),
                         default=float('inf'))
         value = end + delta
         if self.snap:
-            value = snap_time(value, self.project.bpm)
+            value = self.snap_value(value)
         value = min(max(end, following), max(start+.001, value))
         return start, value-start
+
+    def cursor_hit(self, pos):
+        x = 62 + (self.cursor-self.origin)*self.scale
+        return x >= 62 and abs(pos.x()-x) <= 6 and 25 <= pos.y() < self.height()-10
+
+    def scrub_position(self, pos):
+        return max(0,self.origin+(pos.x()-62)/self.scale)
 
     def mousePressEvent(self, event):
         if not self.project or event.button() != Qt.MouseButton.LeftButton:
             return
         pos = event.position()
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        if self.cursor_hit(pos) and not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.cursor_drag = True
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            self.scrub_started.emit()
+            self.scrub_moved.emit(self.scrub_position(pos))
+            return
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.target = None
+            self.seek.emit(max(0,self.origin+(pos.x()-62)/self.scale))
+            return
         note = self.hit(pos)
         if note:
             self.setFocus(Qt.FocusReason.MouseFocusReason)
             if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-                if self.selected_id and not self.selected_ids:
-                    self.selected_ids.add(self.selected_id)
-                if note.id in self.selected_ids:
-                    self.selected_ids.remove(note.id)
-                    self.selected_id = next(iter(self.selected_ids), '')
-                else:
-                    self.selected_ids.add(note.id)
-                    self.selected_id = note.id
+                ordered = self.project.ordered()
+                ids = [n.id for n in ordered]
+                anchor = self.selection_anchor if self.selection_anchor in ids else self.selected_id
+                if anchor not in ids:
+                    anchor = note.id
+                begin,end = sorted((ids.index(anchor),ids.index(note.id)))
+                self.selected_ids = set(ids[begin:end+1])
+                self.selection_anchor = anchor
+                self.selected_id = note.id
+                self.target = (ordered[begin].time,ordered[end].time+ordered[end].length-ordered[begin].time,note.pitch)
                 self.selected.emit(self.selected_id)
                 self.update()
                 return
             self.selected_ids = {note.id}
+            self.selection_anchor = note.id
+            self.target = (note.time,note.length,note.pitch)
             self.selected_id = note.id
             self.selected.emit(note.id)
             mode = self.edge_at(note, pos)
             self.setCursor(Qt.CursorShape.SizeHorCursor if mode != 'move' else Qt.CursorShape.ClosedHandCursor)
             self.drag = (note, pos, note.time, note.length, note.pitch, mode, False)
         else:
+            if pos.x() < 62 or not 38 <= pos.y() < self.height()-54:
+                return
             self.selected_ids.clear()
             self.selected_id = ''
             self.selected.emit('')
-            self.seek.emit(max(0, self.origin + (pos.x() - 62) / self.scale))
+            self.selection_anchor = ''
+            self.target = self.cell_at(pos)
         self.update()
 
+    def cell_at(self, pos):
+        import math
+        from studio.beat_grid import step
+        seconds = max(0,self.origin+(pos.x()-62)/self.scale)
+        length = step(self.project)
+        if self.snap:
+            seconds = max(0,self.project.beat_offset+math.floor((seconds-self.project.beat_offset)/length+1e-9)*length)
+        lane = (self.height()-92)/(self.high-self.low+1)
+        pitch = max(0,min(127,self.high-int((pos.y()-38)/lane)))
+        return seconds,length,pitch
+
+    def create_note(self):
+        from studio.beat_grid import step
+        start,_,pitch = self.target or (self.cursor,step(self.project),60)
+        self.before_edit.emit()
+        note = EditorNote(start,step(self.project),pitch)
+        self.project.notes.append(note)
+        self.selected_id = note.id
+        self.selected_ids = {note.id}
+        self.selection_anchor = note.id
+        self.edited.emit()
+        self.selected.emit(note.id)
+
+    def shift_lyrics(self, direction, suffix=False):
+        from studio.note_editing import lyric_shift_plan
+        try:
+            plan = lyric_shift_plan(self.project,self.selected_id,direction,suffix)
+        except ValueError as error:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self,tr('lyrics.shift'),tr(str(error)))
+            return
+        self.before_edit.emit()
+        for note,text,end_word in plan:
+            note.text,note.end_word = text,end_word
+        self.edited.emit()
+        self.selected.emit(self.selected_id)
+
+    def snap_value(self, seconds):
+        from studio.beat_grid import snap
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.AltModifier:
+            return max(0, seconds)
+        return snap(self.project, seconds)
+
+    def cut_selected_grid(self):
+        from studio.beat_grid import cut_notes
+        identifiers = self.selected_ids or {self.selected_id}
+        if not any(n.id in identifiers for n in self.project.notes):
+            return
+        self.before_edit.emit()
+        try:
+            cut_notes(self.project, identifiers)
+        except ValueError as error:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, tr('beat.cut'), str(error))
+            return
+        self.edited.emit()
+
+    def link_selected_melisma(self):
+        from studio.beat_grid import melisma_selection
+        from PySide6.QtWidgets import QInputDialog
+        notes = melisma_selection(self.project, self.selected_ids, validate_only=True)
+        text = ' '.join(dict.fromkeys(n.text.strip() for n in notes if n.text.strip() not in ('', '~')))
+        text, accepted = QInputDialog.getText(self, tr('beat.melisma'), tr('Text'), text=text)
+        if not accepted or not text.strip():
+            return
+        self.before_edit.emit()
+        melisma_selection(self.project, self.selected_ids, text)
+        self.edited.emit()
+
     def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self.copy_notes()
+            event.accept()
+            return
+        if event.matches(QKeySequence.StandardKey.Paste):
+            if not event.isAutoRepeat():
+                self.paste_notes()
+            event.accept()
+            return
         if self.project and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             self.delete_selected()
             event.accept()
@@ -285,6 +410,76 @@ class Timeline(QWidget):
                 event.accept()
                 return
         super().keyPressEvent(event)
+
+    def copy_notes(self):
+        if not self.project:
+            return
+        from studio.note_clipboard import capture, MIME
+        try:
+            payload, identifiers = capture(self.project, self.selected_ids or {self.selected_id})
+        except ValueError as error:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, tr('notes.copy'), str(error))
+            return
+        if payload is None:
+            return
+        data = QMimeData()
+        data.setData(MIME, payload)
+        QApplication.clipboard().setMimeData(data)
+        self.selected_ids = identifiers
+        self.update()
+
+    def choose_paste_mode(self, notes):
+        from PySide6.QtWidgets import QMessageBox, QCheckBox
+        start,end = min(n.time for n in notes),max(n.time+n.length for n in notes)
+        count = sum(n.time < end-1e-6 and n.time+n.length > start+1e-6 for n in self.project.notes)
+        box = QMessageBox(self)
+        box.setWindowTitle(tr('notes.paste'))
+        box.setText(tr('notes.paste_choice',start=start,end=end,count=count))
+        lyrics = QCheckBox(tr('notes.paste_text'))
+        lyrics.setChecked(True)
+        box.setCheckBox(lyrics)
+        box.setInformativeText(tr('notes.paste_only'))
+        replace = box.addButton(tr('notes.replace'),QMessageBox.ButtonRole.AcceptRole)
+        add = box.addButton(tr('notes.add'),QMessageBox.ButtonRole.ActionRole)
+        box.addButton(tr('Abbrechen'),QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(replace if count else add)
+        box.exec()
+        mode = 'replace' if box.clickedButton() is replace else 'add' if box.clickedButton() is add else None
+        return (mode, lyrics.isChecked()) if mode else None
+
+    def paste_notes(self, seconds=None, *, mode=None, include_text=True):
+        if not self.project:
+            return
+        from studio.note_clipboard import materialize, MIME
+        data = QApplication.clipboard().mimeData()
+        if not data or not data.hasFormat(MIME):
+            return
+        try:
+            position = self.target[0] if self.target is not None else self.cursor
+            notes = materialize(data.data(MIME), position if seconds is None else seconds,
+                                len(self.project.notes))
+            if mode is None:
+                choice = self.choose_paste_mode(notes)
+                if choice is None:
+                    return
+                mode, include_text = choice
+            if not include_text:
+                for note in notes:
+                    note.text = ''
+            from studio.note_editing import passage_destination
+            replacement = passage_destination(self.project,notes,mode)
+        except ValueError as error:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, tr('notes.paste'), str(error))
+            return
+        self.before_edit.emit()
+        self.project.notes = replacement
+        self.selected_id = notes[0].id
+        self.selected_ids = {n.id for n in notes}
+        self.edited.emit()
+        self.selected.emit(notes[0].id)
+        self.update()
 
     def merge_notes(self):
         merge_selection(self.project, self.selected_ids, validate_only=True)
@@ -313,6 +508,14 @@ class Timeline(QWidget):
             return
         note = self.hit(event.pos())
         if not note:
+            from studio.note_clipboard import MIME
+            menu = QMenu(self)
+            action = menu.addAction(tr('notes.paste_here'))
+            data = QApplication.clipboard().mimeData()
+            action.setEnabled(bool(data and data.hasFormat(MIME)))
+            seconds = max(0, self.origin + (event.pos().x() - 62) / self.scale)
+            action.triggered.connect(lambda: self.paste_notes(seconds))
+            menu.exec(event.globalPos())
             return
         self.setFocus(Qt.FocusReason.MouseFocusReason)
         if note.id not in self.selected_ids:
@@ -321,6 +524,30 @@ class Timeline(QWidget):
         self.selected.emit(note.id)
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
+        stack = [n for n in self.project.ordered() if self.geometry_for(n).adjusted(-3,-4,3,4).contains(event.pos())]
+        if len(stack) > 1:
+            choose = menu.addMenu(tr('notes.choose_layer'))
+            for number,item in enumerate(stack,1):
+                action = choose.addAction(f'{number}: {pitch_name(item.pitch)} · {item.time:.3f} s · {item.text}')
+                action.triggered.connect(lambda checked=False,identifier=item.id:self.select_layer(identifier))
+        menu.addAction(tr('lyrics.left'),lambda:self.shift_lyrics(-1))
+        menu.addAction(tr('lyrics.right'),lambda:self.shift_lyrics(1))
+        menu.addSeparator()
+        menu.addAction(tr('notes.copy'), self.copy_notes)
+        from studio.note_clipboard import MIME
+        paste = menu.addAction(tr('notes.paste'), lambda: self.paste_notes())
+        data = QApplication.clipboard().mimeData()
+        paste.setEnabled(bool(data and data.hasFormat(MIME)))
+        menu.addSeparator()
+        grid_cut = menu.addAction(tr('beat.cut'))
+        grid_cut.triggered.connect(self.cut_selected_grid)
+        link = menu.addAction(tr('beat.melisma'))
+        from studio.beat_grid import melisma_selection
+        try:
+            melisma_selection(self.project, self.selected_ids, validate_only=True)
+        except ValueError:
+            link.setEnabled(False)
+        link.triggered.connect(self.link_selected_melisma)
         action = menu.addAction(tr('note.merge_selected'))
         try:
             merge_selection(self.project, self.selected_ids, validate_only=True)
@@ -343,6 +570,15 @@ class Timeline(QWidget):
         menu.addAction(tr('Note loeschen'), self.delete_selected)
         menu.exec(event.globalPos())
 
+    def select_layer(self, identifier):
+        note = next(n for n in self.project.notes if n.id == identifier)
+        self.target = (note.time, note.length, note.pitch)
+        self.selected_id = identifier
+        self.selected_ids = {identifier}
+        self.selection_anchor = identifier
+        self.selected.emit(identifier)
+        self.update()
+
     def add_melisma(self, identifier, seconds=None):
         note = next(n for n in self.project.notes if n.id == identifier)
         if seconds is None or not note.time+.001 <= seconds <= note.time+note.length-.001:
@@ -362,6 +598,9 @@ class Timeline(QWidget):
         self.selected.emit(result.id)
 
     def mouseMoveEvent(self, event):
+        if self.cursor_drag:
+            self.scrub_moved.emit(self.scrub_position(event.position()))
+            return
         if self.drag:
             n, start, time, length, pitch, mode, begun = self.drag
             if not begun and (event.position() - start).manhattanLength() < 4:
@@ -373,7 +612,7 @@ class Timeline(QWidget):
             else:
                 value = max(0, time + delta)
                 if self.snap:
-                    value = snap_time(value, self.project.bpm)
+                    value = self.snap_value(value)
                 duration = length
                 lane = (self.height() - 92) / (self.high - self.low + 1)
                 new_pitch = max(0, min(127, pitch - round((event.position().y() - start.y()) / lane)))
@@ -394,12 +633,22 @@ class Timeline(QWidget):
                         previous.page_break_time = None
             self.update()
         elif self.project:
+            if self.cursor_hit(event.position()):
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+                self.setToolTip(tr('transport.scrub'))
+                return
             n = self.hit(event.position())
             self.setToolTip(f'{pitch_name(n.pitch) if n.pitch_assigned else tr("timing.unassigned")} / {n.time:.3f}s / {n.length:.3f}s / {n.text}' if n else '')
             self.setCursor(Qt.CursorShape.SizeHorCursor if n and self.edge_at(n, event.position()) != 'move'
                            else Qt.CursorShape.OpenHandCursor if n else Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event):
+        if self.cursor_drag and event.button() == Qt.MouseButton.LeftButton:
+            self.scrub_moved.emit(self.scrub_position(event.position()))
+            self.cursor_drag = False
+            self.scrub_finished.emit()
+            self.unsetCursor()
+            return
         if self.drag and self.drag[-1]:
             self.edited.emit()
             if self.drag[0].pitch != self.drag[4]:
@@ -408,12 +657,16 @@ class Timeline(QWidget):
         self.unsetCursor()
 
     def leaveEvent(self, event):
-        if not self.drag:
+        if not self.drag and not self.cursor_drag:
             self.unsetCursor()
         super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         if not self.project:
+            return
+        if self.cursor_hit(event.position()):
+            return
+        if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             return
         n = self.hit(event.position())
         if n:
@@ -421,17 +674,8 @@ class Timeline(QWidget):
             return
         if event.position().x() < 62 or not 38 <= event.position().y() < self.height() - 54:
             return
-        time = max(0, self.origin + (event.position().x() - 62) / self.scale)
-        if self.snap:
-            time = snap_time(time, self.project.bpm)
-        lane = (self.height() - 92) / (self.high - self.low + 1)
-        pitch = max(0, min(127, self.high - int((event.position().y() - 38) / lane)))
-        self.before_edit.emit()
-        n = EditorNote(time, 60 / self.project.bpm, pitch)
-        self.project.notes.append(n)
-        self.selected_id = n.id
-        self.edited.emit()
-        self.selected.emit(n.id)
+        self.target = self.cell_at(event.position())
+        self.create_note()
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -439,5 +683,4 @@ class Timeline(QWidget):
         else:
             delta = event.angleDelta().x() or event.angleDelta().y()
             self.origin = max(0, self.origin - delta / self.scale)
-            self.follow = False
         self.update()

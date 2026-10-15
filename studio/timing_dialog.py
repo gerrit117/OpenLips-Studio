@@ -34,6 +34,8 @@ class TimingDialog(QDialog):
         self.media.setAudioOutput(self.audio)
         self.click = TonePreview(self)
         self.click.set_volume(.5)
+        from studio.beat_dialog import GridMetronome
+        self.metronome = GridMetronome(self)
         self.timer = QTimer(self)
         self.timer.setInterval(20)
         self.timer.timeout.connect(self.tick)
@@ -64,6 +66,15 @@ class TimingDialog(QDialog):
         self.next_label.setWordWrap(True)
         units.addWidget(self.next_label, 1)
         layout.addLayout(units)
+        grid_row = QHBoxLayout()
+        grid = QPushButton(qta.icon('fa5s.th', color='#cdd3d9'), tr('beat.title'))
+        grid.clicked.connect(self.configure_grid)
+        grid_row.addWidget(grid)
+        draft = QPushButton(qta.icon('fa5s.align-left', color='#cdd3d9'), tr('beat.lyrics'))
+        draft.clicked.connect(self.grid_lyrics)
+        grid_row.addWidget(draft)
+        grid_row.addStretch()
+        layout.addLayout(grid_row)
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([tr('Start'), tr('Laenge'), tr('Text')])
         self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.Stretch)
@@ -79,6 +90,7 @@ class TimingDialog(QDialog):
         self.play.setFixedSize(36,32)
         self.play.setToolTip(tr('timing.play'))
         self.play.clicked.connect(self.toggle_play)
+        self.play.setToolTip(tr('transport.toggle_tip'))
         transport.addWidget(self.play)
         self.play_selection = QPushButton(qta.icon('fa5s.step-forward',color='#cdd3d9'), '')
         self.play_selection.setFixedSize(36,32)
@@ -288,6 +300,11 @@ class TimingDialog(QDialog):
             self.record.setChecked(False)
             return
         onset = round(self.position,3)
+        if self.original.beat_enabled and self.original.beat_snap:
+            from studio.beat_grid import snap
+            onset = round(snap(self.original, onset), 6)
+        if self.notes and onset <= self.notes[-1].time + .001:
+            return
         self.snapshot(onset, len(self.notes))
         if self.notes:
             self.notes[-1].length = onset-self.notes[-1].time
@@ -314,6 +331,7 @@ class TimingDialog(QDialog):
         self.clock_start = time.monotonic()-self.position/self.rate
         self.media.setPosition(round(max(0,self.position+self.original.reference_offset)*1000))
         self.last_tick = self.position-1e-6
+        self.metronome.stop()
         self.update_clock()
 
     def toggle_play(self):
@@ -329,6 +347,7 @@ class TimingDialog(QDialog):
             self.media.pause()
             self.timer.stop()
             self.click.stop()
+            self.metronome.stop()
         self.play.setIcon(qta.icon('fa5s.pause' if self.playing else 'fa5s.play',color='#cdd3d9'))
 
     def change_speed(self, text):
@@ -355,6 +374,7 @@ class TimingDialog(QDialog):
             if media_time>=0 and (self.original.audio_path or self.original.video_path):
                 self.media.setPosition(round(media_time*1000))
                 self.media.play()
+        self.metronome.tick(self.original, self.position)
         if not self.record.isChecked() and self.hear_ticks.isChecked():
             if any(self.last_tick<n.time<=self.position for n in self.notes):
                 self.click.play(96,.03)
@@ -435,10 +455,14 @@ class TimingDialog(QDialog):
             self.status.setText(str(error))
 
     def eventFilter(self, watched, event):
-        if (event.type()==QEvent.Type.KeyPress and self.record.isChecked()
+        if (event.type()==QEvent.Type.KeyPress
             and hasattr(watched,'window') and watched.window() is self
             and event.modifiers()==Qt.KeyboardModifier.NoModifier):
-            if event.key()==Qt.Key.Key_Space:
+            if event.key()==Qt.Key.Key_F5:
+                if not event.isAutoRepeat():
+                    self.toggle_play()
+                return True
+            if event.key()==Qt.Key.Key_Space and self.record.isChecked():
                 if not event.isAutoRepeat():
                     self.tap()
                 return True
@@ -448,5 +472,38 @@ class TimingDialog(QDialog):
         self.timer.stop()
         self.media.stop()
         self.click.stop()
+        self.metronome.stop()
         QApplication.instance().removeEventFilter(self)
         super().done(result)
+
+    def configure_grid(self):
+        from studio.beat_dialog import BeatGridDialog, copy_grid
+        if self.playing:
+            self.toggle_play()
+        dialog = BeatGridDialog(self.original, self, identifiers=[])
+        if dialog.exec():
+            copy_grid(dialog.project, self.original)
+
+    def grid_lyrics(self):
+        from studio.beat_grid import snap, step
+        if not self.original.beat_enabled:
+            self.configure_grid()
+            if not self.original.beat_enabled:
+                return
+        units = self.units()
+        if not units:
+            return
+        if self.notes:
+            from PySide6.QtWidgets import QMessageBox
+            if QMessageBox.question(self, tr('beat.lyrics'), tr('beat.replace')) != QMessageBox.StandardButton.Yes:
+                return
+        if self.playing:
+            self.toggle_play()
+        self.snapshot()
+        start = snap(self.original, self.position)
+        spacing = step(self.original)
+        self.notes = [EditorNote(start + i * spacing, spacing, 60, unit.text,
+            unit.end_word, unit.end_line and i + 1 < len(units), pitch_assigned=False)
+            for i, unit in enumerate(units)]
+        self.render()
+        self.status.setText(tr('beat.lyrics_draft'))

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, QThread, Signal, Qt
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QPushButton, QFileDialog, QTabWidget, QTreeWidget, QTreeWidgetItem, QLabel, QMenu)
+    QPushButton, QFileDialog, QTabWidget, QTreeWidget, QTreeWidgetItem, QLabel, QMenu, QMessageBox)
 import qtawesome as qta
 
 from studio.i18n import tr
@@ -98,7 +98,8 @@ class LibraryPage(QWidget):
                                       ('xbox.title', 'fa5s.upload', self.copy),
                                       ('usb.title', 'fa5b.usb', self.copy_usb),
                                       ('library.community_upload', 'fa5s.users', self.upload_community),
-                                      ('server.title', 'fa5s.server', self.server)]):
+                                      ('server.title', 'fa5s.server', self.server),
+                                      ('library.delete', 'fa5s.trash-alt', self.delete_selected)]):
             if index == 3:
                 layout.addLayout(commands)
                 commands = QHBoxLayout()
@@ -116,15 +117,23 @@ class LibraryPage(QWidget):
         layout.addWidget(self.status)
         self.refresh()
 
+    def is_busy(self):
+        owner = self.window()
+        return bool(self.worker and self.worker.isRunning()) or bool(
+            owner and hasattr(owner,'library_busy') and owner.library_busy())
+
     def update_commands(self):
         if not hasattr(self, 'command_buttons'):
             return
-        busy = bool(self.worker and self.worker.isRunning())
+        busy = self.is_busy()
+        for button in self.buttons:
+            button.setEnabled(not busy)
         projects = len(self.projects.selectedItems()) if self.tabs.currentWidget() is self.projects else 0
         packages = len(self.packages.selectedItems()) if self.tabs.currentWidget() is self.packages else 0
         for key, enabled in {'library.open': projects == 1, 'library.export': bool(projects or packages),
                 'xbox.title': packages == 1, 'usb.title': packages == 1,
-                'library.community_upload': projects == 1, 'server.title': True}.items():
+                'library.community_upload': projects == 1, 'server.title': True,
+                'library.delete': bool(projects or packages)}.items():
             self.command_buttons[key].setEnabled(enabled and not busy)
 
     def update_export_label(self):
@@ -133,7 +142,7 @@ class LibraryPage(QWidget):
 
     def context_menu(self, tree, pos):
         item = tree.itemAt(pos)
-        if not item or self.worker and self.worker.isRunning():
+        if not item or self.is_busy():
             return
         if not item.isSelected():
             tree.clearSelection()
@@ -145,8 +154,39 @@ class LibraryPage(QWidget):
         for label, callback in commands:
             menu.addAction(tr(label), callback)
         menu.addSeparator()
+        menu.addAction(tr('library.delete'), self.delete_selected)
         menu.addAction(tr('remote.sync'), self.sync_requested.emit)
         menu.exec(tree.viewport().mapToGlobal(pos))
+
+    def delete_selected(self):
+        if self.is_busy():
+            self.status.setText(tr('library.wait'))
+            return
+        projects = self.tabs.currentWidget() is self.projects
+        tree = self.projects if projects else self.packages
+        items = tree.selectedItems()
+        if not items:
+            return
+        ids = [item.data(0,Qt.ItemDataRole.UserRole) for item in items]
+        if not projects:
+            ids = [record['id'] for record in ids]
+        names = '\n'.join(item.text(1 if projects else 0) for item in items[:12])
+        if QMessageBox.question(self,tr('library.delete'),tr('library.delete_confirm',count=len(ids),names=names),
+            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        library = self.library
+        def remove(progress):
+            errors = []
+            for identifier in ids:
+                try:
+                    progress(identifier)
+                    (library.remove_project if projects else library.remove_package)(identifier)
+                except Exception as error:
+                    errors.append(str(error))
+            if errors:
+                raise ValueError('\n'.join(errors))
+        self.task(remove)
 
     def upload_community(self):
         selected = self.projects.selectedItems() if self.tabs.currentWidget() is self.projects else []

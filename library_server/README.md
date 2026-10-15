@@ -83,7 +83,7 @@ only confirms the library service, not Unraid's Docker manager.
 ### Studio synchronization
 
 Choose a root in **Tools > Library > Choose library folder**. Editing files go
-to `workspace`, immutable versions to `projects`, shared media to `media`, and
+to `workspace`, indexed projects to `projects`, shared media to `media`, and
 ready DLCs to `publish`. Library-enabled DLC export builds directly in `publish`
 instead of keeping an extra export copy. Existing folders are never moved or
 deleted automatically.
@@ -91,8 +91,16 @@ deleted automatically.
 Connect the remote HTTP address and select **Synchronize library**. Projects
 with covers/media and finished DLCs are added in both directions; unchanged
 entries are skipped. Optional automatic synchronization runs every 60 seconds
-while Studio is connected. This is additive, not a deletion mirror: edits are
-new versions and removed entries can return from the other peer. Saved
+while Studio is connected. Save updates the same indexed project; Save As can
+create a separate copy. Explicit local deletions are not downloaded again.
+For each remote connection, optionally enable **Also delete linked remote copies
+when deleted locally**. This includes previously recorded local deletions; only
+linked copies are affected, not unrelated remote content. Deletions are retried
+after connection failures. Remote-only deletion does not remove local copies,
+which may be uploaded again. Projects and whole DLC packages can be deleted via
+Studio library buttons/context menus and the WebUI. Shared media and external
+original files are retained. Update the server as well as Studio to use the new
+in-place project update and DLC deletion endpoints. Saved
 `workspace/*.olp` files are indexed; arbitrary loose files are not auto-imported.
 Community `.ols` uploads still require sign-in and rights confirmation, and
 never contain audio/video. A standalone DLC cannot replace an editable source

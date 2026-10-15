@@ -12,7 +12,9 @@ import time
 import uuid
 import ssl
 import base64
+import re
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 from studio.library import Library
 from studio.server_config import load_config
@@ -275,7 +277,8 @@ def handler_for(library, config, manager, auth=None):
                 except (ValueError, KeyError, TypeError, UnicodeError) as error:
                     self.reply(400, {'error': str(error)[:500]})
                 return
-            if self.path == '/api/v1/project-bundles':
+            bundle_update = re.fullmatch(r'/api/v1/projects/([a-f0-9]{32})/bundle', self.path)
+            if self.path == '/api/v1/project-bundles' or bundle_update:
                 try:
                     import tempfile
                     import zipfile
@@ -293,7 +296,7 @@ def handler_for(library, config, manager, auth=None):
                                     raise ValueError('Incomplete project bundle upload')
                                 stream.write(chunk)
                                 remaining -= len(chunk)
-                        identifier = import_bundle(library, path)
+                        identifier = import_bundle(library, path, identifier=bundle_update[1] if bundle_update else None)
                     self.reply(201, {'id': identifier})
                 except (ValueError, OSError, KeyError, TypeError, zipfile.BadZipFile) as error:
                     self.reply(400, {'error': str(error)[:500]})
@@ -324,6 +327,7 @@ def handler_for(library, config, manager, auth=None):
                 try:
                     from studio.model import load_project
                     project = load_project(library.project_path(parts[0]))
+                    project.modified_at = datetime.now(timezone.utc).isoformat(timespec='microseconds')
                     if len(parts) == 1:
                         request = self.json_body()
                         if not request or set(request) - {'title', 'artist'} or any(
@@ -374,12 +378,12 @@ def handler_for(library, config, manager, auth=None):
                                 from studio.library_exchange import validate_media_header
                                 validate_media_header(path, field)
                             setattr(project, field + '_path', str(path))
-                            identifier = library.add_project(project)
+                            identifier = library.add_project(project, identifier=parts[0])
                         self.reply(201, {'id': identifier})
                         return
                     else:
                         raise ValueError('Unknown project action')
-                    self.reply(201, {'id': library.add_project(project)})
+                    self.reply(201, {'id': library.add_project(project, identifier=parts[0])})
                 except (ValueError, KeyError, OSError, UnicodeError) as error:
                     self.reply(400, {'error': str(error)[:500]})
                 return
@@ -438,6 +442,10 @@ def handler_for(library, config, manager, auth=None):
                         if db.execute("SELECT 1 FROM jobs WHERE state IN ('queued','running')").fetchone():
                             raise ValueError('Wait for active jobs before removing a project')
                     library.remove_project(identifier)
+                elif self.path.startswith('/api/v1/packages/'):
+                    library.remove_package(self.path.rsplit('/', 1)[1])
+                elif self.path.startswith('/api/v1/artifacts/'):
+                    library.remove_artifact(self.path.rsplit('/', 1)[1])
                 else:
                     self.reply(404, {'error': 'Unknown endpoint'})
                     return
