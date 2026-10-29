@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.6 Beta 16
+
+- Replace the nested start flow with persistent Source, Tempo & Key, Lyrics,
+  Melody and Review & Export steps, retaining the existing Qt editor and services.
+- Start with a local recording or an inline YouTube download before saving a
+  project. Show download progress and support cancellation.
+- Propose BPM, beat offset and major/minor key from local audio, with manual
+  correction. Existing note timing and pitches are never rescaled by this step.
+- Keep numerical note controls in an optional Expert view. Show flowing lyrics
+  with occurrence-aware highlighting, word assignment and drag-to-note support.
+- Link one lyric word across several selected notes without repeating its text;
+  preserve those assignments when saving and reopening the project.
+- Show real audio waveforms and separate recording/note volume controls.
+
+## 0.4.6 Beta 15
+
+- Select multiple remote library entries with Ctrl/Shift and delete the selection,
+  retaining it when opening the context menu. Display deletion failures visibly.
+- Save named remote library connections and restore the last used address.
+
 ## 0.4.6 Beta 14
 
 - Update the same library project on Save, including workspace and external

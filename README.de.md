@@ -1,5 +1,18 @@
 [English](README.md) | [Deutsch](README.de.md)
 
+### Neuer Studio-Ablauf (Beta 16)
+
+**Quelle → Tempo & Tonart → Lyrics → Melodie → Prüfen & Export.**
+Mit einer eigenen Audio-/Videodatei oder einem YouTube-Link beginnen, danach
+BPM und Tonart prüfen, Lyrics laden oder suchen und die Melodie bearbeiten.
+Die automatische Erkennung liefert Vorschläge, keine garantierten Ergebnisse.
+Die normale Editoransicht zeigt den zusammenhängenden Songtext mit markierten
+Wörtern; numerische Notendetails sind über **Profi** erreichbar. Wörter lassen
+sich ausgewählten Noten zuordnen oder auf Noten ziehen. Bestehende Import-,
+Bibliotheks- und Exportfunktionen bleiben erhalten.
+
+![Neuer Studio-Editor mit synthetischem Beispiel](assets/screenshots/studio-workflow-editor-de.png)
+
 KI- und Basic-Pitch-Entwürfe lassen sich vor der Übernahme zeilenweise prüfen:
 Aufnahme und Notentöne in Schleife hören, getrennt in der Lautstärke regeln,
 langsamer abspielen und die Noten direkt bearbeiten. Änderungen sind rückgängig

@@ -94,7 +94,7 @@ def test_studio_auto_connects_one_open_library_without_pairing(tmp_path, monkeyp
         QTest.qWait(200)
         assert calls == ['http://192.168.1.100:8765']
         paired = []
-        monkeypatch.setattr(page, 'paired', lambda client, result: paired.append(result))
+        monkeypatch.setattr(page, 'paired', lambda client, result, **kwargs: paired.append(result))
         page.open_lan(LibraryClient(calls[0]), dict(server_id=record['server_id'],
                                                   name=record['name'], auth_required=False))
         credentials = paired[0][1]

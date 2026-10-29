@@ -42,6 +42,7 @@ class LyricField(QLineEdit):
 
 
 class Timeline(QWidget):
+    lyric_word_dropped = Signal(str, object)
     selected = Signal(str)
     edited = Signal()
     before_edit = Signal()
@@ -55,6 +56,7 @@ class Timeline(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.project = None
+        self.expert_view = False
         self.selected_id = ''
         self.selected_ids = set()
         self.selection_anchor = ''
@@ -73,6 +75,7 @@ class Timeline(QWidget):
         self.lyric_fields = {}
         self.setMinimumSize(400, 280)
         self.setMouseTracking(True)
+        self.setAcceptDrops(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def set_project(self, project):
@@ -89,15 +92,44 @@ class Timeline(QWidget):
         self.conflicts = conflicts(project)
         self.selected_ids.intersection_update(n.id for n in project.notes)
         pitches = [n.pitch if n.pitch_assigned else 60 for n in project.notes]
-        self.low = max(0, min(pitches, default=54) - 4)
-        self.high = min(127, max(self.low + 23, max(pitches, default=72) + 4))
+        padding, minimum = (4, 23) if self.expert_view else (2, 11)
+        self.low = max(0, min(pitches, default=54) - padding)
+        self.high = min(127, max(self.low + minimum, max(pitches, default=72) + padding))
         self.update()
+
+    def dragEnterEvent(self, event):
+        from studio.lyric_document import WORD_MIME
+        if event.mimeData().hasFormat(WORD_MIME):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        import json
+        from studio.lyric_document import WORD_MIME
+        if not event.mimeData().hasFormat(WORD_MIME):
+            return event.ignore()
+        note = self.hit(event.position())
+        if not note:
+            return event.ignore()
+        try:
+            value = json.loads(bytes(event.mimeData().data(WORD_MIME)))
+            if not isinstance(value, dict):
+                return event.ignore()
+            self.lyric_word_dropped.emit(note.id, value)
+            event.acceptProposedAction()
+        except (ValueError, TypeError):
+            event.ignore()
 
     def geometry_for(self, note):
         lane = (self.height() - 92) / (self.high - self.low + 1)
+        height = max(4, lane-4) if self.expert_view else min(16, max(6, lane-6))
         return QRectF(62 + (note.time - self.origin) * self.scale,
-                      38 + (self.high - (note.pitch if note.pitch_assigned else 60)) * lane + 2,
-                      max(5, note.length * self.scale), max(4, lane - 4))
+                      38 + (self.high - (note.pitch if note.pitch_assigned else 60)) * lane + (lane-height)/2,
+                      max(5, note.length * self.scale), height)
 
     def set_cursor(self, seconds):
         self.cursor = seconds
@@ -125,7 +157,7 @@ class Timeline(QWidget):
             y = 38 + (self.high - pitch) * lane
             background = QColor('#22262b' if pitch % 12 in (1, 3, 6, 8, 10) else '#1c2024')
             if pitch % 12 in guide:
-                background = QColor('#233832')
+                background = QColor('#253132')
             if video:
                 background.setAlpha(130)
             p.fillRect(QRectF(62, y, self.width() - 62, lane), background)
@@ -172,7 +204,7 @@ class Timeline(QWidget):
             r = self.geometry_for(n)
             active = n.time <= self.cursor < n.time + n.length
             chosen = n.id == self.selected_id or n.id in self.selected_ids
-            color = '#ef599c' if chosen else '#88929b' if not n.pitch_assigned else '#f4c95d' if active else '#49c6cd'
+            color = '#ed8093' if chosen else '#88929b' if not n.pitch_assigned else '#f4c95d' if active else '#49c6cd'
             p.setPen(QPen(QColor('#ffffff' if chosen else '#ff9b5a' if n.id in self.conflicts else '#fa7c7c' if not n.text.strip() else color), 2 if n.id in self.conflicts else 1,
                          Qt.PenStyle.SolidLine if n.pitch_assigned else Qt.PenStyle.DashLine))
             p.setBrush(QColor(color))
@@ -182,6 +214,23 @@ class Timeline(QWidget):
                 p.drawText(int(r.right())+2,int(r.top())+10,'!')
             next_x = self.geometry_for(visible[i + 1]).x() if i + 1 < len(visible) else r.right() + 80
             width = max(0, min(max(r.width(), 35), next_x - r.x() - 5))
+        if not self.expert_view:
+            from studio.lyric_mapping import note_words
+            p.setPen(QColor('#d4dade'))
+            for unit in note_words(ordered):
+                notes = unit['notes']
+                label = ''.join(note.text.replace('~', '') for note in notes)
+                if not label.strip() or not any(note in visible for note in notes):
+                    continue
+                rectangles = [self.geometry_for(note) for note in notes]
+                left, right = rectangles[0].left(), max(r.right() for r in rectangles)
+                bottom = max(r.bottom() for r in rectangles)
+                if len(notes) > 1:
+                    p.drawLine(int(left), int(bottom+4), int(right), int(bottom+4))
+                    p.drawLine(int(left), int(bottom), int(left), int(bottom+4))
+                    p.drawLine(int(right), int(bottom), int(right), int(bottom+4))
+                text = p.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, max(20, int(right-left+12)))
+                p.drawText(QRectF(left, bottom+5, max(20, right-left+12), 20), Qt.AlignmentFlag.AlignHCenter, text)
         try:
             pages = phrase_page_starts(self.project.notes)
         except ValueError:
@@ -199,6 +248,10 @@ class Timeline(QWidget):
         self.sync_lyric_fields(visible)
 
     def sync_lyric_fields(self, visible):
+        if not self.expert_view:
+            for field in self.lyric_fields.values():
+                field.hide()
+            return
         seen = set()
         for i, n in enumerate(visible):
             r = self.geometry_for(n)

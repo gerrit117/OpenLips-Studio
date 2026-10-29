@@ -39,6 +39,7 @@ def test_inline_lyric_field_commits_with_undo():
     app = QApplication.instance() or QApplication([])
     window = StudioWindow()
     window.replace_project(demo_project())
+    window.expert_toggle.setChecked(True)
     window.show()
     app.processEvents()
     note = window.project.notes[0]

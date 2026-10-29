@@ -24,6 +24,7 @@ from studio.model import suggest_syllables
 from studio.importers import read_midi, project_from_midi, import_ultrastar
 from studio.exporters import export_debug_json, export_owned_pair
 from studio.timeline import Timeline
+from studio.lyric_document import LyricDocument
 from studio.branding import app_icon, asset
 
 
@@ -80,6 +81,7 @@ class StudioWindow(QMainWindow):
     def build_ui(self):
         file = self.menuBar().addMenu(tr('Datei'))
         toolbar = QToolBar(tr('Projekt'), self)
+        self.main_toolbar = toolbar
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(toolbar)
         for label, icon, callback, shortcut in [
@@ -187,6 +189,7 @@ class StudioWindow(QMainWindow):
         toolbar.addWidget(logo)
 
         root = QWidget()
+        self.editor_page = root
         self.screens = QStackedWidget()
         self.workspace_tabs = QTabWidget()
         self.workspace_tabs.addTab(self.screens, tr('community.editor'))
@@ -220,7 +223,9 @@ class StudioWindow(QMainWindow):
         self.screens.addWidget(welcome)
         self.screens.addWidget(root)
         layout = QVBoxLayout(root)
-        meta = QHBoxLayout()
+        self.editor_metadata = QWidget()
+        meta = QHBoxLayout(self.editor_metadata)
+        meta.setContentsMargins(0, 0, 0, 0)
         self.cover_preview = QLabel()
         self.cover_preview.setFixedSize(48, 48)
         meta.addWidget(self.cover_preview)
@@ -241,25 +246,48 @@ class StudioWindow(QMainWindow):
                 self.key_combo.addItem(f'{root} {tr("key.minor" if minor else "key.major")}',
                                        root + ('m' if minor else ''))
         self.key_combo.currentIndexChanged.connect(self.edit_key)
-        for label, widget in [(tr('Titel'), self.title_edit), (tr('Artist'), self.artist_edit), ('BPM', self.bpm_edit)]:
+        for label, widget in [(tr('Titel'), self.title_edit), (tr('Artist'), self.artist_edit)]:
             meta.addWidget(QLabel(label))
             meta.addWidget(widget, 1 if isinstance(widget, QLineEdit) else 0)
-        meta.addWidget(self.key_label)
-        meta.addWidget(self.key_combo)
-        layout.addLayout(meta)
+        heading = QHBoxLayout()
+        name = QLabel(tr('flow.editor_title'))
+        name.setObjectName('workflowHeading')
+        heading.addWidget(name)
+        heading.addStretch()
+        heading.addWidget(QLabel('BPM'))
+        heading.addWidget(self.bpm_edit)
+        heading.addWidget(self.key_combo)
+        self.expert_toggle = QCheckBox(tr('flow.pro'))
+        self.expert_toggle.toggled.connect(self.set_expert_view)
+        heading.addWidget(self.expert_toggle)
+        layout.addLayout(heading)
+        layout.addWidget(self.editor_metadata)
         for widget in (self.title_edit, self.artist_edit, self.bpm_edit):
             widget.editingFinished.connect(self.edit_metadata)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.timeline = Timeline()
-        splitter.addWidget(self.timeline)
+        self.timeline.lyric_word_dropped.connect(self.assign_dropped_word)
+        chart_pane = QWidget()
+        chart_layout = QVBoxLayout(chart_pane)
+        chart_layout.setContentsMargins(0, 0, 0, 0)
+        chart_layout.setSpacing(0)
+        chart_layout.addWidget(self.timeline, 1)
+        from studio.workflow import Waveform
+        self.editor_waveform = Waveform(self)
+        self.editor_waveform.setMinimumHeight(55)
+        self.editor_waveform.setMaximumHeight(75)
+        self.editor_waveform.hide()
+        chart_layout.addWidget(self.editor_waveform)
+        splitter.addWidget(chart_pane)
         sidebar = QWidget()
         side = QVBoxLayout(sidebar)
         side.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         side.setContentsMargins(8, 0, 0, 0)
-        sidebar.setMinimumWidth(240)
-        sidebar.setMaximumWidth(320)
+        sidebar.setMinimumWidth(280)
+        sidebar.setMaximumWidth(440)
         box = QGroupBox(tr('Note / Silbe'))
+        self.note_details = box
         form = QFormLayout(box)
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.time_edit = QDoubleSpinBox()
@@ -326,12 +354,24 @@ class StudioWindow(QMainWindow):
         add = QPushButton(qta.icon('fa5s.plus', color='#cdd3d9'), tr('Note erstellen'))
         add.clicked.connect(self.add_note)
         side.addWidget(add)
-        self.lyrics = QTextEdit()
+        self.lyrics = LyricDocument()
+        self.lyrics.word_activated.connect(self.assign_lyric_word)
         self.lyrics.setAcceptRichText(False)
         self.lyrics.setMinimumHeight(100)
         self.lyrics.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lyrics.customContextMenuRequested.connect(self.lyrics_context_menu)
-        side.addWidget(QLabel(tr('Songtext')))
+        lyric_heading = QHBoxLayout()
+        lyric_heading.addWidget(QLabel(tr('Songtext')))
+        lyric_heading.addStretch()
+        self.lyric_edit_toggle = QPushButton(qta.icon('fa5s.pen', color='#cdd3d9'), '')
+        self.lyric_edit_toggle.setCheckable(True)
+        self.lyric_edit_toggle.setToolTip(tr('flow.edit_text'))
+        self.lyric_edit_toggle.toggled.connect(lambda editing: self.lyrics.setReadOnly(not editing))
+        lyric_heading.addWidget(self.lyric_edit_toggle)
+        side.addLayout(lyric_heading)
+        self.lyric_mode = QComboBox()
+        self.lyric_mode.addItems([tr('flow.words'), tr('flow.syllables')])
+        side.addWidget(self.lyric_mode)
         side.addWidget(self.lyrics, 1)
         shift_row = QHBoxLayout()
         self.lyric_shift_mode = QComboBox()
@@ -344,8 +384,12 @@ class StudioWindow(QMainWindow):
             button.setFixedSize(36,30)
             button.clicked.connect(lambda checked=False,d=direction:self.timeline.shift_lyrics(d,self.lyric_shift_mode.currentData()))
             shift_row.addWidget(button)
-        side.addLayout(shift_row)
+        self.lyric_shift_tools = QWidget()
+        self.lyric_shift_tools.setLayout(shift_row)
+        side.addWidget(self.lyric_shift_tools)
         self.syllables = QCheckBox(tr('Silben mit | trennen'))
+        self.lyric_mode.currentIndexChanged.connect(lambda index: self.syllables.setChecked(index == 1))
+        self.syllables.toggled.connect(lambda enabled: self.lyric_mode.setCurrentIndex(int(enabled)))
         side.addWidget(self.syllables)
         language = QHBoxLayout()
         self.language = QComboBox()
@@ -356,7 +400,9 @@ class StudioWindow(QMainWindow):
         suggest.setToolTip(tr('Silbentrennung vorschlagen (experimentell)'))
         suggest.clicked.connect(self.suggest_text)
         language.addWidget(suggest)
-        side.addLayout(language)
+        self.lyric_language_tools = QWidget()
+        self.lyric_language_tools.setLayout(language)
+        side.addWidget(self.lyric_language_tools)
         self.assign_button = QPushButton(qta.icon('fa5s.link', color='#cdd3d9'), tr('Ab Auswahl zuordnen'))
         self.assign_button.setToolTip(tr('lyrics.assign_anchor'))
         self.assign_button.clicked.connect(self.assign)
@@ -364,12 +410,32 @@ class StudioWindow(QMainWindow):
         side_scroll = QScrollArea()
         side_scroll.setWidgetResizable(True)
         side_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        side_scroll.setMinimumWidth(258)
-        side_scroll.setMaximumWidth(340)
+        side_scroll.setMinimumWidth(300)
+        side_scroll.setMaximumWidth(460)
         side_scroll.setWidget(sidebar)
         self.side_scroll = side_scroll
         splitter.addWidget(side_scroll)
-        splitter.setSizes([900, 280])
+        splitter.setSizes([820, 360])
+        editor_tools = QToolBar()
+        for action in (self.undo_action, self.redo_action):
+            editor_tools.addAction(action)
+        editor_tools.addSeparator()
+        for label, icon, callback in [(tr('notes.copy'), 'fa5s.copy', self.copy_notes),
+            (tr('notes.paste'), 'fa5s.paste', self.paste_notes),
+            (tr('timing.split'), 'fa5s.cut', lambda: self.attempt(lambda: self.timeline.split_selected(self.timeline.selected_id, self.position))),
+            (tr('beat.melisma'), 'fa5s.link', lambda: self.attempt(self.timeline.link_selected_melisma))]:
+            editor_tools.addAction(self.action(label, icon, callback))
+        editor_tools.addSeparator()
+        editor_tools.addAction(self.smart_pages_action)
+        self.grid_division = QComboBox()
+        for label, value in [('1/4', 1), ('1/8', 2), ('1/16', 4), ('1/32', 8)]:
+            self.grid_division.addItem(label, value)
+        self.grid_division.setToolTip(tr('beat.division'))
+        self.grid_division.activated.connect(self.edit_grid_division)
+        editor_tools.addWidget(self.grid_division)
+        editor_tools.addAction(self.action(tr('flow.ai'), 'fa5s.wave-square', self.ai_chart_dialog))
+        editor_tools.addAction(self.action(tr('flow.timing'), 'fa5s.keyboard', self.timing_assistant))
+        layout.addWidget(editor_tools)
         layout.addWidget(splitter, 1)
 
         self.scroll = QSlider(Qt.Orientation.Horizontal)
@@ -401,6 +467,7 @@ class StudioWindow(QMainWindow):
         snap.toggled.connect(self.set_grid_snap)
         transport.addWidget(snap)
         self.hear_notes = QCheckBox(tr('tone.playback'))
+        self.hear_notes.setText(tr('flow.notes'))
         self.hear_notes.toggled.connect(self.toggle_note_tones)
         transport.addWidget(self.hear_notes)
         transport.addStretch()
@@ -408,7 +475,8 @@ class StudioWindow(QMainWindow):
         speed.addItems(['0.5x', '0.75x', '1x', '1.25x', '1.5x'])
         speed.setCurrentIndex(2)
         speed.currentTextChanged.connect(self.set_speed)
-        transport.addWidget(QLabel(tr('Tempo')))
+        self.speed_label = QLabel(tr('Tempo'))
+        transport.addWidget(self.speed_label)
         transport.addWidget(speed)
         zoom = QSlider(Qt.Orientation.Horizontal)
         zoom.setRange(20, 300)
@@ -451,7 +519,29 @@ class StudioWindow(QMainWindow):
         export_button = QPushButton(qta.icon('fa5s.file-export', color='#cdd3d9'), tr('export.menu'))
         export_button.setMenu(exports)
         reference.addWidget(export_button)
-        layout.addLayout(reference)
+        self.reference_controls = QWidget()
+        self.reference_controls.setLayout(reference)
+        layout.addWidget(self.reference_controls)
+        transport.insertWidget(4, QLabel(tr('flow.original')))
+        transport.insertWidget(5, self.reference_mute)
+        transport.insertWidget(6, self.reference_volume)
+        transport.insertWidget(transport.indexOf(self.hear_notes)+1, self.tone_volume)
+        self.tone_volume.setMaximumWidth(120)
+        self.tone_volume.setMinimumWidth(55)
+        self.expert_widgets = [self.note_details, self.editor_metadata, self.reference_controls,
+            self.lyric_shift_tools, self.syllables, self.lyric_language_tools, self.assign_button,
+            self.follow_box, self.speed_label, speed, add]
+        self.set_expert_view(False)
+        navigation = QHBoxLayout()
+        back = QPushButton(qta.icon('fa5s.arrow-left', color='#cdd3d9'), tr('flow.back'))
+        back.clicked.connect(lambda: self.workflow.go(2))
+        navigation.addWidget(back)
+        navigation.addStretch()
+        next_step = QPushButton(qta.icon('fa5s.arrow-right', color='#182126'), tr('flow.next_review'))
+        next_step.setProperty('primary', True)
+        next_step.clicked.connect(lambda: self.workflow.go(4))
+        navigation.addWidget(next_step)
+        layout.addLayout(navigation)
         self.timeline.selected.connect(self.select_note)
         self.timeline.selected.connect(self.audition_selection)
         self.timeline.pitch_preview.connect(self.preview_pitch_change)
@@ -464,6 +554,43 @@ class StudioWindow(QMainWindow):
         self.timeline.scrub_finished.connect(self.end_scrub)
         self.statusBar().showMessage(tr('Bereit'))
         self.lyrics.textChanged.connect(self.draft_changed)
+        from studio.workflow import StudioWorkflow
+        self.workflow = StudioWorkflow(self, self.editor_page, tools)
+        self.main_toolbar.hide()
+
+    def set_expert_view(self, enabled):
+        for widget in getattr(self, 'expert_widgets', []):
+            widget.setVisible(enabled)
+        if hasattr(self, 'timeline'):
+            self.timeline.expert_view = enabled
+            self.timeline.set_project(self.project)
+
+    def edit_grid_division(self):
+        if not self.loading:
+            self.snapshot()
+            self.project.beat_division = self.grid_division.currentData()
+            self.project.beat_enabled = True
+            self.changed()
+
+    def assign_lyric_word(self, start, end):
+        if self.timeline.selected_id:
+            self.assign_dropped_word(self.timeline.selected_id, {'start': start, 'end': end})
+
+    def assign_dropped_word(self, identifier, value):
+        def assign():
+            from studio.lyric_mapping import assign_word
+            from studio.lyric_document import valid_payload
+            if 'document' in value and not valid_payload(value, self.lyrics.toPlainText()):
+                raise ValueError('The lyric text changed during dragging')
+            candidate = copy.deepcopy(self.project)
+            candidate.draft_lyrics = self.lyrics.toPlainText()
+            selected = self.timeline.selected_ids if identifier in self.timeline.selected_ids else {identifier}
+            anchor = assign_word(candidate, value['start'], value['end'], selected or {identifier})
+            self.snapshot()
+            self.project = candidate
+            self.timeline.selected_id = anchor
+            self.changed()
+        self.attempt(assign)
 
     def set_reference_volume(self, value):
         self.audio.setVolume(value / 100)
@@ -475,14 +602,20 @@ class StudioWindow(QMainWindow):
 
     def draft_changed(self):
         if not self.loading:
+            if self.project.draft_lyrics != self.lyrics.toPlainText():
+                self.snapshot()
+                self.project.lyric_assignments.clear()
             self.dirty = True
             self.project.draft_lyrics = self.lyrics.toPlainText()
             self.setWindowTitle(f'{self.project.title} * - OpenLips Studio {DISPLAY_VERSION}')
+            self.lyrics.highlight(self.project, self.timeline.selected_id)
+            if hasattr(self, 'workflow'):
+                self.workflow.refresh()
 
     def change_language(self, value):
         if value == ui_language():
             return
-        if self.community_page.worker or self.library_busy():
+        if self.community_page.worker or self.library_busy() or self.workflow.busy:
             self.statusBar().showMessage(tr('community.wait'))
             return
         position, selected = self.position, self.timeline.selected_id
@@ -534,15 +667,18 @@ class StudioWindow(QMainWindow):
             self.snapshot()
             self.lyrics.setPlainText(result.get('plainLyrics') or '')
 
-    def ai_chart_dialog(self):
+    def ai_chart_dialog(self, checked=False, *, lyrics_only=False):
         self.stop()
         from studio.ai_dialog import AiChartDialog
         dialog = AiChartDialog(self.project, self)
+        if lyrics_only:
+            dialog.transcribe.setChecked(True)
         if dialog.exec() and dialog.result_project:
             result = dialog.result_project
             self.stop()
             self.snapshot()
-            self.project.notes = result.notes
+            if not lyrics_only or not self.project.notes:
+                self.project.notes = result.notes
             self.project.source = result.source
             self.project.warnings = result.warnings
             if result.lyric_reference:
@@ -707,6 +843,7 @@ class StudioWindow(QMainWindow):
         self.timeline.selected_id = ''
         self.timeline.origin = 0
         self.changed()
+        self.workflow.go(3)
 
     def apply_plugin_notes(self, result):
         result.validate()
@@ -726,13 +863,15 @@ class StudioWindow(QMainWindow):
         self.changed()
 
     def snapshot(self):
-        self.history.append(copy.deepcopy(self.project))
+        if not self.history or self.history[-1] != self.project:
+            self.history.append(copy.deepcopy(self.project))
         self.history = self.history[-100:]
         self.future.clear()
 
     def changed(self):
         self.dirty = True
-        self.screens.setCurrentIndex(1)
+        if self.screens.currentIndex() == 0:
+            self.screens.setCurrentIndex(1)
         self.refresh()
 
     def copy_notes(self):
@@ -794,9 +933,12 @@ class StudioWindow(QMainWindow):
         if len(self.project.notes) < 2:
             self.record_pages_action.setChecked(False)
         self.select_note(self.timeline.selected_id)
+        self.grid_division.setCurrentIndex(self.grid_division.findData(self.project.beat_division))
         self.statusBar().showMessage(tr('notes.summary', count=len(self.project.notes), duration=self.project.duration,
                                        warnings=len(self.project.warnings), source=self.project.source))
         self.loading = False
+        if hasattr(self, 'workflow'):
+            self.workflow.refresh()
 
     def note(self):
         return next((n for n in self.project.notes if n.id == self.timeline.selected_id), None)
@@ -840,6 +982,7 @@ class StudioWindow(QMainWindow):
             self.page_edit.setEnabled(False)
         self.loading = previous
         self.timeline.update()
+        self.lyrics.highlight(self.project, ident)
 
     def audition_note(self):
         if self.note() and self.pitch_edit.value() >= 0:
@@ -1020,6 +1163,10 @@ class StudioWindow(QMainWindow):
         self.attempt(run)
 
     def confirm_discard(self):
+        if hasattr(self, 'workflow') and self.workflow.busy:
+            self.workflow.cancel()
+            self.statusBar().showMessage(tr('flow.stopping'))
+            return False
         if not self.dirty:
             return True
         result = QMessageBox.question(self, tr('Ungespeicherte Aenderungen'), tr('Projekt speichern?'),
@@ -1042,6 +1189,13 @@ class StudioWindow(QMainWindow):
         self.stop()
         self.record_pages_action.setChecked(False)
         self.project, self.path = project, path
+        if hasattr(self, 'workflow'):
+            self.workflow.last_media = None
+            self.workflow.analysis_result = None
+            self.workflow.waveform.samples = []
+            self.workflow.waveform.duration = 0
+            self.editor_waveform.samples = []
+            self.editor_waveform.hide()
         self.history.clear()
         self.future.clear()
         self.dirty = path is None and project != StudioProject()
@@ -1057,27 +1211,10 @@ class StudioWindow(QMainWindow):
     def new(self):
         if self.confirm_discard():
             self.replace_project(StudioProject())
-            self.screens.setCurrentIndex(0)
+            self.workflow.go(0)
 
     def create_song(self):
-        if not self.confirm_discard():
-            return
-        from studio.song_wizard import SongWizard
-        wizard = SongWizard(self)
-        if wizard.exec() and wizard.project:
-            if wizard.usdb_result:
-                from types import SimpleNamespace
-                self.finish_usdb_batch(SimpleNamespace(batch_result=wizard.usdb_result))
-                return
-            self.replace_project(wizard.project)
-            self.offer_reference_download()
-            if wizard.choice == 'scratch':
-                if wizard.method.currentData() == 'plugin':
-                    self.plugins_dialog()
-                elif wizard.method.currentData() == 'ai':
-                    self.ai_chart_dialog()
-                elif wizard.method.currentData() == 'timing':
-                    self.timing_assistant()
+        self.new()
 
     def open_community(self):
         if not self.confirm_discard():
@@ -1224,6 +1361,8 @@ class StudioWindow(QMainWindow):
             self.attempt(lambda: self.replace_project(load_project(path), Path(path)))
 
     def save(self, *, choose_location=False):
+        if self.workflow.current_step == 1:
+            self.workflow.commit_preparation()
         self.edit_metadata()
         from studio.library_page import configured_library
         root = configured_library()
@@ -1300,6 +1439,19 @@ class StudioWindow(QMainWindow):
 
     def accept_lrc(self, document, source=''):
         from studio.lrc import attach_lrc
+        if self.workflow.current_step == 2:
+            self.snapshot()
+            if not self.project.notes:
+                from studio.lyric_timing import lrc_draft
+                self.project = lrc_draft(self.project, document, source)
+            else:
+                attach_lrc(self.project, document, source)
+                self.project.lyric_assignments.clear()
+            self.loading = True
+            self.lyrics.setPlainText(self.project.draft_lyrics)
+            self.loading = False
+            self.changed()
+            return
         from studio.lrc_dialog import LrcDialog
         dialog = LrcDialog(document, self, project=self.project)
         if dialog.exec() != LrcDialog.DialogCode.Accepted:
@@ -1738,10 +1890,17 @@ class StudioWindow(QMainWindow):
 
     def update_cursor(self):
         self.timeline.set_cursor(self.position)
+        self.editor_waveform.position = self.position
+        if self.editor_waveform.isVisible():
+            self.editor_waveform.update()
         self.clock_label.setText(f'{int(self.position // 60):02d}:{self.position % 60:06.3f}')
         blocked = self.scroll.blockSignals(True)
         self.scroll.setValue(round(self.timeline.origin / max(1, self.project.duration) * 100000))
         self.scroll.blockSignals(blocked)
+        if hasattr(self, 'workflow'):
+            self.workflow.position_changed(self.position)
+            if self.playing:
+                self.lyrics.highlight(self.project, position=self.position)
 
     def set_follow(self, enabled):
         self.timeline.follow = enabled
@@ -1775,6 +1934,11 @@ class StudioWindow(QMainWindow):
         QMessageBox.critical(self, 'OpenLips Studio', str(exc))
 
     def closeEvent(self, event):
+        if hasattr(self, 'workflow') and self.workflow.busy:
+            self.workflow.cancel()
+            self.statusBar().showMessage(tr('flow.stopping'))
+            event.ignore()
+            return
         if self.community_page.worker or self.library_busy():
             self.statusBar().showMessage(tr('library.wait') if self.library_busy() else tr('community.wait'))
             event.ignore()
@@ -1819,23 +1983,8 @@ def main():
     app.setOrganizationName('OpenLips')
     app.setWindowIcon(app_icon())
     app.setStyle('Fusion')
-    app.setStyleSheet('''
-        QWidget { background: #25292e; color: #e6e9ec; font-size: 13px; }
-        QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #181c20; border: 1px solid #535c64; padding: 4px; }
-        QPushButton { border: 1px solid #59636c; padding: 6px; border-radius: 4px; }
-        QPushButton:hover { background: #384249; }
-        QMenu { border: 1px solid #59636c; }
-        QMenu::item { padding: 7px 24px; }
-        QMenu::item:selected, QMenuBar::item:selected, QMenuBar::item:pressed { background: #3c5559; }
-        QMenu::item:disabled { color: #8c949a; }
-        QToolButton:hover { background: #384249; }
-        QGroupBox { border: 1px solid #49535c; margin-top: 12px; padding-top: 12px; }
-        QGroupBox::title { subcontrol-origin: margin; left: 8px; }
-        QToolBar { border: none; spacing: 5px; }
-        QToolButton { padding: 6px; }
-        QCheckBox { spacing: 6px; }
-        QSplitter::handle { background: #49535c; }
-    ''')
+    from studio.style import STUDIO_STYLE
+    app.setStyleSheet(STUDIO_STYLE)
     window = StudioWindow()
     if args.project:
         window.attempt(lambda: window.replace_project(load_project(args.project), args.project))

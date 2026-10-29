@@ -53,13 +53,17 @@ def download(request, output, progress):
         format='bestvideo[height<=720]+bestaudio/best[height<=720]' if video else 'bestaudio/best',
         merge_output_format='mkv', max_filesize=8 * 1024 ** 3)
     with yt_dlp.YoutubeDL(options) as downloader:
-        downloader.extract_info(url, download=True)
+        info = downloader.extract_info(url, download=True) or {}
     files = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() not in
              ('.part', '.ytdl', '.json') and not re.search(r'\.f\d+\.', p.name)]
     if len(files) != 1:
         raise ValueError('Download did not produce one complete media file')
     return {'type': 'media', 'path': files[0].relative_to(output).as_posix(),
-            'video': video, 'reference': url}
+            'video': video, 'reference': url,
+            'metadata': {'title': str(info.get('track') or info.get('title') or '')[:1000],
+                         'artist': str(info.get('artist') or info.get('creator') or '')[:1000],
+                         'album': str(info.get('album') or '')[:1000],
+                         'year': str(info.get('release_year') or '')[:4]}}
 
 
 def main():

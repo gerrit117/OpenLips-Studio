@@ -1,5 +1,17 @@
 [English](README.md) | [Deutsch](README.de.md)
 
+### Studio Workflow Redesign (Beta 16)
+
+**Source → Tempo & Key → Lyrics → Melody → Review & Export.** Start with local
+audio/video or a YouTube link, review tempo/key proposals, attach lyrics and edit
+the melody. Detection provides suggestions, not guaranteed musical analysis.
+The simplified editor keeps flowing, highlighted lyrics beside the piano roll;
+numerical note details remain available in **Expert** view. Assign individual
+words to selected notes or drag them onto notes. Existing import, library and
+export services remain available.
+
+![Redesigned Studio editor with synthetic example](assets/screenshots/studio-workflow-editor-de.png)
+
 ![OpenLips](assets/branding/concept-01/openlips-logo-light.png#gh-light-mode-only)
 ![OpenLips](assets/branding/concept-01/openlips-logo-dark.png#gh-dark-mode-only)
 

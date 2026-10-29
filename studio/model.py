@@ -96,6 +96,7 @@ class StudioProject:
     draft_lyrics: str = ""
     warnings: list[str] = field(default_factory=list)
     lyric_reference: dict = field(default_factory=dict)
+    lyric_assignments: dict[str, list[int]] = field(default_factory=dict)
     video_reference: str = ''
     preview_start: float | None = None
     preview_length: float = 15.0
@@ -135,6 +136,11 @@ class StudioProject:
             raise ValueError("Project contains too many notes")
         if not isinstance(self.lyric_reference, dict):
             raise ValueError('Lyric reference must be an object')
+        if not isinstance(self.lyric_assignments, dict) or any(
+            not isinstance(key, str) or not isinstance(span, list) or len(span) != 2 or
+            any(type(i) is not int for i in span) or not 0 <= span[0] < span[1]
+            for key, span in self.lyric_assignments.items()):
+            raise ValueError('Invalid lyric assignment anchors')
         if self.lyric_reference:
             from studio.lrc import parse_lrc
             if self.lyric_reference.get('format') != 'lrc' or not isinstance(self.lyric_reference.get('source', ''), str):

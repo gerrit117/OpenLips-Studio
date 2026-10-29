@@ -1,5 +1,9 @@
 # OpenLips Library
 
+In Studio, **Save library** stores a named remote connection and restores the
+last used address. Use Ctrl/Shift to select multiple library entries for
+deletion. A DLC song pack is always removed as a complete package.
+
 [English](README.md) | [Deutsch](README.de.md)
 
 A private home-network song library for Studio, the Xbox client and a WebUI.

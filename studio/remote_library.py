@@ -52,6 +52,9 @@ class RemoteLibraryPage(QWidget):
         self.pair_button = QPushButton(tr('remote.connect'))
         self.pair_button.clicked.connect(self.prepare_pair)
         row.addWidget(self.pair_button)
+        self.save_button = QPushButton(qta.icon('fa5s.save', color='#cdd3d9'), tr('remote.save_connection'))
+        self.save_button.clicked.connect(self.save_connection)
+        row.addWidget(self.save_button)
         layout.addLayout(row)
         self.search = QLineEdit()
         self.search.setPlaceholderText(tr('library.search'))
@@ -59,6 +62,7 @@ class RemoteLibraryPage(QWidget):
         layout.addWidget(self.search)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels([tr('Artist'), tr('Titel'), tr('remote.type')])
+        self.tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.tree.itemDoubleClicked.connect(lambda *_: self.open_project())
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.context_menu)
@@ -93,7 +97,7 @@ class RemoteLibraryPage(QWidget):
         self.delete_remote = QCheckBox(tr('remote.delete_local'))
         self.delete_remote.setToolTip(tr('remote.delete_warning'))
         self.delete_remote.toggled.connect(self.change_delete_policy)
-        self.connections.currentIndexChanged.connect(self.load_delete_policy)
+        self.connections.currentIndexChanged.connect(self.connection_changed)
         layout.addWidget(self.delete_remote)
         self.load_delete_policy()
         self.sync_timer = QTimer(self)
@@ -104,7 +108,27 @@ class RemoteLibraryPage(QWidget):
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.status)
-        self.controls = [self.connections, self.connect_button, self.discover_button, self.found, self.url, self.pair_button, self.sync_button, self.delete_remote, *self.actions]
+        self.controls = [self.connections, self.connect_button, self.discover_button, self.found, self.url, self.pair_button, self.save_button, self.sync_button, self.delete_remote, *self.actions]
+        saved_url = QSettings('OpenLips', 'OpenLips Studio').value('library/last_remote_url', '')
+        index = next((i for i, profile in enumerate(self.profiles) if profile.get('url') == saved_url), 0)
+        self.connections.setCurrentIndex(index if self.profiles else -1)
+        self.connection_changed()
+
+    def connection_changed(self):
+        self.load_delete_policy()
+        profile = self.connections.currentData()
+        if profile:
+            self.url.setText(profile.get('url', ''))
+            self.connections.setToolTip(profile.get('url', ''))
+            if self.client and self.client.url != profile.get('url'):
+                self.client = None
+                self.catalog = {}
+                self.tree.clear()
+
+    def save_connection(self):
+        name, ok = QInputDialog.getText(self, tr('remote.save_connection'), tr('remote.connection_name'))
+        if ok:
+            self.prepare_pair(name=name.strip())
 
     def load_delete_policy(self):
         profile = self.connections.currentData() or {}
@@ -125,25 +149,49 @@ class RemoteLibraryPage(QWidget):
         QSettings('OpenLips','OpenLips Studio').setValue('library/delete_remote/' + profile.get('server_id','none'),enabled)
 
     def delete_selected(self):
-        item = self.tree.currentItem()
-        if not item or not self.client or self.worker and self.worker.isRunning():
+        items = [item for item in self.tree.selectedItems() if not item.isHidden()]
+        if self.worker and self.worker.isRunning():
+            self.status.setText(tr('library.wait'))
             return
-        kind, record = item.data(0,Qt.ItemDataRole.UserRole)
-        if QMessageBox.question(self,tr('library.delete'),tr('remote.delete_confirm',name=item.text(1)),
+        if not items or not self.client:
+            self.status.setText(tr('remote.select_delete'))
+            return
+        entries = [item.data(0, Qt.ItemDataRole.UserRole) for item in items]
+        names = '\n'.join(item.text(1) for item in items[:12])
+        if QMessageBox.question(self,tr('library.delete'),tr('remote.delete_many',count=len(entries),names=names),
             QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
         client = self.client
         def remove():
-            client.request('DELETE',f'/api/v1/{kind}/{record["id"]}')
-            return client.request('GET','/api/v1/library')
-        self.task(remove,self.received)
+            errors = []
+            # Projects also remove derived artifacts; do not delete them twice.
+            projects = {record['id'] for kind, record in entries if kind == 'projects'}
+            for kind, record in entries:
+                if kind == 'artifacts' and record.get('project_id') in projects:
+                    continue
+                try:
+                    client.request('DELETE', f'/api/v1/{kind}/{record["id"]}')
+                except Exception as error:
+                    errors.append(f'{record.get("title", record["id"])}: {error}')
+            return client.request('GET','/api/v1/library'), errors
+        def done(result):
+            self.received(result[0])
+            if result[1]:
+                self.show_error('\n'.join(result[1]))
+        self.task(remove, done, report_errors=True)
+
+    def show_error(self, message):
+        self.status.setText(message)
+        QMessageBox.warning(self, tr('library.delete'), message)
 
     def context_menu(self, pos):
         item = self.tree.itemAt(pos)
         if not item or self.worker and self.worker.isRunning():
             return
-        self.tree.setCurrentItem(item)
+        if not item.isSelected():
+            self.tree.clearSelection()
+            self.tree.setCurrentItem(item)
         kind, record = item.data(0, Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         if kind == 'projects':
@@ -166,7 +214,7 @@ class RemoteLibraryPage(QWidget):
             self.task(lambda: self.download_project(record['id']),
                       lambda path: self.community_upload_requested.emit(load_project(path)))
 
-    def task(self, callback, result, *, progress=False):
+    def task(self, callback, result, *, progress=False, report_errors=False):
         if self.worker and self.worker.isRunning():
             return
         parent = self.parent()
@@ -177,7 +225,7 @@ class RemoteLibraryPage(QWidget):
         self.worker = LibraryTask(callback if progress else lambda report: callback(), self)
         self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(result)
-        self.worker.failed.connect(self.status.setText)
+        self.worker.failed.connect(self.show_error if report_errors else self.status.setText)
         self.worker.finished.connect(lambda: [widget.setEnabled(True) for widget in self.controls])
         for widget in self.controls:
             widget.setEnabled(False)
@@ -213,25 +261,25 @@ class RemoteLibraryPage(QWidget):
             self.url.setText(f"{'https' if record['tls'] else 'http'}://{record['host']}:{record['port']}")
             self.pair_button.setText(tr('remote.connect') if not record.get('auth_required', True) else tr('remote.pair'))
 
-    def prepare_pair(self):
+    def prepare_pair(self, checked=False, *, name=''):
         try:
             client = LibraryClient(self.url.text().strip())
         except Exception as error:
             self.status.setText(str(error))
             return
         if not client.tls:
-            self.task(lambda: client.request('GET', '/api/v1/identity'), lambda value: self.open_lan(client, value))
+            self.task(lambda: client.request('GET', '/api/v1/identity'), lambda value: self.open_lan(client, value, name=name))
             return
-        self.task(lambda: client.connect(inspect=True) if client.tls else '', lambda fingerprint: self.finish_pair(client, fingerprint))
+        self.task(lambda: client.connect(inspect=True) if client.tls else '', lambda fingerprint: self.finish_pair(client, fingerprint, name=name))
 
-    def open_lan(self, client, identity):
+    def open_lan(self, client, identity, *, name=''):
         if identity.get('auth_required', True):
             self.status.setText(tr('remote.trust'))
             return
         credentials = dict(server_id=identity['server_id'], api_token='', ftp=dict(username='anonymous', password=''))
-        self.paired(client, (identity, credentials))
+        self.paired(client, (identity, credentials), name=name)
 
-    def finish_pair(self, client, fingerprint):
+    def finish_pair(self, client, fingerprint, *, name=''):
         if QMessageBox.question(self, tr('remote.trust'), tr('remote.fingerprint', fingerprint=fingerprint or 'localhost'),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
@@ -242,17 +290,24 @@ class RemoteLibraryPage(QWidget):
         client.fingerprint = fingerprint
         self.task(lambda: (client.request('GET', '/api/v1/identity'),
             client.request('POST', '/api/v1/pair', {'code': code, 'name': socket.gethostname()[:80]})),
-            lambda result: self.paired(client, result))
+            lambda result: self.paired(client, result, name=name))
 
-    def paired(self, client, result):
+    def paired(self, client, result, *, name=''):
         identity, credentials = result
-        profile = dict(name=identity['name'], url=client.url, fingerprint=client.fingerprint, **credentials)
-        self.profiles = [p for p in self.profiles if p['server_id'] != profile['server_id']] + [profile]
-        save_profiles(self.profile_path, self.profiles)
+        previous = next((p for p in self.profiles if p['server_id'] == credentials['server_id']), {})
+        profile = dict(name=name or previous.get('name') or identity['name'], url=client.url, fingerprint=client.fingerprint, **credentials)
+        profiles = [p for p in self.profiles if p['server_id'] != profile['server_id'] and p['url'] != profile['url']] + [profile]
+        try:
+            save_profiles(self.profile_path, profiles)
+        except Exception as error:
+            self.status.setText(str(error))
+            return
+        self.profiles = profiles
         self.connections.clear()
         for item in self.profiles:
             self.connections.addItem(item['name'], item)
         self.connections.setCurrentIndex(self.connections.count()-1)
+        QSettings('OpenLips', 'OpenLips Studio').setValue('library/last_remote_url', profile['url'])
         self.client = LibraryClient(profile['url'], profile['api_token'], profile['fingerprint'])
         self.status.setText(tr('remote.connected') if not profile['api_token'] else tr('remote.paired'))
         # The worker's completion signal arrives before QThread.finished.
@@ -262,6 +317,8 @@ class RemoteLibraryPage(QWidget):
     def connect_saved(self):
         profile = self.connections.currentData()
         if profile:
+            self.url.setText(profile['url'])
+            QSettings('OpenLips', 'OpenLips Studio').setValue('library/last_remote_url', profile['url'])
             self.client = LibraryClient(profile['url'], profile['api_token'], profile['fingerprint'])
             self.refresh()
         elif self.url.text().strip():

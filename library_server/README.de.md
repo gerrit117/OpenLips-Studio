@@ -5,6 +5,11 @@
 Eine private Heimnetz-Bibliothek für Studio, Xbox-Client und WebUI.
 Sie ist **nicht die öffentliche Community-Website**.
 
+In Studio lassen sich Remote-Adressen mit **Bibliothek speichern** benennen und
+dauerhaft hinterlegen. Die zuletzt verwendete Verbindung wird wieder ausgewählt.
+Mit Strg/Shift lassen sich mehrere Bibliothekseinträge auswählen und gemeinsam
+löschen. Ein DLC-Songpack wird dabei immer als vollständiges Paket entfernt.
+
 ## Einfacher Docker-Start
 
 Der Container verwendet **Bridge-Netzwerk und einen HTTP-Port**.

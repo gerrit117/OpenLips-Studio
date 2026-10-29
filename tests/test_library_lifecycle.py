@@ -67,6 +67,30 @@ def test_saves_update_identity_and_save_as_can_fork(tmp_path,workspace):
     assert fork != identifier and len(library.projects()) == 2
 
 
+def test_remote_delete_button_removes_multiple_projects_over_http(peers, monkeypatch):
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    import studio.remote_library as module
+    app = QApplication.instance() or QApplication([])
+    local, remote, client = peers
+    for title in ('One', 'Two', 'Keep'):
+        remote.add_project(song(title))
+    monkeypatch.setattr(module, 'load_profiles', lambda path: [])
+    page = module.RemoteLibraryPage(lambda: StudioProject())
+    page.sync_timer.stop()
+    page.scanned = True
+    page.client = client
+    page.received(client.request('GET', '/api/v1/library'))
+    for index in (0, 1):
+        page.tree.topLevelItem(index).setSelected(True)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    page.actions[-1].click()
+    assert page.worker.wait(5000)
+    app.processEvents()
+    assert len(remote.projects()) == 1
+    assert page.tree.topLevelItemCount() == 1
+    page.close()
+
+
 def test_project_delete_removes_drafts_exports_but_keeps_shared_and_external_files(tmp_path):
     library = Library(tmp_path/'lib')
     external = tmp_path/'original.olp'

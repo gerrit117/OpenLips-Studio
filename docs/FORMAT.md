@@ -18,6 +18,12 @@ Dates use ISO 8601 UTC. Old files fall back to their filesystem modification
 time; that is not a recovered original creation time. Date fields do not define
 library musical identity. Project saves and exports are separate operations.
 
+The optional `lyric_assignments` object maps editor-note IDs to `[start, end]`
+word spans in `draft_lyrics`. Spans use Python Unicode character indexes, with
+an exclusive end, not Qt UTF-16 offsets. These anchors distinguish repeated
+words after manual reassignment. Missing/stale anchors are ignored in favor of
+text matching; they do not change chart timing, pitch or runtime lyric encoding.
+
 New unsigned DLC headers contain `OpenLips Studio; created=<ISO UTC>; ...` in
 the display-description field. The header SHA-1 is recomputed before canonical
 naming. This does not alter the XML, chart, lyric or media bytes and is not a

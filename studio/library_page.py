@@ -164,7 +164,7 @@ class LibraryPage(QWidget):
             return
         projects = self.tabs.currentWidget() is self.projects
         tree = self.projects if projects else self.packages
-        items = tree.selectedItems()
+        items = [item for item in tree.selectedItems() if not item.isHidden()]
         if not items:
             return
         ids = [item.data(0,Qt.ItemDataRole.UserRole) for item in items]
@@ -186,7 +186,7 @@ class LibraryPage(QWidget):
                     errors.append(str(error))
             if errors:
                 raise ValueError('\n'.join(errors))
-        self.task(remove)
+        self.task(remove, report_errors=True)
 
     def upload_community(self):
         selected = self.projects.selectedItems() if self.tabs.currentWidget() is self.projects else []
@@ -247,13 +247,17 @@ class LibraryPage(QWidget):
                             for song in record['songs']) if record else '')
         self.update_commands()
 
-    def task(self, callback):
+    def task(self, callback, *, report_errors=False):
         if self.worker and self.worker.isRunning():
             return
         self.worker = LibraryTask(callback, self)
         self.worker.progress.connect(self.status.setText)
         self.worker.completed.connect(lambda _: self.finish(tr('library.saved')))
-        self.worker.failed.connect(self.finish)
+        def failed(message):
+            self.finish(message)
+            if report_errors:
+                QMessageBox.warning(self, tr('library.delete'), message)
+        self.worker.failed.connect(failed)
         self.worker.finished.connect(self.update_commands)
         for button in self.buttons:
             button.setEnabled(False)
