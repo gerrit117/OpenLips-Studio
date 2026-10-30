@@ -1,4 +1,4 @@
 """OpenLips Studio desktop application and platform-independent editing core."""
 
-__version__ = "0.4.6b16"
-DISPLAY_VERSION = "0.4.6 Beta 16"
+__version__ = "0.4.6b17"
+DISPLAY_VERSION = "0.4.6 Beta 17"

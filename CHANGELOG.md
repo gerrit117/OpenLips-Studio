@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.6 Beta 17
+
+- Retain the Beta 16 workflow redesign and library improvements.
+- Fix Intel macOS builds by keeping Numba on its final supported binary series;
+  other platforms retain their existing dependency ranges.
+- Require binary Numba/llvmlite packages in desktop CI instead of silently
+  attempting an unsupported LLVM source build and blocking the release.
+
 ## 0.4.6 Beta 16
 
 - Replace the nested start flow with persistent Source, Tempo & Key, Lyrics,
